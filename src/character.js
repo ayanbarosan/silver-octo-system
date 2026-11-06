@@ -161,7 +161,7 @@ export function createBoy(THREE) {
   const cycle=x=>((x%1)+1)%1;
   const TAU=Math.PI*2,THIGH=.305,SHIN=.31;
   const footWorld=new THREE.Vector3(),temporary=new THREE.Vector3();
-  const animation={phase:0,mode:'idle',wakeStage:'awake',jumpStage:'grounded',climbStage:'none',ladderStage:'none',launchLead:0,launchSpeed:0,landingReach:0,feet:legs.map(()=>({stance:true,contactWeight:1,position:{x:0,y:0,z:0}})),hands:arms.map(()=>({contactWeight:0,position:{x:0,y:0,z:0}}))};
+  const animation={phase:0,mode:'idle',wakeStage:'awake',jumpStage:'grounded',climbStage:'none',ladderStage:'none',slipStage:'none',launchLead:0,launchSpeed:0,landingReach:0,feet:legs.map(()=>({stance:true,contactWeight:1,position:{x:0,y:0,z:0}})),hands:arms.map(()=>({contactWeight:0,position:{x:0,y:0,z:0}}))};
   group.userData.animation=animation;
   let phase=0,moving=0,running=0,pushing=0,air=0,lean=0,headLean=0,bagLean=0,locomotionActive=false;
   let landing=0,landingVelocity=0,previousGrounded=true,previousTime=0,initialized=false;
@@ -178,6 +178,11 @@ export function createBoy(THREE) {
   const ladderFeet=legs.map(()=>new THREE.Vector3()),ladderHands=arms.map(()=>new THREE.Vector3());
   const ladderContacts={hands:[0,0],stances:[false,false],weights:[0,0]};
   const ladderRolls=new Float64Array(2);
+  const slipChannels=new Float64Array(16),slipContacts={hands:[0,0],stances:[false,false],weights:[0,0]};
+  const slipDown=new THREE.Vector3(0,-1,0),slipOffset=new THREE.Vector3(0,0,.048);
+  const slipTarget=new THREE.Vector3(),slipDirection=new THREE.Vector3(),slipBend=new THREE.Vector3(),slipElbow=new THREE.Vector3(),slipUpper=new THREE.Vector3(),slipFore=new THREE.Vector3();
+  const slipInverse=new THREE.Quaternion(),slipDesired=new THREE.Quaternion(),slipUpperQ=new THREE.Quaternion(),slipForeQ=new THREE.Quaternion();
+  const slipEuler=new THREE.Euler();
 
   function reset() {
     phase=.04;moving=running=pushing=air=lean=headLean=bagLean=0;locomotionActive=false;
@@ -191,7 +196,7 @@ export function createBoy(THREE) {
     // Initialization uses the same IK as moving poses, so restarting cannot
     // retain a knee angle, a contact anchor or a backpack spring from last time.
     legs.forEach((leg,i)=>solveLeg(leg,footState[i].target,0,.64));
-    animation.phase=phase;animation.mode='idle';animation.wakeStage='awake';animation.jumpStage='grounded';animation.climbStage='none';animation.ladderStage='none';animation.launchLead=0;animation.launchSpeed=0;animation.landingReach=0;
+    animation.phase=phase;animation.mode='idle';animation.wakeStage='awake';animation.jumpStage='grounded';animation.climbStage='none';animation.ladderStage='none';animation.slipStage='none';animation.launchLead=0;animation.launchSpeed=0;animation.landingReach=0;
     updateDiagnostics([true,true],[1,1]);
   }
 
@@ -473,14 +478,138 @@ export function createBoy(THREE) {
     return ladderContacts;
   }
 
+  // The short fall uses joint targets; recovery changes support from a side
+  // palm to two forward palms, a knee and finally the feet. No root tilt is
+  // used, so the head, pelvis, arms and legs can respond independently.
+  const slipPoseKeys={
+    slip:[
+      [0,.64,0,0,0, 0,.025,0,.025, .65,.09,.65,.09,.04,0,0],
+      [.45,.62,-.015,-.09,-.025, .02,.18,.015,.10, .85,-.03,.79,-.02,.10,0,0],
+      [1,.58,-.025,-.20,-.035, .04,.42,.025,.15, .95,-.12,.88,-.12,.18,0,0]
+    ],
+    fall:[
+      [0,.58,-.025,-.20,-.035, .04,.42,.025,.15, .95,-.12,.88,-.12,.18,0,0],
+      [.35,.52,-.045,-.65,-.045, .08,.55,.12,.40, 1.0,-.38,.93,-.34,.24,0,0],
+      [.68,.415,-.08,-1.26,-.025, .10,.50,.08,.32, .46,-.63,.48,-.55,.30,0,0],
+      [1,.40,-.08,-1.40,0, .035,.44,.05,.34, .13,-.53,.15,-.50,.24,0,0]
+    ],
+    ragdoll:[
+      [0,.40,-.08,-1.40,0, .035,.44,.05,.34, .13,-.53,.15,-.50,.24,0,0],
+      [1,.40,-.08,-1.40,0, .035,.44,.05,.34, .13,-.53,.15,-.50,.24,0,0]
+    ],
+    recover:[
+      [0,.40,-.08,-1.40,0, .035,.44,.05,.34, .13,-.53,.15,-.50,.24,0,0],
+      [.09,.43,-.08,-1.32,.52, .08,.38,.15,.26, .014,-.42,.50,-.40,.22,0,0],
+      [.15,.43,-.08,-1.32,.52, .08,.38,.15,.26, .014,-.42,.50,-.40,.22,0,0],
+      [.22,.37,-.075,-.90,.36, .03,.40,.11,.22, .12,-.36,.62,-.10,.20,0,0],
+      [.34,.35,-.06,.10,.08, .015,.28,.08,-.10, .30,.22,.40,.30,.13,0,0],
+      [.46,.26,-.04,1.43,0, 0,.24,.10,.02, .014,.37,.014,.40,-.20,0,0],
+      [.62,.34,-.025,1.27,0, 0,.24,.07,-.12, .014,.37,.014,.40,-.32,0,0],
+      [.68,.34,-.025,1.27,0, 0,.24,.07,-.12, .014,.37,.014,.40,-.32,0,0],
+      [.76,.48,.025,.65,0, 0,.20,.035,-.10, .42,.25,.40,.30,-.20,0,0],
+      [.82,.56,.04,.35,0, 0,.12,.025,-.07, .55,.15,.55,.10,-.12,0,0],
+      [1,.64,0,0,0, 0,.025,0,.025, .65,.09,.65,.09,.06,0,0]
+    ],
+    brush:[
+      [0,.64,0,0,0, 0,.025,0,.025, .65,.09,.65,.09,.06,0,0],
+      [1,.64,0,.025,0, 0,.025,0,.025, .65,.09,.65,.09,.04,0,0]
+    ],
+    look:[
+      [0,.64,0,.025,0, 0,.025,0,.025, .65,.09,.65,.09,.04,0,0],
+      [.34,.64,0,.025,0, 0,.025,0,.025, .65,.09,.65,.09,.025,-.48,-1.45],
+      [1,.64,0,.025,0, 0,.025,0,.025, .65,.09,.65,.09,.025,-.48,-1.45]
+    ],
+    settle:[
+      [0,.64,0,.025,0, 0,.025,0,.025, .65,.09,.65,.09,.025,-.48,-1.45],
+      [1,.64,0,0,0, 0,.025,0,.025, .65,.09,.65,.09,.04,0,0]
+    ]
+  };
+  function sampleSlipPose(keys,p) {
+    let a=keys[0],b=keys[keys.length-1];
+    for(let i=1;i<keys.length;i++)if(p<=keys[i][0]){a=keys[i-1];b=keys[i];break;}
+    const u=smooth(p,a[0],b[0]);
+    for(let i=1;i<16;i++)slipChannels[i]=lerp(a[i],b[i],u);
+    return slipChannels;
+  }
+  function solveSlipArm(arm,target,palmPitch) {
+    // Three-dimensional arm IK allows a real supporting palm during the side
+    // roll, and an opposite hand to cross the chest while brushing the jacket.
+    arm.shoulder.position.set(arm.side*.227,.405,0);
+    slipInverse.copy(torso.quaternion).invert();
+    slipDesired.setFromEuler(slipEuler.set(palmPitch,0,0)).premultiply(slipInverse);
+    slipTarget.copy(target).sub(torso.position).applyQuaternion(slipInverse);
+    slipFore.copy(slipOffset).applyQuaternion(slipDesired);slipTarget.sub(slipFore);
+    slipDirection.copy(slipTarget).sub(arm.shoulder.position);
+    const distance=clamp(slipDirection.length(),.025,.4115);slipDirection.normalize();
+    const a=(.192*.192-.22*.22+distance*distance)/(2*distance),h=Math.sqrt(Math.max(0,.192*.192-a*a));
+    slipBend.set(0,0,-1).applyQuaternion(slipInverse);slipBend.addScaledVector(slipDirection,-slipBend.dot(slipDirection));
+    if(slipBend.lengthSq()<.00001)slipBend.set(1,0,0).addScaledVector(slipDirection,-slipDirection.x);
+    slipBend.normalize();
+    slipElbow.copy(arm.shoulder.position).addScaledVector(slipDirection,a).addScaledVector(slipBend,h);
+    slipUpper.copy(slipElbow).sub(arm.shoulder.position).normalize();
+    slipFore.copy(arm.shoulder.position).addScaledVector(slipDirection,distance).sub(slipElbow).normalize();
+    slipUpperQ.setFromUnitVectors(slipDown,slipUpper);slipForeQ.setFromUnitVectors(slipDown,slipFore);
+    arm.shoulder.quaternion.copy(slipUpperQ);
+    arm.elbow.quaternion.copy(slipUpperQ).invert().multiply(slipForeQ);
+    arm.wrist.quaternion.copy(slipForeQ).invert().multiply(slipDesired);
+  }
+  function applySlip(slip) {
+    capturePose();pose.position.set(0,0,0);pose.rotation.set(0,0,0);
+    const stage=slip.phase||'slip',p=clamp(slip.progress||0,0,1),v=sampleSlipPose(slipPoseKeys[stage]||slipPoseKeys.slip,p);
+    const loose=stage==='fall'||stage==='ragdoll',w=slip.wobble;
+    const wobble=(name)=>loose&&w&&Number.isFinite(w[name])?w[name]:0;
+    const hipWobble=wobble('hips'),chestWobble=wobble('torso');
+    const hipY=v[1]+Math.abs(hipWobble)*.06+(loose?(slip.impact||0)*.018:0),hipZ=v[2]+hipWobble*.035;
+    torso.position.set(0,hipY,hipZ);torso.scale.set(1,1,1);
+    // Applying the side roll after the sagittal lean lowers the supporting
+    // shoulder, rather than rolling around an upright chest's vertical axis.
+    torso.quaternion.setFromEuler(slipEuler.set(v[3]+chestWobble*.65,v[14],0));
+    slipUpperQ.setFromEuler(slipEuler.set(0,0,v[4]+hipWobble*.45));torso.quaternion.premultiply(slipUpperQ);
+    head.position.set(0,.679,.026);head.rotation.set(v[13]+wobble('head')*.9,v[15],-hipWobble*.25);
+    bag.position.set(0,.263,-.195);bag.rotation.set(-chestWobble*.35,0,-hipWobble*.25);
+    slipContacts.hands[0]=slipContacts.hands[1]=0;
+    for(let i=0;i<2;i++) {
+      const legWobble=wobble(i===0?'leftLeg':'rightLeg');
+      const target=legTargets[i].set(legs[i].side*.108,v[5+i*2]+Math.abs(legWobble)*.20,v[6+i*2]+legWobble*.18);
+      const recoverRoll=stage==='recover'&&i===1?lerp(.18,.35,smooth(p,.24,.46))*(1-smooth(p,.68,.88)):0;
+      solveLeg(legs[i],target,recoverRoll+legWobble*.45,hipY,hipZ);
+      slipContacts.weights[i]=stage==='brush'||stage==='look'||stage==='settle'?1:stage==='recover'?smooth(p,i===0?.39:.84,i===0?.46:.98):stage==='slip'?1-smooth(p,0,.35):0;
+      slipContacts.stances[i]=slipContacts.weights[i]>.5;
+    }
+    for(let i=0;i<2;i++) {
+      const armWobble=wobble(i===0?'leftArm':'rightArm');
+      const target=handTargets[i].set(arms[i].side*.255,v[9+i*2]+armWobble*.20,v[10+i*2]+armWobble*.14);
+      let pitch=stage==='brush'||stage==='look'||stage==='settle'?0:Math.PI/2;
+      if(stage==='recover') {
+        const early=i===0?smooth(p,.04,.09)*(1-smooth(p,.135,.15)):0;
+        const planted=smooth(p,.40,.46)*(1-smooth(p,i===0?.62:.64,i===0?.68:.70));
+        slipContacts.hands[i]=Math.max(early,planted);
+        pitch=lerp(Math.PI/2,0,smooth(p,.70,.90));
+      }
+      if(stage==='brush') {
+        const left=i===0,weight=left?smooth(p,0,.10)*(1-smooth(p,.36,.48)):smooth(p,.36,.46)*(1-smooth(p,.82,.98));
+        const stroke=left?smooth(p,.10,.34):smooth(p,.46,.78);
+        target.x=lerp(target.x,left?lerp(.10,-.13,stroke):lerp(-.10,.13,stroke),weight);
+        target.y=lerp(target.y,lerp(1.01,.81,stroke),weight);
+        target.z=lerp(target.z,.19+.02*Math.sin(stroke*Math.PI),weight);
+      }
+      solveSlipArm(arms[i],target,pitch);
+    }
+    let weight=stage==='slip'?smooth(p,0,.25):stage==='settle'?1-smooth(p,0,1):1;
+    if(weight<1)blendPose(1-weight);
+    for(let i=0;i<2;i++){slipContacts.hands[i]*=weight;slipContacts.weights[i]*=weight;}
+    animation.mode='slip';animation.slipStage=stage;animation.jumpStage='grounded';
+    return slipContacts;
+  }
+
   /**
    * Distance advances a gait; time only drives breathing and secondary motion.
    * Both legs use a planted stance and an airborne Hermite recovery arc. The
    * foot's world anchor survives changing speeds, which avoids skating while
    * accelerating or settling into a stop.
    */
-  function animate({time=0,speed=0,grounded=true,wake=1,push=false,vy=0,dt,travel,acceleration=0,landImpact=0,jumpPrep=0,airTime,takeoff,climb=null,ladder=null,launchSpeed,landingDistance}={}) {
-    if(climb||ladder){grounded=true;speed=0;travel=0;jumpPrep=0;airTime=0;takeoff=0;}
+  function animate({time=0,speed=0,grounded=true,wake=1,push=false,vy=0,dt,travel,acceleration=0,landImpact=0,jumpPrep=0,airTime,takeoff,climb=null,ladder=null,slip=null,launchSpeed,landingDistance}={}) {
+    if(climb||ladder||slip){grounded=true;speed=0;travel=0;jumpPrep=0;airTime=0;takeoff=0;}
     const delta=clamp(Number.isFinite(dt)?dt:(initialized?time-previousTime:1/60),0,.1);
     previousTime=time;
     stepResult.footstep=false;stepResult.intensity=0;
@@ -488,7 +617,7 @@ export function createBoy(THREE) {
     initialized=true;
     // Rung contacts belong to the ladder; the first floor step acquires a new
     // ground anchor at the exit instead of reusing one from the entry roof.
-    if(!ladder&&animation.mode==='ladder')for(const foot of footState){foot.hasAnchor=false;foot.wasStance=false;foot.landingPlant=false;}
+    if((!ladder&&animation.mode==='ladder')||(!slip&&animation.mode==='slip'))for(const foot of footState){foot.hasAnchor=false;foot.wasStance=false;foot.landingPlant=false;}
     const speedAbs=Math.abs(speed),wakeProgress=clamp(wake,0,1),stand=1;
     const justLanded=!previousGrounded&&grounded;
     const beginsWalk=grounded&&speedAbs>.025&&!locomotionActive;
@@ -646,14 +775,18 @@ export function createBoy(THREE) {
       arm.shoulder.rotation.z=damp(arm.shoulder.rotation.z,-arm.side*(lerp(.055,.023,running)+air*flight[13]),12,delta);
       arm.elbow.rotation.x=damp(arm.elbow.rotation.x,lerp(elbowTarget,flight[10+armRole*2]-.12*takeoffRun,air),12,delta);
       arm.wrist.rotation.x=damp(arm.wrist.rotation.x,air*(-.10+.12*tuck),12,delta);
+      arm.shoulder.rotation.y=damp(arm.shoulder.rotation.y,0,14,delta);
+      arm.elbow.rotation.y=damp(arm.elbow.rotation.y,0,14,delta);arm.elbow.rotation.z=damp(arm.elbow.rotation.z,0,14,delta);
+      arm.wrist.rotation.y=damp(arm.wrist.rotation.y,0,14,delta);arm.wrist.rotation.z=damp(arm.wrist.rotation.z,0,14,delta);
     }
     animation.mode=wakeProgress<1?'wake':!grounded?'air':pushing>.5?'push':moving<.05?'idle':running>.5?'run':'walk';
     animation.wakeStage='awake';
     animation.jumpStage=grounded?(jumpPrep>0?'anticipation':landing>.008?'landing':'grounded'):(launchProgress<1?'takeoff':vy>1.2?'rising':vy>-.9?'apex':'descent');
     let handWeights=wakeProgress<1?applyWake(wakeProgress,time):noHands;
-    animation.climbStage='none';animation.ladderStage='none';
+    animation.climbStage='none';animation.ladderStage='none';animation.slipStage='none';
     if(climb){const contacts=applyClimb(climb);handWeights=contacts.hands;stances[0]=contacts.stances[0];stances[1]=contacts.stances[1];weights[0]=contacts.weights[0];weights[1]=contacts.weights[1];footstep=false;}
     if(ladder){const contacts=applyLadder(ladder);handWeights=contacts.hands;stances[0]=contacts.stances[0];stances[1]=contacts.stances[1];weights[0]=contacts.weights[0];weights[1]=contacts.weights[1];footstep=false;}
+    if(slip){const contacts=applySlip(slip);handWeights=contacts.hands;stances[0]=contacts.stances[0];stances[1]=contacts.stances[1];weights[0]=contacts.weights[0];weights[1]=contacts.weights[1];footstep=false;}
     if(wakeProgress<1){stances.fill(false);weights.fill(0);}
     animation.launchLead=launchLead;animation.launchSpeed=takeoffSpeed;animation.landingReach=landingReach;
     updateDiagnostics(stances,weights,handWeights);

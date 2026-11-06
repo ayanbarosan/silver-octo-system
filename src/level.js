@@ -9,6 +9,7 @@ export const LEVEL = Object.freeze({
   bridge: Object.freeze({ x: 31.3, w: 3.4, y: .47, z: 0, safeX: 34.95 }),
   finalOffset: 10.2,
   doorX: 48.7,
+  slipPuddle: Object.freeze({x:9.75,w:1.0,y:0,z:0,centerX:10.3335,centerZ:-.38,sx:1.15,sz:.38,angle:1.026}),
   ladder: Object.freeze({
     wallX: 38, x: 37.58, rungX: 37.82, bottomY: .45, topY: 4.65,
     rungBaseY: .65, spacing: .30, width: .58, exitX: 38.65

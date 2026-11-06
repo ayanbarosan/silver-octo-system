@@ -33,11 +33,12 @@ After **WAKE UP**, the boy automatically braces his palms against the roof, brin
 ## Rooftop route
 
 1. Leave the mattress shelter and get over the vent.
-2. Push the crate toward the tall pipe, then use it as a step to climb across.
-3. Take a running jump over the first gap to the middle apartment block.
-4. Walk across the wooden plank spanning the second gap to the lower landing beside the final building. It breaks behind you only after you reach the landing safely.
-5. At the left wall, hold **W**, **Up**, or **Space** to climb the ladder. Stop to hold still, or use **S / Down** to reverse. You can also use **D / A** while climbing.
-6. Step onto the upper roof to set the final checkpoint, then continue to the lit door and press **E**. To go back down, hold **S / Down** at the top of the ladder.
+2. Cross the marked puddle before the crate. The first grounded crossing causes a slip and automatic recovery; jump clear of it to avoid the fall.
+3. Push the crate toward the tall pipe, then use it as a step to climb across.
+4. Take a running jump over the first gap to the middle apartment block.
+5. Walk across the wooden plank spanning the second gap to the lower landing beside the final building. It breaks behind you only after you reach the landing safely.
+6. At the left wall, hold **W**, **Up**, or **Space** to climb the ladder. Stop to hold still, or use **S / Down** to reverse. You can also use **D / A** while climbing.
+7. Step onto the upper roof to set the final checkpoint, then continue to the lit door and press **E**. To go back down, hold **S / Down** at the top of the ladder.
 
 ## Android: play the downloaded ZIP offline
 
@@ -63,7 +64,7 @@ npm start
 npm test
 ```
 
-`npm run build` bundles `src/main.js` into `game.js` and generates the standalone HTML file in `dist/` and the GitHub Pages site in `docs/`. `npm start` serves the existing build. `npm test` checks JavaScript syntax, character contact and animation continuity, bridge failure timing, and ladder movement and transitions. The ladder tests check the rendered hand and shoe markers against real rungs and scan the body for wall penetration. WebGL rendering and the complete level also need verification in a browser.
+`npm run build` bundles `src/main.js` into `game.js` and generates the standalone HTML file in `dist/` and the GitHub Pages site in `docs/`. `npm start` serves the existing build. `npm test` checks JavaScript syntax, character contact and animation continuity, bridge failure timing, ladder movement and transitions, and the puddle slip and recovery. Tests check the rendered hand and shoe markers against real surfaces, scan the body for floor and wall penetration, and verify the jacket brushing and backward glance. WebGL rendering and the complete level also need verification in a browser.
 
 Character geometry, buildings, windows, materials, and audio are generated locally. Three.js and the build tools are pinned in the dependency manifest and lockfile. The compiled game uses no external fonts, CDNs, or other network resources.
 
@@ -93,3 +94,9 @@ A third apartment block forms the middle stage of the route. The first crossing 
 ## Wall ladder and upper roof — v0.10
 
 The final building rises above the plank landing. A wall ladder connects the lower landing to its upper roof. Climbing follows alternating hand and foot contacts, holds still when you release the controls, and reverses when you change direction. You can enter from the bottom or climb down from the top. The upper roof sets the final checkpoint, so later falls return you near the door rather than across the broken plank.
+
+## Puddle slip and recovery — v0.11
+
+The marked puddle between the vent and the crate causes a slip on the first grounded crossing of each restart. The boy falls backward, settles briefly, supports himself to stand, brushes his jacket, and looks back before normal movement resumes. The sequence is automatic and needs no new controls. Jumping over the puddle does not trigger it, and crossing it again after the recovery does not repeat the fall until you restart.
+
+For a browser check, walk into the puddle and let the complete recovery finish, then cross it again to confirm it does not repeat. Restart and jump clear of it to check that passing overhead does not trigger the sequence.

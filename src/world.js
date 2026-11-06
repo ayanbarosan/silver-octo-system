@@ -131,6 +131,12 @@ export function createWorld(THREE, scene) {
       const spec = { x: left + 1.1 + random(seed + i + 50) * (width - 2.2), y: level + .008,
         z: -.8 + random(seed + i + 15) * 2, sx: .48 + random(seed + i) * .88,
         sz: .13 + random(seed + i + 10) * .27, angle: random(seed + i + 311) * 3 };
+      // This existing puddle reaches the walking lane so the scripted slip
+      // happens on visible water, without adding a trip obstacle or draw call.
+      if (seed === 38 && i === 3) Object.assign(spec, {
+        x: LEVEL.slipPuddle.centerX, z: LEVEL.slipPuddle.centerZ,
+        sx: LEVEL.slipPuddle.sx, sz: LEVEL.slipPuddle.sz, angle: LEVEL.slipPuddle.angle
+      });
       dampPatches.push(spec); wetPatches.push({ ...spec, y: level + .011, sx: spec.sx * .81, sz: spec.sz * .77 });
     }
     for (let i = 0; i < 12; i++) {
@@ -623,7 +629,7 @@ export function createWorld(THREE, scene) {
     mesh.castShadow = batch.castShadow; mesh.receiveShadow = batch.receiveShadow; world.add(mesh);
   }
   for (const geometry of disposedGeometry) geometry.dispose();
-  return { crate, door, doorLight, world, opening, restArea, bridge, update(time, playerX = 0, openingUpdate) {
+  return { crate, door, doorLight, world, opening, restArea, bridge, slipPuddle: LEVEL.slipPuddle, update(time, playerX = 0, openingUpdate) {
     lastWorldTime = Number.isFinite(time) ? time : lastWorldTime;
     if (openingUpdate) opening.update(openingUpdate);
     updateOpening(lastWorldTime);
