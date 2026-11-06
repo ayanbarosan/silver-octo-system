@@ -22,3 +22,13 @@ export function landingDistance(x,y,surfaces){
  for(const p of surfaces)if(x>=p.x-.08&&x<=p.x+p.w+.08&&y>=p.y-.04)nearest=Math.min(nearest,Math.max(0,y-p.y));
  return Number.isFinite(nearest)?nearest:undefined;
 }
+
+// Low bedding is stepped over, not treated as a jump or a climbable obstacle.
+export function groundStepY(x,y,surfaces,maxStep=.16){
+ let support;
+ for(const p of surfaces){
+  if(x<p.x-.02||x>p.x+p.w+.02||Math.abs(p.y-y)>maxStep+1e-8)continue;
+  if(support===undefined||p.y>support)support=p.y;
+ }
+ return support;
+}

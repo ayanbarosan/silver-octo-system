@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {MOVEMENT,movementVelocity,preparationX,landingDistance} from '../src/movement.js';
+import {MOVEMENT,movementVelocity,preparationX,landingDistance,groundStepY} from '../src/movement.js';
 import {createOpening} from '../src/opening.js';
 
 test('jump preparation advances the stride without stepping off either roof edge',()=>{
@@ -51,4 +51,13 @@ test('the lower reference jump still crosses the existing rooftop gap',()=>{
   if(x>=24.2&&vy<0&&before>=.45&&y<=.45){landed=true;break;}
  }
  assert(landed,'Reference-like height must preserve the current level route.');
+});
+
+test('the mattress is a low step while the real rooftop gap stays unsupported',()=>{
+ const bed={x:-.9,w:2.2,y:.12},roof={x:-1,w:23,y:0},guard={x:-1.04,w:.18,y:1.32};
+ const surfaces=[bed,roof,guard];
+ assert.equal(groundStepY(0,0,surfaces),.12,'Walking onto bedding should step onto its top.');
+ assert.equal(groundStepY(1.6,.12,surfaces),0,'Walking off bedding should return to the roof.');
+ assert.equal(groundStepY(-.65,.12,surfaces),.12,'The guard must not become a giant automatic step.');
+ assert.equal(groundStepY(23,0,surfaces),undefined,'Low-step handling must not bridge the rooftop gap.');
 });

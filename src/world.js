@@ -135,6 +135,79 @@ export function createWorld(THREE, scene) {
     }
   }
   rooftop(-1, 22, 0, 38); rooftop(24.2, 43, .45, 91);
+  // A small improvised sleeping spot is protected by the fixed end guard.
+  // These constants are also consumed by movement so art and collision agree.
+  const restArea = {
+    spawnX: 0, surfaceY: .12,
+    mattress: { x: -.9, w: 2.2, y: .12 },
+    leftWall: { x: -1.04, w: .18, y: 1.32 }
+  };
+  box(.18, .32, 4.4, -.95, .16, -.15, rimMat);
+  // Thin rusty rails keep the head and hands readable against the city.
+  for (const z of [-2.30, -1.43, -.56, .31, 1.18, 2.02]) {
+    box(.047, 1.0, .047, -.95, .82, z, darkMetal);
+    box(.055, .13, .055, -.95, .43 + random(z + 340) * .24, z, rust);
+    box(.105, .045, .105, -.95, .34, z, zinc);
+  }
+  for (const y of [.76, 1.295]) box(.045, .05, 4.36, -.95, y, -.14, darkMetal);
+  // The tiny front return stops at x=-.68, clear of the child's silhouette.
+  box(.27, .22, .18, -.815, .11, 2.01, rimMat);
+  for (const y of [.76, 1.295]) box(.27, .05, .045, -.815, y, 2.02, darkMetal);
+  box(.045, .99, .045, -.70, .815, 2.02, darkMetal);
+  const bed = new THREE.Group(); bed.name = 'rest-area'; world.add(bed);
+  const fabricCanvas = document.createElement('canvas'); fabricCanvas.width = 512; fabricCanvas.height = 256;
+  const fabricCtx = fabricCanvas.getContext('2d');
+  fabricCtx.fillStyle = '#aaa99a'; fabricCtx.fillRect(0, 0, 512, 256);
+  for (let i = 0; i < 20; i++) {
+    const x = random(i + 522) * 512, y = random(i + 721) * 256, radius = 18 + random(i + 821) * 54;
+    const stain = fabricCtx.createRadialGradient(x, y, 2, x, y, radius);
+    stain.addColorStop(0, `rgba(72,74,58,${.035 + random(i + 540) * .09})`); stain.addColorStop(1, 'rgba(72,74,58,0)');
+    fabricCtx.fillStyle = stain; fabricCtx.fillRect(0, 0, 512, 256);
+  }
+  fabricCtx.lineWidth = .65;
+  for (let i = 1; i < 256; i += 2) { fabricCtx.strokeStyle = 'rgba(32,38,34,.042)'; fabricCtx.beginPath(); fabricCtx.moveTo(0, i); fabricCtx.lineTo(512, i); fabricCtx.stroke(); }
+  for (let i = 1; i < 512; i += 3) { fabricCtx.strokeStyle = 'rgba(231,231,213,.055)'; fabricCtx.beginPath(); fabricCtx.moveTo(i, 0); fabricCtx.lineTo(i, 256); fabricCtx.stroke(); }
+  // Faded quilt channels and a double stitched border are baked into the fabric.
+  fabricCtx.strokeStyle = 'rgba(58,64,57,.16)'; fabricCtx.lineWidth = 1;
+  for (let y = 40; y < 240; y += 39) { fabricCtx.beginPath(); fabricCtx.moveTo(14, y); fabricCtx.bezierCurveTo(180, y + 6, 310, y - 5, 497, y); fabricCtx.stroke(); }
+  fabricCtx.strokeStyle = 'rgba(46,51,45,.25)'; fabricCtx.setLineDash([4, 3]);
+  fabricCtx.strokeRect(12, 11, 488, 234); fabricCtx.strokeRect(17, 16, 478, 224); fabricCtx.setLineDash([]);
+  const fabricMap = new THREE.CanvasTexture(fabricCanvas); fabricMap.colorSpace = THREE.SRGBColorSpace; fabricMap.anisotropy = 4;
+  fabricMap.wrapS = fabricMap.wrapT = THREE.RepeatWrapping;
+  const fabricBump = fabricMap.clone(); fabricBump.colorSpace = THREE.NoColorSpace;
+  const mattressFabric = mat('#a2a99a', .99, { map: fabricMap, bumpMap: fabricBump, bumpScale: .008 });
+  const mattressSide = mat('#8e9686', .99, { map: fabricMap, bumpMap: fabricBump, bumpScale: .008 });
+  // The front corner is absent from the cloth shell; the shell is mirrored so
+  // the exposed foam faces the camera away from the guard.
+  const mattressShape = new THREE.Shape(), hx = 1.088, hz = .513, corner = .07;
+  mattressShape.moveTo(-hx + .26, -hz); mattressShape.lineTo(hx - corner, -hz);
+  mattressShape.quadraticCurveTo(hx, -hz, hx, -hz + corner); mattressShape.lineTo(hx, hz - corner);
+  mattressShape.quadraticCurveTo(hx, hz, hx - corner, hz); mattressShape.lineTo(-hx + corner, hz);
+  mattressShape.quadraticCurveTo(-hx, hz, -hx, hz - corner); mattressShape.lineTo(-hx, -.20);
+  mattressShape.lineTo(-hx + .04, -.31); mattressShape.lineTo(-hx + .11, -.285);
+  mattressShape.lineTo(-hx + .14, -.42); mattressShape.lineTo(-hx + .23, -.415); mattressShape.closePath();
+  const mattressGeometry = new THREE.ExtrudeGeometry(mattressShape, { depth: .09, steps: 1, bevelEnabled: true, bevelSize: .012, bevelThickness: .015, bevelSegments: 2, curveSegments: 4 });
+  mattressGeometry.rotateX(-Math.PI / 2); mattressGeometry.translate(0, .015, 0);
+  const mattressPositions = mattressGeometry.attributes.position, mattressUV = mattressGeometry.attributes.uv;
+  for (let i = 0; i < mattressPositions.count; i++) mattressUV.setXY(i, mattressPositions.getX(i) / 2.2 + .5, .5 - mattressPositions.getZ(i) / 1.05);
+  const mattress = new THREE.Mesh(mattressGeometry, [mattressFabric, mattressSide]); mattress.name = 'torn-mattress'; mattress.position.x = .2; mattress.scale.x = -1;
+  mattress.castShadow = true; mattress.receiveShadow = true; bed.add(mattress);
+  const foam = beveledBox(.27, .067, .27, .008, 1.15, .043, .39, mat('#a39b73', .99, { map: concreteMap, bumpMap: concreteRelief, bumpScale: .012 }), bed); foam.name = 'exposed-foam';
+  const springs = new THREE.InstancedMesh(new THREE.TorusGeometry(.023, .004, 4, 12), rust, 3), springDummy = new THREE.Object3D();
+  for (let i = 0; i < 3; i++) { springDummy.position.set(1.24 - i * .063, .037, .52); springDummy.rotation.z = i * .2; springDummy.updateMatrix(); springs.setMatrixAt(i, springDummy.matrix); }
+  springs.name = 'exposed-springs'; bed.add(springs);
+  const pillow = beveledBox(.5, .075, .42, .018, .68, .158, 0, mat('#c0c0ad', .99, { map: fabricMap, bumpMap: fabricBump, bumpScale: .004 }), bed); pillow.name = 'pillow';
+  pillow.rotation.y = -.055;
+  // The folded blanket lies on the far edge, away from the child's z=±.255 hands.
+  const blanketGeometry = new THREE.PlaneGeometry(1.5, .17, 16, 4); blanketGeometry.rotateX(-Math.PI / 2);
+  const blanketVertices = blanketGeometry.attributes.position;
+  for (let i = 0; i < blanketVertices.count; i++) {
+    const x = blanketVertices.getX(i), z = blanketVertices.getZ(i);
+    blanketVertices.setY(i, .139 + Math.sin(x * 16 + z * 15) * .017 + Math.cos(x * 6 - z * 21) * .012);
+  }
+  blanketGeometry.computeVertexNormals();
+  const blanket = new THREE.Mesh(blanketGeometry, mat('#637277', .98, { map: fabricMap, bumpMap: fabricBump, bumpScale: .006, side: THREE.DoubleSide }));
+  blanket.name = 'folded-blanket'; blanket.position.set(-.04, 0, -.43); blanket.castShadow = true; blanket.receiveShadow = true; bed.add(blanket);
   // Low vent: first readable jump, open space around it.
   beveledBox(1.6, .76, 1.08, .035, 7, .38, 0, zinc);
   beveledBox(1.68, .09, 1.15, .018, 7, .805, 0, rimMat);
@@ -358,8 +431,7 @@ export function createWorld(THREE, scene) {
     sprite.position.set(-17 + i * 21, -3 + random(i + 17) * 6, -9 - i * 5);
     sprite.scale.set(32 + i * 4, 5, 1); sprite.userData.startX = sprite.position.x; mist.push(sprite); world.add(sprite);
   }
-  // Opening tension is visual only: the playable roof and all collision dimensions stay intact.
-  // A distant security searchlight wakes up, then a loose coping stone falls behind the child.
+  // A distant security searchlight wakes up while the sleeping child remains protected.
   const searchOrigin = new THREE.Vector3(-5, 4.25, -23.6);
   box(.14, 1.1, .14, -5, 3.6, -24, darkMetal, world, false);
   box(.7, .15, .5, -5, 3.1, -24, zinc, world, false);
@@ -372,25 +444,18 @@ export function createWorld(THREE, scene) {
   const beacon = new THREE.Mesh(new THREE.SphereGeometry(.105, 8, 6), beaconMaterial); searchRig.add(beacon);
   searchRig.visible = false;
   const searchDirection = new THREE.Vector3(), beamDown = new THREE.Vector3(0, -1, 0);
-  const ledgeTile = box(.43, .09, .92, -1.02, .05, 1.27, rimMat);
-  ledgeTile.userData.keepDynamic = true;
-  const dustCount = 22, dustPositions = new Float32Array(dustCount * 3);
-  const dustGeometry = new THREE.BufferGeometry(); dustGeometry.setAttribute('position', new THREE.BufferAttribute(dustPositions, 3));
-  const dustMaterial = new THREE.PointsMaterial({ color: '#a5aaa2', size: .07, transparent: true, opacity: 0, depthWrite: false, sizeAttenuation: true, fog: true });
-  const dust = new THREE.Points(dustGeometry, dustMaterial); dust.visible = false; dust.frustumCulled = false; world.add(dust);
-  let openingState = { active: false, elapsed: 0, wake: 0, escaped: false }, beamArmed = false, fallStarted = -1, lastWorldTime = 0;
+  // The waking place is protected; only the distant searchlight drives the opening.
+  let openingState = { active: false, elapsed: 0, wake: 0, escaped: false }, beamArmed = false, lastWorldTime = 0;
   const opening = {
     reset() {
-      openingState = { active: false, elapsed: 0, wake: 0, escaped: false }; beamArmed = false; fallStarted = -1;
-      searchRig.visible = false; dust.visible = false; dustMaterial.opacity = 0;
-      ledgeTile.visible = true; ledgeTile.position.set(-1.02, .05, 1.27); ledgeTile.rotation.set(0, 0, 0);
+      openingState = { active: false, elapsed: 0, wake: 0, escaped: false }; beamArmed = false;
+      searchRig.visible = false;
     },
     update(state = {}) {
       openingState = { ...openingState, ...state };
       if (Number.isFinite(openingState.wake) && openingState.wake >= .5 && (openingState.active || openingState.escaped)) beamArmed = true;
-      if (openingState.escaped && fallStarted < 0) fallStarted = lastWorldTime;
     },
-    get state() { return { beamOn: beamArmed, stoneFalling: fallStarted >= 0, escaped: !!openingState.escaped }; }
+    get state() { return { beamOn: beamArmed, stoneFalling: false, escaped: !!openingState.escaped }; }
   };
   function updateOpening(time) {
     searchRig.visible = beamArmed;
@@ -398,24 +463,6 @@ export function createWorld(THREE, scene) {
       searchDirection.set(.45 + Math.sin(time * .24) * .55, -.15 + Math.sin(time * .17) * .035, 1).normalize();
       searchRig.quaternion.setFromUnitVectors(beamDown, searchDirection);
       beaconMaterial.opacity = .7 + Math.sin(time * 1.8) * .1;
-    }
-    if (fallStarted >= 0) {
-      const age = Math.max(0, time - fallStarted), slide = Math.min(age / .26, 1);
-      ledgeTile.position.x = -1.02 - slide * .42 - Math.max(0, age - .26) * .35;
-      ledgeTile.position.y = .05 - Math.max(0, age - .26) ** 2 * 4.7;
-      ledgeTile.rotation.z = -slide * .12 - Math.max(0, age - .26) * 1.8;
-      ledgeTile.rotation.x = Math.max(0, age - .26) * .7;
-      ledgeTile.visible = age < 2.2; dust.visible = age < 1.45;
-      dustMaterial.opacity = Math.max(0, 1 - age / 1.45) * .36;
-      if (dust.visible) {
-        for (let i = 0; i < dustCount; i++) {
-          const n = i * 3;
-          dustPositions[n] = -1.1 - random(i + 191) * .2 - age * (.2 + random(i + 7) * .5);
-          dustPositions[n + 1] = .08 + age * (.2 + random(i + 15) * .3) - age * age * (1.1 + random(i + 99));
-          dustPositions[n + 2] = 1.05 + random(i + 45) * .55 + age * (random(i + 83) - .5) * .4;
-        }
-        dustGeometry.attributes.position.needsUpdate = true;
-      }
     }
   }
   // Consolidate static set dressing without touching the moving crate, door or mist.
@@ -440,7 +487,7 @@ export function createWorld(THREE, scene) {
     mesh.castShadow = batch.castShadow; mesh.receiveShadow = batch.receiveShadow; world.add(mesh);
   }
   for (const geometry of disposedGeometry) geometry.dispose();
-  return { crate, door, doorLight, world, opening, update(time, playerX = 0, openingUpdate) {
+  return { crate, door, doorLight, world, opening, restArea, update(time, playerX = 0, openingUpdate) {
     lastWorldTime = Number.isFinite(time) ? time : lastWorldTime;
     if (openingUpdate) opening.update(openingUpdate);
     updateOpening(lastWorldTime);

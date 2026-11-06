@@ -62,3 +62,7 @@ The `docs/` directory contains the complete game as a static page, including its
 4. When deployment finishes, open the site address shown in Pages settings on your phone. Landscape orientation gives the scene and touch controls more room.
 
 For later updates, run `npm run build` and commit the updated `docs/index.html` along with the source changes. Keep `docs/.nojekyll` so GitHub serves the generated page directly.
+
+## Rooftop shelter — v0.8
+
+The boy wakes on a torn mattress with a pillow and a folded blanket. A fixed railing and concrete base guard the left edge. Bedding is a low walkable surface, and the guard blocks movement and ordinary jumps toward the drop. The searchlight opening remains; the loose falling coping stone has been removed.

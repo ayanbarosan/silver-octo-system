@@ -8,7 +8,7 @@ import {createBoy} from './character.js';
 import {createWorld} from './world.js';
 import {createWaterEffects} from './water.js';
 import {findClimbTarget,createClimb,sampleClimb} from './climb.js';
-import {MOVEMENT,movementVelocity,preparationX,landingDistance} from './movement.js';
+import {MOVEMENT,movementVelocity,preparationX,landingDistance,groundStepY} from './movement.js';
 import {createOpening} from './opening.js';
 
 const $=s=>document.querySelector(s);
@@ -47,6 +47,10 @@ const sun=new THREE.DirectionalLight('#cddbdc',1.95);sun.position.set(5,18,-9);s
 const fill=new THREE.DirectionalLight('#8fa8b7',.8);fill.position.set(-8,5,12);scene.add(fill);
 const rim=new THREE.DirectionalLight('#dae8e8',1.25);rim.position.set(-3,8,-5);scene.add(rim);
 const world=createWorld(THREE,scene),boy=createBoy(THREE);scene.add(boy.group);
+const restArea=world.restArea;
+Object.assign(player,{x:restArea.spawnX,y:restArea.surfaceY});
+Object.assign(previousSim,{x:restArea.spawnX,y:restArea.surfaceY,vx:0});
+lastDrawX=restArea.spawnX;
 const water=createWaterEffects(THREE,scene);
 
 // Sparse moving rain catches the cold skylight, leaving the silhouettes legible.
@@ -70,7 +74,7 @@ function resize(){const w=innerWidth,h=innerHeight;const ratio=Math.min(qualityR
 
 function say(text,duration=3){if(message.textContent!==text)message.textContent=text;messageUntil=time+duration;}
 function setObjective(text){const p=objective.querySelector('p');if(p.textContent!==text)p.textContent=text;}
-function start(){clearInput();state='play';wake=0;checkpoint=0;fade=0;player.x=0;player.y=0;player.vx=0;player.vy=0;player.grounded=true;player.face=1;world.crate.position.x=13;jumpHeld=false;jumpBuffer=0;coyoteTime=0;resetJumpMotion();mantle=null;ledgeIntent=0;climbsCompleted=0;water.reset();landImpact=0;acceleration=0;lastDrawX=0;Object.assign(previousSim,{x:0,y:0,vx:0});boy.reset?.();opening.reset();world.opening?.reset();cameraX=-3.2;cameraLead=1.3;cameraY=0;openingCue.hidden=false;openingCue.textContent=opening.state.cue;document.body.classList.add('opening');intro.hidden=true;ending.hidden=true;objective.hidden=false;document.body.classList.add('playing');canvas.focus();say('You are awake. The city is still sleeping.',4);}
+function start(){clearInput();state='play';wake=0;checkpoint=0;fade=0;player.x=restArea.spawnX;player.y=restArea.surfaceY;player.vx=0;player.vy=0;player.grounded=true;player.face=1;world.crate.position.x=13;jumpHeld=false;jumpBuffer=0;coyoteTime=0;resetJumpMotion();mantle=null;ledgeIntent=0;climbsCompleted=0;water.reset();landImpact=0;acceleration=0;lastDrawX=0;Object.assign(previousSim,{x:restArea.spawnX,y:restArea.surfaceY,vx:0});boy.reset?.();opening.reset();world.opening?.reset();cameraX=-3.2;cameraLead=1.3;cameraY=0;openingCue.hidden=false;openingCue.textContent=opening.state.cue;document.body.classList.add('opening');intro.hidden=true;ending.hidden=true;objective.hidden=false;document.body.classList.add('playing');canvas.focus();say('You are awake. The city is still sleeping.',4);}
 function pause(){if(state==='play'){state='pause';clearInput();say('PAUSED · Press ESC or tap the scene to continue.',1e6)}else if(state==='pause'){state='play';message.textContent='';messageUntil=0;}}
 $('#play').onclick=start;$('#again').onclick=start;
 canvas.addEventListener('pointerdown',()=>{if(state==='pause')pause();canvas.focus()});
@@ -89,8 +93,8 @@ for(const b of document.querySelectorAll('[data-key]')){
  for(const type of ['pointerup','pointercancel','lostpointercapture'])b.addEventListener(type,()=>{if(b.dataset.key!=='Shift')keys.delete(b.dataset.key)});
 }
 const crateCollider={id:'crate',x:12.45,w:1.1,y:.85};
-const obstacleList=[{id:'vent',x:6.2,w:1.6,y:.85},{id:'pipe',x:16.725,w:.55,y:1.65},crateCollider];
-const surfaceList=[{x:-1,w:23,y:0},{x:24.2,w:18.8,y:.45},...obstacleList];
+const obstacleList=[{id:'rest-wall',...restArea.leftWall},{id:'vent',x:6.2,w:1.6,y:.85},{id:'pipe',x:16.725,w:.55,y:1.65},crateCollider];
+const surfaceList=[restArea.mattress,{x:-1,w:23,y:0},{x:24.2,w:18.8,y:.45},...obstacleList];
 const obstacles=()=>{crateCollider.x=world.crate.position.x-.55;return obstacleList;};
 const colliders=()=>{crateCollider.x=world.crate.position.x-.55;return surfaceList;};
 function beginClimb(target){
@@ -144,7 +148,7 @@ function physics(dt){
  }
  // Brief planted anticipation keeps an edge jump responsive without stepping
  // off the roof while the knees load. Airborne trajectory remains unchanged.
- const previousY=player.y;let nextX=jumpMotion.preparing?preparationX({x:player.x,y:player.y,vx:player.vx,running,dt,grounded:player.grounded,surfaces:colliders()}):player.x+player.vx*dt;push=false;
+ let previousY=player.y;let nextX=jumpMotion.preparing?preparationX({x:player.x,y:player.y,vx:player.vx,running,dt,grounded:player.grounded,surfaces:colliders()}):player.x+player.vx*dt;push=false;
  const crate=world.crate.position;
  if(player.y<.84&&Math.abs(nextX-crate.x)<.77){
   if(keys.has('e')&&direction&&player.grounded&&!jumpMotion.preparing){
@@ -155,12 +159,17 @@ function physics(dt){
  }
  for(const c of obstacleList){
   if(c.id==='crate')continue;
-  if(player.y<c.y-.02&&nextX+.2>c.x&&nextX-.2<c.x+c.w){
+  const contactRadius=c.id==='rest-wall'?.21:.2;
+  if(player.y<c.y-.02&&nextX+contactRadius>c.x&&nextX-contactRadius<c.x+c.w){
    // Resolve only side entry, so standing on top never gets stuck.
    if(player.x<=c.x-.19){nextX=c.x-.21;player.vx=0;}else if(player.x>=c.x+c.w+.19){nextX=c.x+c.w+.21;player.vx=0;}
   }
  }
  const wasGrounded=player.grounded;
+ if(wasGrounded&&!jumpMotion.launched&&!jumpMotion.preparing&&player.vy<=0){
+  const support=groundStepY(nextX,player.y,colliders());
+  if(support!==undefined){player.y=support;previousY=support;player.vy=0;}
+ }
  player.x=nextX;player.vy-=(jumpMotion.launched?MOVEMENT.gravity:MOVEMENT.fallGravity)*dt;player.y+=player.vy*dt;player.grounded=false;
  const fallSpeed=-player.vy;
  for(const c of colliders())if(player.x>c.x-.02&&player.x<c.x+c.w+.02&&previousY>=c.y-.025&&player.y<=c.y&&player.vy<=0){player.y=c.y;player.vy=0;player.grounded=true;}
@@ -173,7 +182,7 @@ function physics(dt){
  if(player.y<-5){state='fall';fade=0;clearInput();message.textContent='';}
  if(player.x>42.5)player.x=42.5;
 
- setObjective(player.x<5?'Find a way to the next rooftop.':player.x<10?'Hold toward the vent to climb. SPACE also grabs the ledge.':player.x<18?'Push the crate all the way to the pipe. Climb the crate, then the pipe.':player.x<24.7?'Hold SHIFT + D to run. Jump close to the edge.':'Reach the lit doorway.');
+ setObjective(player.x<5?'Leave your shelter. Follow the roof to the right.':player.x<10?'Hold toward the vent to climb. SPACE also grabs the ledge.':player.x<18?'Push the crate all the way to the pipe. Climb the crate, then the pipe.':player.x<24.7?'Hold SHIFT + D to run. Jump close to the edge.':'Reach the lit doorway.');
  if(player.x>37.3&&player.x<40.5){say('E — Open the door.',.2);if(keys.has('e')){state='end';ending.hidden=false;objective.hidden=true;message.textContent='';clearInput();}}
 }
 let audio=null,muted=true,master,stepNoise;
@@ -221,7 +230,7 @@ function frame(now){
  if(state==='fall'){
   fade=Math.min(1,fade+dt*1.7);
   if(fade===1){
-   player.x=checkpoint?25.4:0;player.y=checkpoint?.45:0;player.vy=0;player.vx=0;player.grounded=true;
+   player.x=checkpoint?25.4:restArea.spawnX;player.y=checkpoint?.45:restArea.surfaceY;player.vy=0;player.vx=0;player.grounded=true;
    Object.assign(previousSim,{x:player.x,y:player.y,vx:0});lastDrawX=player.x;boy.reset?.();
    cameraX=player.x;state='play';jumpBuffer=0;coyoteTime=0;resetJumpMotion();mantle=null;ledgeIntent=0;water.reset();
    say('Steady yourself. Try again.',3);
@@ -274,7 +283,7 @@ function frame(now){
  grade.uniforms.uTime.value=time;grade.uniforms.uFade.value=fade;
  if(software){const opacity=String(1-fade);if(canvas.style.opacity!==opacity)canvas.style.opacity=opacity;renderer.render(scene,camera)}else composer.render();
 }
-boy.group.position.set(0,0,0);boy.group.rotation.y=Math.PI/2;requestAnimationFrame(frame);
+boy.group.position.set(restArea.spawnX,restArea.surfaceY,0);boy.group.rotation.y=Math.PI/2;requestAnimationFrame(frame);
 canvas.addEventListener('webglcontextlost',e=>{e.preventDefault();state='pause';$('#error').hidden=false;$('#error').textContent='3D graphics were interrupted. Reload the page to continue.'});
 // Non-enumerable observation hook for repeatable browser smoke tests.
 Object.defineProperty(window,'__game',{value:{get state(){return state},get wake(){return wake},get opening(){return {...opening.state}},get jump(){return {...jumpMotion}},get animation(){return boy.group.userData.animation},get climb(){return mantle?{...mantle}:null},get climbsCompleted(){return climbsCompleted},get splashes(){return {active:water.activeCount,emitted:water.emittedCount}},get software(){return software},player,get crateX(){return world.crate.position.x},get drawCalls(){return renderer.info.render.calls},get triangles(){return renderer.info.render.triangles}}});

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import {findClimbTarget,createClimb,sampleClimb} from '../src/climb.js';
 import {createWaterEffects} from '../src/water.js';
+import {MOVEMENT} from '../src/movement.js';
 
 test('ledge reach respects height, distance, direction and grounded support',()=>{
  const vent={id:'vent',x:6.2,w:1.6,y:.85},pipe={id:'pipe',x:16.725,w:.55,y:1.65};
@@ -51,4 +52,10 @@ test('water reuses a bounded pool and reset clears all old spray',()=>{
  fx.reset();assert.equal(fx.activeCount,0);assert.equal(fx.emittedCount,0);
  fx.splash({x:2,y:0,strength:.55});assert.deepEqual(Array.from(scene.getObjectByName('WaterDroplets').geometry.attributes.position.array),first);
  fx.splash({x:NaN,y:0});assert.equal(fx.emittedCount,1);
+});
+
+test('the starting guard cannot be climbed or cleared from the mattress',()=>{
+ const guard={id:'rest-wall',x:-1.04,w:.18,y:1.32};
+ assert.equal(findClimbTarget({x:-.65,y:.12,face:-1,grounded:true},[guard]),null);
+ assert(.12+MOVEMENT.jumpVelocity**2/(2*MOVEMENT.gravity)<guard.y,'The guard must remain higher than the maximum normal jump feet height.');
 });

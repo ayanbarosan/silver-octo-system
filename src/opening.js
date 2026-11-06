@@ -15,8 +15,8 @@ export function createOpening(){
    state.cue=sinceEscape<1.15?'Keep moving.':sinceEscape<2.8?'A light in the opposite building. Then nothing.':'Find the lit door.';
    if(sinceEscape>4){state.active=false;state.phase='complete';state.cue='';}
   }else if(wake<.48){state.phase='waking';state.cue=state.elapsed<1.1?'06:14 — Sector 09':'Wake up.';}
-  else if(wake<1){state.phase='warning';state.cue='Something below is waking too.';}
-  else{state.phase='escape';state.cue=state.elapsed>8?'Move right. Get off the edge.':'Get away from the edge.';}
+  else if(wake<1){state.phase='warning';state.cue='Someone is searching the rooftops.';}
+  else{state.phase='escape';state.cue=state.elapsed>8?'Leave your shelter. Move right.':'Move away from the light.';}
   if(state.phase!==lastPhase){events.push(state.phase);lastPhase=state.phase;}
   return events;
  }
