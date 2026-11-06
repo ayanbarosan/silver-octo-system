@@ -2,7 +2,7 @@
 
 An original **2.5D adventure prototype** with a fully 3D character and city, played from a side view. A boy in a black tracksuit with white stripes and a lime backpack wakes on a torn mattress in a small rooftop shelter above a quiet city of apartment blocks. A fixed railing and concrete base guard the edge beside his bedding.
 
-Cross three rooftops: climb past the vent, move the crate to clear the pipe, take a running jump to the middle block, then cross a wooden plank to the lit door on the final roof. The plank breaks behind you after you reach safety, with a checkpoint on the final roof. The scene uses concrete textures, layered city silhouettes, fog, shadows, and a subdued early morning palette. Walking, running, waking, jumping, landing, and climbing use animated character poses.
+Cross three rooftops: climb past the vent, move the crate to clear the pipe, take a running jump to the middle block, then cross a wooden plank to a lower landing beside the final building. The plank breaks behind you after you reach the landing safely. Climb the wall ladder to the upper roof, where the next checkpoint is set, and continue to the lit door. The scene uses concrete textures, layered city silhouettes, fog, shadows, and a subdued early morning palette. Walking, running, waking, jumping, landing, and climbing use animated character poses.
 
 ## Opening
 
@@ -18,12 +18,15 @@ Open the generated `dist/The-last-floor.html` file in Chrome, Edge, or Firefox. 
 - **Shift + a direction**: run. Use a running jump to cross the gap between buildings.
 - **Space**, **W**, or **Up**: jump; near a reachable ledge, climb up.
 - **Hold a direction toward a reachable ledge**: automatically grab the edge and pull yourself up.
+- **W**, **Up**, or **Space** at the wall ladder: climb up.
+- **S** or **Down** at the wall ladder: climb down, including entering the ladder from the upper roof.
+- **D / Right** or **A / Left** while on the ladder: climb up or down, respectively. Release the controls to hold still; reverse direction at any point.
 - **E + a direction**: push the crate.
 - **E**: open the lit door.
 - **Esc**: pause or resume. On a touchscreen, tap the scene to resume.
 - **R**: restart the level.
 
-Touch controls appear on touchscreen devices. **RUN** toggles running so you can jump without holding three buttons at once. Use the **SOUND** button in the top right to turn the ambient audio on or off.
+Touch controls appear on touchscreen devices. **RUN** toggles running so you can jump without holding three buttons at once. Near the ladder, an extra **↓** button appears for climbing down; the **↑** button climbs up. The existing **← / →** buttons also move down or up while on the ladder. Release the buttons to hold your place. Use the **SOUND** button in the top right to turn the ambient audio on or off.
 
 After **WAKE UP**, the boy automatically braces his palms against the roof, brings a knee beneath him, and stands. Jumps preserve forward momentum, choose a leading leg from the current stride, and blend through anticipation, takeoff, airborne recovery, landing reach, and a step back into movement. A short input buffer and edge grace make repeated jumps more forgiving. Near a reachable ledge, he grabs the edge and pulls himself onto the roof.
 
@@ -32,8 +35,9 @@ After **WAKE UP**, the boy automatically braces his palms against the roof, brin
 1. Leave the mattress shelter and get over the vent.
 2. Push the crate toward the tall pipe, then use it as a step to climb across.
 3. Take a running jump over the first gap to the middle apartment block.
-4. Walk across the wooden plank spanning the second gap to the final roof.
-5. Once you reach the far roof safely, the plank breaks behind you and the final checkpoint is saved. Continue to the lit door and press **E**.
+4. Walk across the wooden plank spanning the second gap to the lower landing beside the final building. It breaks behind you only after you reach the landing safely.
+5. At the left wall, hold **W**, **Up**, or **Space** to climb the ladder. Stop to hold still, or use **S / Down** to reverse. You can also use **D / A** while climbing.
+6. Step onto the upper roof to set the final checkpoint, then continue to the lit door and press **E**. To go back down, hold **S / Down** at the top of the ladder.
 
 ## Android: play the downloaded ZIP offline
 
@@ -59,7 +63,7 @@ npm start
 npm test
 ```
 
-`npm run build` bundles `src/main.js` into `game.js` and generates the standalone HTML file in `dist/` and the GitHub Pages site in `docs/`. `npm start` serves the existing build. `npm test` checks JavaScript syntax and the character animation rig, including foot contact and animation continuity. WebGL rendering and the complete level also need verification in a browser.
+`npm run build` bundles `src/main.js` into `game.js` and generates the standalone HTML file in `dist/` and the GitHub Pages site in `docs/`. `npm start` serves the existing build. `npm test` checks JavaScript syntax, character contact and animation continuity, bridge failure timing, and ladder movement and transitions. The ladder tests check the rendered hand and shoe markers against real rungs and scan the body for wall penetration. WebGL rendering and the complete level also need verification in a browser.
 
 Character geometry, buildings, windows, materials, and audio are generated locally. Three.js and the build tools are pinned in the dependency manifest and lockfile. The compiled game uses no external fonts, CDNs, or other network resources.
 
@@ -84,4 +88,8 @@ The boy wakes on a torn mattress with a pillow and a folded blanket. A fixed rai
 
 ## Middle rooftop and breakaway plank — v0.9
 
-A third apartment block now forms the middle stage of the route. The first crossing remains a running jump; a wooden plank connects the middle block to the final door roof. It stays intact while you cross and breaks only after you are safely on the final roof. The final checkpoint keeps a later fall from sending you back across the broken plank. The mattress shelter and protective railing remain at the start.
+A third apartment block forms the middle stage of the route. The first crossing remains a running jump; a wooden plank connects the middle block to the far building. It stays intact while you cross and breaks only after you are safely on the far side. The mattress shelter and protective railing remain at the start. In v0.10, the far side is a lower landing, with a ladder leading to the final door roof.
+
+## Wall ladder and upper roof — v0.10
+
+The final building rises above the plank landing. A wall ladder connects the lower landing to its upper roof. Climbing follows alternating hand and foot contacts, holds still when you release the controls, and reverses when you change direction. You can enter from the bottom or climb down from the top. The upper roof sets the final checkpoint, so later falls return you near the door rather than across the broken plank.

@@ -12,6 +12,7 @@ import {MOVEMENT,movementVelocity,preparationX,landingDistance,groundStepY} from
 import {createOpening} from './opening.js';
 import {LEVEL} from './level.js';
 import {createBridge} from './bridge.js';
+import {createLadder,canMountLadder} from './ladder.js';
 
 const $=s=>document.querySelector(s);
 const canvas=$('#scene'),intro=$('#intro'),objective=$('#objective'),message=$('#message'),ending=$('#ending'),openingCue=$('#opening-cue');
@@ -26,6 +27,8 @@ let lastDrawX=0,mantle=null,ledgeIntent=0,climbsCompleted=0;
 const player={x:0,y:0,vx:0,vy:0,grounded:true,face:1};
 const opening=createOpening(),openingVisual={active:false,elapsed:0,wake:0,escaped:false};
 const bridge=createBridge();
+const ladder=createLadder();
+let ladderCooldown=0,laddersCompleted=0;
 const reducedMotion=matchMedia('(prefers-reduced-motion: reduce)').matches;
 let renderer;
 try{renderer=new THREE.WebGLRenderer({canvas,antialias:true,powerPreference:'high-performance'});}catch(error){$('#error').hidden=false;$('#error').textContent='Could not start 3D graphics. Open the game in Chrome or Edge with hardware acceleration enabled.';throw error;}
@@ -77,7 +80,7 @@ function resize(){const w=innerWidth,h=innerHeight;const ratio=Math.min(qualityR
 
 function say(text,duration=3){if(message.textContent!==text)message.textContent=text;messageUntil=time+duration;}
 function setObjective(text){const p=objective.querySelector('p');if(p.textContent!==text)p.textContent=text;}
-function start(){clearInput();state='play';wake=0;checkpoint=0;fade=0;player.x=restArea.spawnX;player.y=restArea.surfaceY;player.vx=0;player.vy=0;player.grounded=true;player.face=1;world.crate.position.x=13;jumpHeld=false;jumpBuffer=0;coyoteTime=0;resetJumpMotion();mantle=null;ledgeIntent=0;climbsCompleted=0;water.reset();bridge.reset();world.bridge?.reset();landImpact=0;acceleration=0;lastDrawX=0;Object.assign(previousSim,{x:restArea.spawnX,y:restArea.surfaceY,vx:0});boy.reset?.();opening.reset();world.opening?.reset();cameraX=-3.2;cameraLead=1.3;cameraY=0;openingCue.hidden=false;openingCue.textContent=opening.state.cue;document.body.classList.add('opening');intro.hidden=true;ending.hidden=true;objective.hidden=false;document.body.classList.add('playing');canvas.focus();say('You are awake. The city is still sleeping.',4);}
+function start(){clearInput();state='play';wake=0;checkpoint=0;fade=0;player.x=restArea.spawnX;player.y=restArea.surfaceY;player.vx=0;player.vy=0;player.grounded=true;player.face=1;world.crate.position.x=13;jumpHeld=false;jumpBuffer=0;coyoteTime=0;resetJumpMotion();mantle=null;ledgeIntent=0;climbsCompleted=0;water.reset();bridge.reset();world.bridge?.reset();ladder.reset();ladderCooldown=0;laddersCompleted=0;landImpact=0;acceleration=0;lastDrawX=0;Object.assign(previousSim,{x:restArea.spawnX,y:restArea.surfaceY,vx:0});boy.reset?.();opening.reset();world.opening?.reset();cameraX=-3.2;cameraLead=1.3;cameraY=0;openingCue.hidden=false;openingCue.textContent=opening.state.cue;document.body.classList.add('opening');intro.hidden=true;ending.hidden=true;objective.hidden=false;document.body.classList.add('playing');canvas.focus();say('You are awake. The city is still sleeping.',4);}
 function pause(){if(state==='play'){state='pause';clearInput();say('PAUSED · Press ESC or tap the scene to continue.',1e6)}else if(state==='pause'){state='play';message.textContent='';messageUntil=0;}}
 $('#play').onclick=start;$('#again').onclick=start;
 canvas.addEventListener('pointerdown',()=>{if(state==='pause')pause();canvas.focus()});
@@ -96,12 +99,39 @@ for(const b of document.querySelectorAll('[data-key]')){
  for(const type of ['pointerup','pointercancel','lostpointercapture'])b.addEventListener(type,()=>{if(b.dataset.key!=='Shift')keys.delete(b.dataset.key)});
 }
 const crateCollider={id:'crate',x:12.45,w:1.1,y:.85};
-const obstacleList=[{id:'rest-wall',...restArea.leftWall},{id:'vent',x:6.2,w:1.6,y:.85},{id:'pipe',x:16.725,w:.55,y:1.65},crateCollider];
+const obstacleList=[{id:'rest-wall',...restArea.leftWall},{id:'vent',x:6.2,w:1.6,y:.85},{id:'pipe',x:16.725,w:.55,y:1.65},crateCollider,{id:'final-wall',...LEVEL.roofs.final}];
 const fixedSurfaces=[restArea.mattress,...Object.values(LEVEL.roofs),...obstacleList];
 const surfaceList=[...fixedSurfaces,LEVEL.bridge];
 const obstacles=()=>{crateCollider.x=world.crate.position.x-.55;return obstacleList;};
 const colliders=()=>{crateCollider.x=world.crate.position.x-.55;return bridge.supported?surfaceList:fixedSurfaces;};
 const onPlank=x=>bridge.supported&&x>=LEVEL.bridge.x&&x<=LEVEL.bridge.x+LEVEL.bridge.w;
+function saveCheckpoint(){
+ if(!player.grounded)return;
+ for(let i=0;i<LEVEL.checkpoints.length;i++){
+  const roof=[LEVEL.roofs.middle,LEVEL.roofs.landing,LEVEL.roofs.final][i];
+  if(Math.abs(player.y-roof.y)<.06&&player.x>=roof.x+.5&&player.x<roof.x+roof.w-.2)checkpoint=Math.max(checkpoint,i+1);
+ }
+}
+function ladderInput(){return {up:keys.has('w')||keys.has('ArrowUp')||keys.has(' ')||keys.has('d')||keys.has('ArrowRight'),down:keys.has('s')||keys.has('ArrowDown')||keys.has('a')||keys.has('ArrowLeft')};}
+function beginLadder(entry){
+ if(!ladder.begin(player,entry))return false;
+ ladder.state.turnStart=boy.group.rotation.y;
+ mantle=null;resetJumpMotion();jumpHeld=true;jumpBuffer=0;coyoteTime=0;ledgeIntent=0;push=false;landImpact=0;acceleration=0;
+ say('Hold UP to climb. DOWN to descend. Release to hold on.',3);
+ return true;
+}
+function advanceLadder(dt){
+ const event=ladder.update(dt,ladderInput(),player);
+ setObjective('Climb to the upper roof. Take your time.');
+ if(event==='rung')ladderSound();
+ if(event==='complete-top'||event==='complete-bottom'){
+  ladderCooldown=.3;resetJumpMotion();jumpBuffer=0;coyoteTime=0;
+  jumpHeld=keys.has(' ')||keys.has('w')||keys.has('ArrowUp');
+  const support=groundStepY(player.x,player.y,colliders());
+  player.grounded=support!==undefined;if(player.grounded)player.y=support;
+  if(event==='complete-top'){laddersCompleted++;saveCheckpoint();say('The door is close. Keep going.',2.5);}
+ }
+}
 function beginClimb(target){
  mantle=createClimb({x:player.x,y:player.y,face:player.face,target});
  if(!mantle)return false;
@@ -123,9 +153,16 @@ let push=false;
 function physics(dt){
  if(!bridge.supported)bridge.update(dt,player);
  if(state!=='play')return;
+ ladderCooldown=Math.max(0,ladderCooldown-dt);
  wake=Math.min(1,wake+dt/3.4);if(wake<1){player.vx=0;setObjective('Wake up. Slowly, back on your feet.');return;}
+ if(ladder.active){advanceLadder(dt);return;}
  if(mantle){advanceClimb(dt);return;}
  let direction=Number(keys.has('d')||keys.has('ArrowRight'))-Number(keys.has('a')||keys.has('ArrowLeft'));
+ if(ladderCooldown===0&&!keys.has('e')){
+  const climbUp=keys.has('w')||keys.has('ArrowUp')||keys.has(' ');
+  if(canMountLadder(player)&&((direction>0&&player.x>=LEVEL.ladder.x-.24)||climbUp)){if(beginLadder('bottom'))return;}
+  if(canMountLadder(player,LEVEL.ladder,'top')&&(keys.has('s')||keys.has('ArrowDown'))){if(beginLadder('top'))return;}
+ }
  const previousVX=player.vx;
  const running=keys.has('Shift');
  player.vx=movementVelocity(player.vx,direction,running,player.grounded,dt);
@@ -184,15 +221,14 @@ function physics(dt){
   water.splash({x:player.x,y:player.y,strength:.65+landImpact*.45});
  }
  if(player.grounded){jumpMotion.airTime=0;jumpMotion.launched=false;}else jumpMotion.airTime+=dt;
- if(player.grounded&&Math.abs(player.y-LEVEL.roofs.middle.y)<.06&&player.x>LEVEL.roofs.middle.x+.5&&player.x<LEVEL.roofs.middle.x+LEVEL.roofs.middle.w-.2)checkpoint=Math.max(checkpoint,1);
- if(player.grounded&&Math.abs(player.y-LEVEL.roofs.final.y)<.06&&player.x>=LEVEL.bridge.safeX)checkpoint=2;
+ saveCheckpoint();
  const bridgeEvent=bridge.supported?bridge.update(dt,player):undefined;
  if(bridgeEvent){bridgeSound(bridgeEvent);if(bridgeEvent==='break')say('Keep moving. There is no way back.',3.5);}
  if(player.y<-5){state='fall';fade=0;clearInput();message.textContent='';}
  player.x=Math.min(player.x,LEVEL.roofs.final.x+LEVEL.roofs.final.w-.5);
 
- setObjective(player.x<5?'Leave your shelter. Follow the roof to the right.':player.x<10?'Hold toward the vent to climb. SPACE also grabs the ledge.':player.x<18?'Push the crate all the way to the pipe. Climb the crate, then the pipe.':player.x<LEVEL.roofs.middle.x+.5?'Hold SHIFT + D to run. Jump close to the edge.':player.x<LEVEL.bridge.safeX?'Cross the wooden plank to the next roof.':'Reach the lit doorway.');
- if(player.x>LEVEL.doorX-1.2&&player.x<LEVEL.doorX+2){say('E — Open the door.',.2);if(keys.has('e')){state='end';ending.hidden=false;objective.hidden=true;message.textContent='';clearInput();}}
+ setObjective(player.x<5?'Leave your shelter. Follow the roof to the right.':player.x<10?'Hold toward the vent to climb. SPACE also grabs the ledge.':player.x<18?'Push the crate all the way to the pipe. Climb the crate, then the pipe.':player.x<LEVEL.roofs.middle.x+.5?'Hold SHIFT + D to run. Jump close to the edge.':player.x<LEVEL.bridge.safeX?'Cross the wooden plank to the next roof.':player.y<LEVEL.roofs.final.y-.2?'Climb the ladder to reach the upper roof.':'Reach the lit doorway.');
+ if(player.grounded&&Math.abs(player.y-LEVEL.roofs.final.y)<.09&&player.x>LEVEL.doorX-1.2&&player.x<LEVEL.doorX+2){say('E — Open the door.',.2);if(keys.has('e')){state='end';ending.hidden=false;objective.hidden=true;message.textContent='';clearInput();}}
 }
 let audio=null,muted=true,master,stepNoise;
 function initAudio(){if(audio)return;const AC=window.AudioContext||window.webkitAudioContext;if(!AC)return;audio=new AC();master=audio.createGain();master.gain.value=.45;master.connect(audio.destination);const noise=audio.createBuffer(1,audio.sampleRate*4,audio.sampleRate);const data=noise.getChannelData(0);for(let i=0;i<data.length;i++)data[i]=(Math.random()*2-1)*.21;stepNoise=audio.createBuffer(1,Math.floor(audio.sampleRate*.12),audio.sampleRate);const stepData=stepNoise.getChannelData(0);for(let i=0;i<stepData.length;i++)stepData[i]=(Math.random()*2-1)*(1-i/stepData.length);const source=audio.createBufferSource();source.buffer=noise;source.loop=true;const filter=audio.createBiquadFilter();filter.type='lowpass';filter.frequency.value=420;const volume=audio.createGain();volume.gain.value=.18;source.connect(filter).connect(volume).connect(master);source.start();const drone=audio.createOscillator();drone.frequency.value=51;const hum=audio.createGain();hum.gain.value=.025;drone.connect(hum).connect(master);drone.start();}
@@ -231,6 +267,13 @@ function bridgeSound(kind){
   }
  }
 }
+function ladderSound(){
+ if(!audio||muted)return;
+ const t=audio.currentTime,ring=audio.createOscillator(),gain=audio.createGain();
+ ring.type='sine';ring.frequency.setValueAtTime(275,t);ring.frequency.exponentialRampToValueAtTime(180,t+.14);
+ gain.gain.setValueAtTime(.025,t);gain.gain.exponentialRampToValueAtTime(.0001,t+.22);
+ ring.connect(gain).connect(master);ring.start(t);ring.stop(t+.23);
+}
 $('#sound').onclick=()=>{try{initAudio();if(!audio)return;muted=!muted;if(muted)audio.suspend();else audio.resume();$('#sound span').textContent=muted?'OFF':'ON';$('#sound').setAttribute('aria-pressed',String(!muted));}catch{say('Audio is unavailable in this browser.',3)}};
 let last=performance.now(),accumulator=0,simTime=0;
 let lastShadow=-1,qualityElapsed=0,qualityFrames=0;
@@ -258,7 +301,7 @@ function frame(now){
    const respawn=LEVEL.checkpoints[checkpoint-1];
    player.x=respawn?respawn.x:restArea.spawnX;player.y=respawn?respawn.y:restArea.surfaceY;player.vy=0;player.vx=0;player.grounded=true;
    Object.assign(previousSim,{x:player.x,y:player.y,vx:0});lastDrawX=player.x;boy.reset?.();
-   cameraX=player.x;state='play';jumpBuffer=0;coyoteTime=0;resetJumpMotion();mantle=null;ledgeIntent=0;water.reset();
+   cameraX=player.x;cameraY=Math.max(0,player.y);state='play';jumpBuffer=0;coyoteTime=0;resetJumpMotion();mantle=null;ladder.reset();ladderCooldown=.3;ledgeIntent=0;water.reset();
    say('Steady yourself. Try again.',3);
   }
  }else fade=Math.max(0,fade-dt*1.7);
@@ -270,10 +313,14 @@ function frame(now){
  if(state!=='pause'){
   const travel=Math.min(.7,Math.abs(renderedX-lastDrawX));lastDrawX=renderedX;
   boy.group.position.set(renderedX,renderedY,0);
-  boy.group.rotation.y=mantle?mantle.face*Math.PI/2:THREE.MathUtils.damp(boy.group.rotation.y,player.face*Math.PI/2,8,dt);
-  const contact=boy.animate({time:simTime,speed:mantle?0:renderedSpeed,grounded:mantle?true:player.grounded,wake:state==='intro'?0:wake,push,vy:player.vy,dt,travel:mantle?0:travel,acceleration:acceleration*player.face,landImpact,
+  const attached=!!mantle||ladder.active;
+  if(ladder.active){
+   const motion=ladder.state,turn=motion.phase==='mount'||motion.phase==='top-in'?THREE.MathUtils.smoothstep(motion.progress,0,.22):1;
+   boy.group.rotation.y=THREE.MathUtils.lerp(motion.turnStart??Math.PI/2,Math.PI/2,turn);
+  }else boy.group.rotation.y=mantle?mantle.face*Math.PI/2:THREE.MathUtils.damp(boy.group.rotation.y,player.face*Math.PI/2,8,dt);
+  const contact=boy.animate({time:simTime,speed:attached?0:renderedSpeed,grounded:attached?true:player.grounded,wake:state==='intro'?0:wake,push,vy:player.vy,dt,travel:attached?0:travel,acceleration:acceleration*player.face,landImpact,
    jumpPrep:jumpMotion.preparing?Math.min(1,jumpMotion.elapsed/jumpMotion.duration):0,
-   airTime:mantle?0:jumpMotion.airTime,launchSpeed:jumpMotion.launchSpeed,landingDistance:landingDistance(renderedX,renderedY,colliders()),takeoff:mantle?0:jumpMotion.launched?Math.min(1,jumpMotion.airTime/.12):1,climb:mantle});
+   airTime:attached?0:jumpMotion.airTime,launchSpeed:jumpMotion.launchSpeed,landingDistance:landingDistance(renderedX,renderedY,colliders()),takeoff:attached?0:jumpMotion.launched?Math.min(1,jumpMotion.airTime/.12):1,climb:mantle,ladder:ladder.state});
   if(contact?.footstep||landImpact>.35)stepSound(contact?.footstep?contact.intensity:landImpact);
   if(contact?.footstep&&player.grounded&&!mantle&&!onPlank(renderedX))water.splash({x:renderedX,y:renderedY,strength:.15});
   water.update(dt);
@@ -283,6 +330,8 @@ function frame(now){
   openingCue.hidden=!opening.state.active;
   if(openingCue.textContent!==opening.state.cue)openingCue.textContent=opening.state.cue;
   document.body.classList.toggle('opening',opening.state.active);
+  document.body.classList.toggle('on-ladder',ladder.active);
+  document.body.classList.toggle('near-ladder',wake===1&&(canMountLadder(player)||canMountLadder(player,LEVEL.ladder,'top')));
   Object.assign(openingVisual,{active:opening.state.active,elapsed:opening.state.elapsed,wake,escaped:opening.state.escaped});
   world.update(time,renderedX,openingVisual);
   world.bridge?.update(time,bridge.state);
@@ -296,7 +345,7 @@ function frame(now){
  cameraLead=THREE.MathUtils.damp(cameraLead,1.3+player.face*Math.min(1,Math.abs(renderedSpeed)/3.35),2.3,dt);
  const wakingFocus=opening.state.active&&!opening.state.escaped?1-THREE.MathUtils.smoothstep(wake,.65,1):0;
  cameraX=THREE.MathUtils.damp(cameraX,state==='intro'?-5.5:renderedX-wakingFocus*2.2,3.2,dt);
- cameraY=THREE.MathUtils.damp(cameraY,Math.max(0,renderedY-.8)*.18,2,dt);
+ cameraY=THREE.MathUtils.damp(cameraY,Math.max(0,renderedY),2.8,dt);
  const centerX=cameraX+cameraLead;
  const zoom=state==='intro'?19:16.3+wakingFocus*.9;
  const impact=(!reducedMotion&&opening.state.edgeImpact>0)?Math.sin(opening.state.elapsed*46)*.027*opening.state.edgeImpact:0;
@@ -313,4 +362,4 @@ function frame(now){
 boy.group.position.set(restArea.spawnX,restArea.surfaceY,0);boy.group.rotation.y=Math.PI/2;requestAnimationFrame(frame);
 canvas.addEventListener('webglcontextlost',e=>{e.preventDefault();state='pause';$('#error').hidden=false;$('#error').textContent='3D graphics were interrupted. Reload the page to continue.'});
 // Non-enumerable observation hook for repeatable browser smoke tests.
-Object.defineProperty(window,'__game',{value:{get state(){return state},get wake(){return wake},get checkpoint(){return checkpoint},get bridge(){return {...bridge.state,supported:bridge.supported}},get opening(){return {...opening.state}},get jump(){return {...jumpMotion}},get animation(){return boy.group.userData.animation},get climb(){return mantle?{...mantle}:null},get climbsCompleted(){return climbsCompleted},get splashes(){return {active:water.activeCount,emitted:water.emittedCount}},get software(){return software},player,get crateX(){return world.crate.position.x},get drawCalls(){return renderer.info.render.calls},get triangles(){return renderer.info.render.triangles}}});
+Object.defineProperty(window,'__game',{value:{get state(){return state},get wake(){return wake},get checkpoint(){return checkpoint},get ladder(){return ladder.state?{...ladder.state}:null},get laddersCompleted(){return laddersCompleted},get bridge(){return {...bridge.state,supported:bridge.supported}},get opening(){return {...opening.state}},get jump(){return {...jumpMotion}},get animation(){return boy.group.userData.animation},get climb(){return mantle?{...mantle}:null},get climbsCompleted(){return climbsCompleted},get splashes(){return {active:water.activeCount,emitted:water.emittedCount}},get software(){return software},player,get crateX(){return world.crate.position.x},get drawCalls(){return renderer.info.render.calls},get triangles(){return renderer.info.render.triangles}}});

@@ -4,6 +4,7 @@ import { LEVEL } from './level.js';
 export function createWorld(THREE, scene) {
   const world = new THREE.Group();
   const finalOffset = LEVEL.finalOffset;
+  const finalRise = LEVEL.roofs.final.y - .45;
   scene.add(world);
   const random = n => { const f = Math.sin(n * 127.1 + 311.7) * 43758.5453123; return f - Math.floor(f); };
   function texture(kind) {
@@ -138,7 +139,7 @@ export function createWorld(THREE, scene) {
       stone.rotation.y = random(i + 28) * 6;
     }
   }
-  for (const [key, seed] of [['first', 38], ['middle', 145], ['final', 91]]) {
+  for (const [key, seed] of [['first', 38], ['middle', 145], ['landing', 171], ['final', 91]]) {
     const roof = LEVEL.roofs[key]; rooftop(roof.x, roof.x + roof.w, roof.y, seed);
   }
   // The intermediate roof is a quiet landing, with all equipment behind the path.
@@ -267,9 +268,9 @@ export function createWorld(THREE, scene) {
   const label = new THREE.Mesh(new THREE.PlaneGeometry(.35, .18), new THREE.MeshStandardMaterial({ map: markMap, transparent: true, roughness: 1, depthWrite: false }));
   label.position.set(0, .45, .446); crate.add(label);
   // Rooftop access house, door facing the viewer behind the walking path.
-  box(4.0, 3.2, 2.0, 39 + finalOffset, 2.05, -1.55, wallMat);
-  beveledBox(4.22, .18, 2.2, .025, 39 + finalOffset, 3.74, -1.55, roofMat);
-  box(4.2, .09, .18, 39 + finalOffset, 3.69, -.46, rimMat);
+  box(4.0, 3.2, 2.0, 39 + finalOffset, 2.05 + finalRise, -1.55, wallMat);
+  beveledBox(4.22, .18, 2.2, .025, 39 + finalOffset, 3.74 + finalRise, -1.55, roofMat);
+  box(4.2, .09, .18, 39 + finalOffset, 3.69 + finalRise, -.46, rimMat);
   const door = new THREE.Group(); door.position.set(LEVEL.doorX, LEVEL.roofs.final.y, -.505); world.add(door);
   box(1.18, 2.28, .12, 0, 1.14, 0, black, door);
   box(1.02, 2.16, .06, 0, 1.08, .075, darkMetal, door);
@@ -282,17 +283,50 @@ export function createWorld(THREE, scene) {
   box(.3, .065, .16, 0, 2.51, .07, zinc, door);
   box(.24, .025, .12, 0, 2.47, .08, warmGlass, door);
   const doorLight = new THREE.PointLight('#f7c875', 14, 5, 2);
-  doorLight.position.set(LEVEL.doorX, 2.85, .1); world.add(doorLight);
+  doorLight.position.set(LEVEL.doorX, 2.85 + finalRise, .1); world.add(doorLight);
   // Cable, an old junction box, a small TV aerial and two background flues.
-  box(.48, .67, .15, 40.45 + finalOffset, 1.2, -.47, darkMetal);
-  wire([[LEVEL.doorX, 3.0, -.35], [39.3 + finalOffset, 2.8, -.36], [40.45 + finalOffset, 2.93, -.37], [40.45 + finalOffset, 1.6, -.37]]);
+  box(.48, .67, .15, 40.45 + finalOffset, 1.2 + finalRise, -.47, darkMetal);
+  wire([[LEVEL.doorX, 3.0 + finalRise, -.35], [39.3 + finalOffset, 2.8 + finalRise, -.36], [40.45 + finalOffset, 2.93 + finalRise, -.37], [40.45 + finalOffset, 1.6 + finalRise, -.37]]);
   for (const [x, height, z] of [[3.0, .6, -1.5], [30.2 + finalOffset, 1.0, -1.55]]) {
-    cylinder(.13, height, x, (x > 23 ? .45 : 0) + height / 2, z, zinc);
-    cylinder(.2, .06, x, (x > 23 ? .45 : 0) + height, z, darkMetal);
+    cylinder(.13, height, x, (x > 23 ? LEVEL.roofs.final.y : 0) + height / 2, z, zinc);
+    cylinder(.2, .06, x, (x > 23 ? LEVEL.roofs.final.y : 0) + height, z, darkMetal);
   }
-  cylinder(.035, 3.2, 33 + finalOffset, 2.05, -1.9, zinc);
-  for (let i = 0; i < 6; i++) box(.9 - Math.abs(i - 2) * .1, .025, .025, 33 + finalOffset, 2.2 + i * .22, -1.9, zinc);
-  wire([[33 + finalOffset, .5, -1.9], [33.25 + finalOffset, .46, -1.8], [35 + finalOffset, .46, -1.8], [37 + finalOffset, .48, -1.8]]);
+  cylinder(.035, 3.2, 33 + finalOffset, 2.05 + finalRise, -1.9, zinc);
+  for (let i = 0; i < 6; i++) box(.9 - Math.abs(i - 2) * .1, .025, .025, 33 + finalOffset, 2.2 + finalRise + i * .22, -1.9, zinc);
+  wire([[33 + finalOffset, .5 + finalRise, -1.9], [33.25 + finalOffset, .46 + finalRise, -1.8], [35 + finalOffset, .46 + finalRise, -1.8], [37 + finalOffset, .48 + finalRise, -1.8]]);
+  // The lower annex ends against the taller building's left wall. The ladder
+  // is mounted on that YZ plane rather than floating in front of its facade.
+  const ladder = LEVEL.ladder, rungDepth = ladder.width, railTop = ladder.topY + .55;
+  const rungHeights = [];
+  for (const z of [-rungDepth / 2, rungDepth / 2]) {
+    cylinder(.032, railTop - ladder.bottomY, ladder.rungX, (railTop + ladder.bottomY) / 2, z, darkMetal);
+    cylinder(.05, .035, ladder.rungX, ladder.bottomY + .0175, z, zinc);
+    // Rust flecks sit on the outward-facing surfaces, not across the route.
+    for (const y of [ladder.bottomY + .45, ladder.bottomY + 1.9, ladder.topY - .3]) box(.008, .14, .045, ladder.rungX - .034, y, z, rust);
+    for (let y = ladder.bottomY + .38; y < ladder.topY; y += 1.14) {
+      const bracketLength = ladder.wallX - ladder.rungX + .025;
+      box(bracketLength, .045, .07, ladder.rungX + bracketLength / 2, y, z, zinc);
+      box(.03, .18, .13, ladder.wallX + .005, y, z, darkMetal);
+    }
+    const grabCurve = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(ladder.rungX, ladder.topY + .45, z),
+      new THREE.Vector3(ladder.rungX, ladder.topY + .66, z),
+      new THREE.Vector3(ladder.rungX + .06, ladder.topY + .80, z),
+      new THREE.Vector3(ladder.rungX + .19, ladder.topY + .85, z),
+      new THREE.Vector3(ladder.rungX + .38, ladder.topY + .80, z),
+      new THREE.Vector3(ladder.rungX + .50, ladder.topY + .65, z)
+    ]);
+    const grab = new THREE.Mesh(new THREE.TubeGeometry(grabCurve, 18, .029, 6, false), darkMetal);
+    grab.name = z > 0 ? 'ladder-grab-near' : 'ladder-grab-far'; grab.castShadow = true; grab.receiveShadow = true; world.add(grab);
+  }
+  for (let y = ladder.rungBaseY, i = 0; y < ladder.topY; y += ladder.spacing, i++) {
+    rungHeights.push(y);
+    const tread = cylinder(.022, rungDepth, ladder.rungX, y, 0, zinc); tread.rotation.x = Math.PI / 2;
+    if (i % 3 === 0) for (const z of [-.17, .17]) { const grip = cylinder(.026, .09, ladder.rungX, y, z, darkMetal); grip.rotation.x = Math.PI / 2; }
+  }
+  // Cheap foot plates visually anchor the ladder to the lower ledge.
+  for (const z of [-rungDepth / 2, rungDepth / 2]) box(.17, .025, .16, ladder.rungX + .03, ladder.bottomY + .0125, z, darkMetal);
+  world.userData.ladder = { wallX: ladder.wallX, rungX: ladder.rungX, rungZ: [-rungDepth / 2, rungDepth / 2], rungHeights, bottomY: ladder.bottomY, handrailTopY: ladder.topY + .88, exitClearX: ladder.rungX + .54 };
   // A single weathered plank spans the second gap. Physics decides when it breaks;
   // the art controller never triggers failure while the child is still crossing.
   const plankConfig = LEVEL.bridge, plankWidth = .68, plankThickness = .07;
@@ -505,7 +539,7 @@ export function createWorld(THREE, scene) {
   waterInstances(dampPatches, dampMat); waterInstances(wetPatches, wetMat);
   // Short frayed ties breathe in the wind behind the walking lane.
   const tieMaterial = mat('#898d7b', .96, { side: THREE.DoubleSide });
-  for (const [x, y] of [[4.2, 1], [10, 1], [28 + finalOffset, 1.45]]) {
+  for (const [x, y] of [[4.2, 1], [10, 1], [28 + finalOffset, 1.45 + finalRise]]) {
     const pivot = new THREE.Group(); pivot.position.set(x, y, -2.34);
     const tieShape = new THREE.Shape(); tieShape.moveTo(0, 0); tieShape.lineTo(.07, -.02); tieShape.lineTo(.055, -.24); tieShape.lineTo(.015, -.31); tieShape.lineTo(.02, -.13); tieShape.closePath();
     const tie = new THREE.Mesh(new THREE.ShapeGeometry(tieShape), tieMaterial); pivot.add(tie); world.add(pivot); ribbons.push(pivot);
