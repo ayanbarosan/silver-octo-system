@@ -1,0 +1,280 @@
+import * as THREE from 'three';
+import {EffectComposer} from 'three/addons/postprocessing/EffectComposer.js';
+import {RenderPass} from 'three/addons/postprocessing/RenderPass.js';
+import {ShaderPass} from 'three/addons/postprocessing/ShaderPass.js';
+import {OutputPass} from 'three/addons/postprocessing/OutputPass.js';
+import {UnrealBloomPass} from 'three/addons/postprocessing/UnrealBloomPass.js';
+import {createBoy} from './character.js';
+import {createWorld} from './world.js';
+import {createWaterEffects} from './water.js';
+import {findClimbTarget,createClimb,sampleClimb} from './climb.js';
+import {MOVEMENT,movementVelocity,preparationX,landingDistance} from './movement.js';
+import {createOpening} from './opening.js';
+
+const $=s=>document.querySelector(s);
+const canvas=$('#scene'),intro=$('#intro'),objective=$('#objective'),message=$('#message'),ending=$('#ending'),openingCue=$('#opening-cue');
+const keys=new Set();
+function clearInput(){keys.clear();document.querySelector('[data-key="Shift"]')?.setAttribute('aria-pressed','false');}
+let state='intro',time=0,wake=0,checkpoint=0,cameraX=-5.5,messageUntil=0,jumpHeld=false,fade=0;
+let jumpBuffer=0,coyoteTime=0,acceleration=0,landImpact=0,cameraY=0,cameraLead=1.6;
+const jumpMotion={preparing:false,elapsed:0,duration:.12,airTime:0,launched:false,launchSpeed:0};
+function resetJumpMotion(){Object.assign(jumpMotion,{preparing:false,elapsed:0,duration:.12,airTime:0,launched:false,launchSpeed:0});}
+const previousSim={x:0,y:0,vx:0};
+let lastDrawX=0,mantle=null,ledgeIntent=0,climbsCompleted=0;
+const player={x:0,y:0,vx:0,vy:0,grounded:true,face:1};
+const opening=createOpening(),openingVisual={active:false,elapsed:0,wake:0,escaped:false};
+const reducedMotion=matchMedia('(prefers-reduced-motion: reduce)').matches;
+let renderer;
+try{renderer=new THREE.WebGLRenderer({canvas,antialias:true,powerPreference:'high-performance'});}catch(error){$('#error').hidden=false;$('#error').textContent='Could not start 3D graphics. Open the game in Chrome or Edge with hardware acceleration enabled.';throw error;}
+const gl=renderer.getContext(), debug=gl.getExtension('WEBGL_debug_renderer_info');
+const software=debug&&/swiftshader|llvmpipe|software/i.test(gl.getParameter(debug.UNMASKED_RENDERER_WEBGL));
+let qualityRatio=software?.7:Math.min(devicePixelRatio,1.5);
+renderer.setPixelRatio(qualityRatio);
+renderer.shadowMap.enabled=true;
+renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+renderer.toneMapping=THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure=.82;
+renderer.outputColorSpace=THREE.SRGBColorSpace;
+const scene=new THREE.Scene();
+const skyCanvas=document.createElement('canvas');skyCanvas.width=4;skyCanvas.height=512;
+const skyContext=skyCanvas.getContext('2d'),skyGradient=skyContext.createLinearGradient(0,0,0,512);
+skyGradient.addColorStop(0,'#334550');skyGradient.addColorStop(.55,'#6e8186');skyGradient.addColorStop(1,'#4e6570');skyContext.fillStyle=skyGradient;skyContext.fillRect(0,0,4,512);
+scene.background=new THREE.CanvasTexture(skyCanvas);scene.background.colorSpace=THREE.SRGBColorSpace;
+scene.fog=new THREE.FogExp2('#536a74',.017);
+const camera=new THREE.PerspectiveCamera(38,innerWidth/innerHeight,.1,250);
+const hemi=new THREE.HemisphereLight('#b6c9d5','#202b2c',1.75);scene.add(hemi);
+const sun=new THREE.DirectionalLight('#cddbdc',1.95);sun.position.set(5,18,-9);sun.castShadow=true;sun.shadow.mapSize.set(software?512:2048,software?512:2048);sun.shadow.camera.left=-19;sun.shadow.camera.right=19;sun.shadow.camera.top=18;sun.shadow.camera.bottom=-13;sun.shadow.camera.near=1;sun.shadow.camera.far=65;sun.shadow.bias=-.0005;sun.shadow.normalBias=.035;sun.shadow.radius=3;scene.add(sun,sun.target);
+const fill=new THREE.DirectionalLight('#8fa8b7',.8);fill.position.set(-8,5,12);scene.add(fill);
+const rim=new THREE.DirectionalLight('#dae8e8',1.25);rim.position.set(-3,8,-5);scene.add(rim);
+const world=createWorld(THREE,scene),boy=createBoy(THREE);scene.add(boy.group);
+const water=createWaterEffects(THREE,scene);
+
+// Sparse moving rain catches the cold skylight, leaving the silhouettes legible.
+const rainCount=550,rainPositions=new Float32Array(rainCount*6);
+const random=(n)=>{const x=Math.sin(n*127.1+74.7)*43758.5453;return x-Math.floor(x)};
+for(let i=0;i<rainCount;i++){const o=i*6;rainPositions[o]=random(i)*66-25;rainPositions[o+1]=random(i+722)*25-5;rainPositions[o+2]=random(i+1000)*45-20;rainPositions[o+3]=rainPositions[o]-.06;rainPositions[o+4]=rainPositions[o+1]-.28;rainPositions[o+5]=rainPositions[o+2];}
+const rainGeometry=new THREE.BufferGeometry();rainGeometry.setAttribute('position',new THREE.BufferAttribute(rainPositions,3));
+const rain=new THREE.LineSegments(rainGeometry,new THREE.LineBasicMaterial({color:'#bbcbd1',transparent:true,opacity:.16,depthWrite:false}));scene.add(rain);
+// Soft shafts are behind the play lane rather than a screen-space filter.
+const shafts=new THREE.Group();
+for(let i=0;i<4;i++){
+ const geometry=new THREE.PlaneGeometry(1.8+i*.6,28);
+ const mat=new THREE.ShaderMaterial({transparent:true,depthWrite:false,side:THREE.DoubleSide,blending:THREE.AdditiveBlending,vertexShader:'varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',fragmentShader:'varying vec2 vUv;void main(){float a=pow(sin(vUv.x*3.14159),2.)*sin(vUv.y*3.14159);gl_FragColor=vec4(.75,.84,.86,a*.035);}'});
+ const shaft=new THREE.Mesh(geometry,mat);shaft.position.set(-5+i*13,6,-10-i*4);shaft.rotation.z=-.27;shafts.add(shaft);
+}scene.add(shafts);
+const composer=new EffectComposer(renderer);composer.addPass(new RenderPass(scene,camera));
+const bloom=new UnrealBloomPass(new THREE.Vector2(innerWidth,innerHeight),.16,.6,1.05);bloom.enabled=!software;composer.addPass(bloom);
+const grade=new ShaderPass({uniforms:{tDiffuse:{value:null},uTime:{value:0},uFade:{value:0}},vertexShader:`varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`,fragmentShader:`uniform sampler2D tDiffuse;uniform float uTime;uniform float uFade;varying vec2 vUv;void main(){vec3 c=texture2D(tDiffuse,vUv).rgb;vec2 p=vUv-.5;float vignette=1.-smoothstep(.2,.8,length(p*vec2(.95,1.1)));c*=mix(.56,1.,vignette);float noise=fract(sin(dot(vUv*1900.+fract(uTime)*100.,vec2(12.9898,78.233)))*43758.5453);float luminance=dot(c,vec3(.2126,.7152,.0722));c=mix(c,vec3(luminance),.10);c+=(noise-.5)*.007;c=mix(c,vec3(.012,.02,.026),uFade);gl_FragColor=vec4(c,1.);}`});
+composer.addPass(grade);composer.addPass(new OutputPass());
+function resize(){const w=innerWidth,h=innerHeight;const ratio=Math.min(qualityRatio,(software?1100:1920)/w,(software?800:1200)/h);renderer.setPixelRatio(ratio);renderer.setSize(w,h);composer.setPixelRatio(ratio);composer.setSize(w,h);camera.aspect=w/h;camera.fov=w/h<1?48:36;camera.updateProjectionMatrix();}resize();addEventListener('resize',resize);
+
+function say(text,duration=3){if(message.textContent!==text)message.textContent=text;messageUntil=time+duration;}
+function setObjective(text){const p=objective.querySelector('p');if(p.textContent!==text)p.textContent=text;}
+function start(){clearInput();state='play';wake=0;checkpoint=0;fade=0;player.x=0;player.y=0;player.vx=0;player.vy=0;player.grounded=true;player.face=1;world.crate.position.x=13;jumpHeld=false;jumpBuffer=0;coyoteTime=0;resetJumpMotion();mantle=null;ledgeIntent=0;climbsCompleted=0;water.reset();landImpact=0;acceleration=0;lastDrawX=0;Object.assign(previousSim,{x:0,y:0,vx:0});boy.reset?.();opening.reset();world.opening?.reset();cameraX=-3.2;cameraLead=1.3;cameraY=0;openingCue.hidden=false;openingCue.textContent=opening.state.cue;document.body.classList.add('opening');intro.hidden=true;ending.hidden=true;objective.hidden=false;document.body.classList.add('playing');canvas.focus();say('You are awake. The city is still sleeping.',4);}
+function pause(){if(state==='play'){state='pause';clearInput();say('PAUSED · Press ESC or tap the scene to continue.',1e6)}else if(state==='pause'){state='play';message.textContent='';messageUntil=0;}}
+$('#play').onclick=start;$('#again').onclick=start;
+canvas.addEventListener('pointerdown',()=>{if(state==='pause')pause();canvas.focus()});
+const keyName=e=>e.key.length===1?e.key.toLowerCase():e.key;
+addEventListener('keydown',e=>{if([' ','ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key))e.preventDefault();if(e.repeat&&['Escape','r'].includes(keyName(e)))return;keys.add(keyName(e));if(e.key==='Escape')pause();if(keyName(e)==='r'&&state!=='intro')start();});
+addEventListener('keyup',e=>keys.delete(keyName(e)));
+addEventListener('blur',()=>{clearInput();if(state==='play')pause()});
+for(const b of document.querySelectorAll('[data-key]')){
+ b.addEventListener('pointerdown',e=>{
+  e.preventDefault();if(state==='pause')pause();b.setPointerCapture(e.pointerId);
+  if(b.dataset.key==='Shift'){
+   const enabled=!keys.has('Shift');if(enabled)keys.add('Shift');else keys.delete('Shift');
+   b.setAttribute('aria-pressed',String(enabled));
+  }else keys.add(b.dataset.key);
+ });
+ for(const type of ['pointerup','pointercancel','lostpointercapture'])b.addEventListener(type,()=>{if(b.dataset.key!=='Shift')keys.delete(b.dataset.key)});
+}
+const crateCollider={id:'crate',x:12.45,w:1.1,y:.85};
+const obstacleList=[{id:'vent',x:6.2,w:1.6,y:.85},{id:'pipe',x:16.725,w:.55,y:1.65},crateCollider];
+const surfaceList=[{x:-1,w:23,y:0},{x:24.2,w:18.8,y:.45},...obstacleList];
+const obstacles=()=>{crateCollider.x=world.crate.position.x-.55;return obstacleList;};
+const colliders=()=>{crateCollider.x=world.crate.position.x-.55;return surfaceList;};
+function beginClimb(target){
+ mantle=createClimb({x:player.x,y:player.y,face:player.face,target});
+ if(!mantle)return false;
+ player.vx=0;player.vy=0;player.grounded=false;push=false;
+ resetJumpMotion();jumpBuffer=0;coyoteTime=0;ledgeIntent=0;
+ say('Find your grip. Pull yourself up.',1.4);
+ return true;
+}
+function advanceClimb(dt){
+ mantle.elapsed+=dt;mantle.progress=Math.min(1,mantle.elapsed/mantle.duration);
+ const point=sampleClimb(mantle);player.x=point.x;player.y=point.y;
+ player.vx=0;player.vy=0;player.face=mantle.face;
+ if(mantle.progress===1){
+  player.x=mantle.endX;player.y=mantle.endY;player.grounded=true;
+  mantle=null;climbsCompleted++;ledgeIntent=0;
+ }
+}
+let push=false;
+function physics(dt){
+ if(state!=='play')return;
+ wake=Math.min(1,wake+dt/3.4);if(wake<1){player.vx=0;setObjective('Wake up. Slowly, back on your feet.');return;}
+ if(mantle){advanceClimb(dt);return;}
+ let direction=Number(keys.has('d')||keys.has('ArrowRight'))-Number(keys.has('a')||keys.has('ArrowLeft'));
+ const previousVX=player.vx;
+ const running=keys.has('Shift');
+ player.vx=movementVelocity(player.vx,direction,running,player.grounded,dt);
+ acceleration=THREE.MathUtils.clamp((player.vx-previousVX)/dt,-16,16);
+ if(direction&&(Math.sign(player.vx)===direction||Math.abs(player.vx)<.2))player.face=direction;
+ const jump=keys.has(' ')||keys.has('ArrowUp')||keys.has('w');
+ if(jump&&!jumpHeld)jumpBuffer=MOVEMENT.buffer;jumpHeld=jump;
+ coyoteTime=player.grounded?MOVEMENT.coyote:Math.max(0,coyoteTime-dt);jumpBuffer=Math.max(0,jumpBuffer-dt);
+ const ledge=findClimbTarget(player,obstacles());
+ if(ledge&&!keys.has('e')&&direction===player.face)ledgeIntent+=dt;else ledgeIntent=0;
+ if(ledge&&!keys.has('e')&&(jumpBuffer>0||ledgeIntent>(ledge.id==='pipe'?.015:.13))){
+  if(beginClimb(ledge))return;
+ }
+ if(jumpBuffer>0&&coyoteTime>0&&!jumpMotion.preparing){
+  jumpMotion.preparing=true;jumpMotion.elapsed=0;
+  jumpMotion.duration=running&&Math.abs(player.vx)>1?.085:.12;
+  jumpBuffer=0;coyoteTime=0;
+ }
+ if(jumpMotion.preparing){
+  jumpMotion.elapsed+=dt;
+  if(jumpMotion.elapsed>=jumpMotion.duration){
+   jumpMotion.preparing=false;jumpMotion.launched=true;jumpMotion.airTime=0;
+   player.vy=MOVEMENT.jumpVelocity;jumpMotion.launchSpeed=Math.abs(player.vx);player.grounded=false;coyoteTime=0;
+   water.splash({x:player.x+player.face*.04,y:player.y,strength:.55});
+  }
+ }
+ // Brief planted anticipation keeps an edge jump responsive without stepping
+ // off the roof while the knees load. Airborne trajectory remains unchanged.
+ const previousY=player.y;let nextX=jumpMotion.preparing?preparationX({x:player.x,y:player.y,vx:player.vx,running,dt,grounded:player.grounded,surfaces:colliders()}):player.x+player.vx*dt;push=false;
+ const crate=world.crate.position;
+ if(player.y<.84&&Math.abs(nextX-crate.x)<.77){
+  if(keys.has('e')&&direction&&player.grounded&&!jumpMotion.preparing){
+   const desired=THREE.MathUtils.clamp(crate.x+direction*.9*dt,10.5,16.0);
+   const delta=desired-crate.x;crate.x=desired;nextX=player.x+delta;player.vx=delta/dt;push=Math.abs(delta)>.0001;
+   say('Move the crate to the pipe. Climb up, then keep going.',.15);
+  }else{nextX=player.x;player.vx=0;say('Hold E + A / D to push the crate. Release E to climb.',.15);}
+ }
+ for(const c of obstacleList){
+  if(c.id==='crate')continue;
+  if(player.y<c.y-.02&&nextX+.2>c.x&&nextX-.2<c.x+c.w){
+   // Resolve only side entry, so standing on top never gets stuck.
+   if(player.x<=c.x-.19){nextX=c.x-.21;player.vx=0;}else if(player.x>=c.x+c.w+.19){nextX=c.x+c.w+.21;player.vx=0;}
+  }
+ }
+ const wasGrounded=player.grounded;
+ player.x=nextX;player.vy-=(jumpMotion.launched?MOVEMENT.gravity:MOVEMENT.fallGravity)*dt;player.y+=player.vy*dt;player.grounded=false;
+ const fallSpeed=-player.vy;
+ for(const c of colliders())if(player.x>c.x-.02&&player.x<c.x+c.w+.02&&previousY>=c.y-.025&&player.y<=c.y&&player.vy<=0){player.y=c.y;player.vy=0;player.grounded=true;}
+ if(!wasGrounded&&player.grounded&&fallSpeed>1){
+  landImpact=Math.max(landImpact,Math.min(1,fallSpeed/8));
+  water.splash({x:player.x,y:player.y,strength:.65+landImpact*.45});
+ }
+ if(player.grounded){jumpMotion.airTime=0;jumpMotion.launched=false;}else jumpMotion.airTime+=dt;
+ if(player.x>24.7)checkpoint=1;
+ if(player.y<-5){state='fall';fade=0;clearInput();message.textContent='';}
+ if(player.x>42.5)player.x=42.5;
+
+ setObjective(player.x<5?'Find a way to the next rooftop.':player.x<10?'Hold toward the vent to climb. SPACE also grabs the ledge.':player.x<18?'Push the crate all the way to the pipe. Climb the crate, then the pipe.':player.x<24.7?'Hold SHIFT + D to run. Jump close to the edge.':'Reach the lit doorway.');
+ if(player.x>37.3&&player.x<40.5){say('E — Open the door.',.2);if(keys.has('e')){state='end';ending.hidden=false;objective.hidden=true;message.textContent='';clearInput();}}
+}
+let audio=null,muted=true,master,stepNoise;
+function initAudio(){if(audio)return;const AC=window.AudioContext||window.webkitAudioContext;if(!AC)return;audio=new AC();master=audio.createGain();master.gain.value=.45;master.connect(audio.destination);const noise=audio.createBuffer(1,audio.sampleRate*4,audio.sampleRate);const data=noise.getChannelData(0);for(let i=0;i<data.length;i++)data[i]=(Math.random()*2-1)*.21;stepNoise=audio.createBuffer(1,Math.floor(audio.sampleRate*.12),audio.sampleRate);const stepData=stepNoise.getChannelData(0);for(let i=0;i<stepData.length;i++)stepData[i]=(Math.random()*2-1)*(1-i/stepData.length);const source=audio.createBufferSource();source.buffer=noise;source.loop=true;const filter=audio.createBiquadFilter();filter.type='lowpass';filter.frequency.value=420;const volume=audio.createGain();volume.gain.value=.18;source.connect(filter).connect(volume).connect(master);source.start();const drone=audio.createOscillator();drone.frequency.value=51;const hum=audio.createGain();hum.gain.value=.025;drone.connect(hum).connect(master);drone.start();}
+function stepSound(intensity=.6){
+ if(!audio||muted)return;
+ const t=audio.currentTime,osc=audio.createOscillator(),g=audio.createGain();
+ osc.type='triangle';osc.frequency.setValueAtTime(92,t);osc.frequency.exponentialRampToValueAtTime(34,t+.11);
+ g.gain.setValueAtTime(.025+.045*intensity,t);g.gain.exponentialRampToValueAtTime(.001,t+.13);
+ osc.connect(g).connect(master);osc.start();osc.stop(t+.14);
+ const scrape=audio.createBufferSource(),filter=audio.createBiquadFilter(),wet=audio.createGain();
+ scrape.buffer=stepNoise;filter.type='bandpass';filter.frequency.value=900+intensity*400;filter.Q.value=.6;
+ wet.gain.setValueAtTime(.025*intensity,t);wet.gain.exponentialRampToValueAtTime(.001,t+.1);
+ scrape.connect(filter).connect(wet).connect(master);scrape.start();
+}
+function openingSound(kind){
+ if(!audio||muted)return;
+ const t=audio.currentTime,low=audio.createOscillator(),gain=audio.createGain();
+ low.type=kind==='edge-break'?'triangle':'sine';low.frequency.setValueAtTime(kind==='edge-break'?105:180,t);low.frequency.exponentialRampToValueAtTime(34,t+.8);
+ gain.gain.setValueAtTime(.0001,t);gain.gain.exponentialRampToValueAtTime(kind==='edge-break'?.10:.045,t+.025);gain.gain.exponentialRampToValueAtTime(.0001,t+.9);
+ low.connect(gain).connect(master);low.start(t);low.stop(t+1);
+ if(kind==='edge-break')stepSound(.85);
+}
+$('#sound').onclick=()=>{try{initAudio();if(!audio)return;muted=!muted;if(muted)audio.suspend();else audio.resume();$('#sound span').textContent=muted?'OFF':'ON';$('#sound').setAttribute('aria-pressed',String(!muted));}catch{say('Audio is unavailable in this browser.',3)}};
+let last=performance.now(),accumulator=0,simTime=0;
+let lastShadow=-1,qualityElapsed=0,qualityFrames=0;
+renderer.shadowMap.autoUpdate=false;
+function frame(now){
+ requestAnimationFrame(frame);
+ const wallDt=Math.max(0,(now-last)/1000),dt=Math.min(wallDt,.14);last=now;
+ if(state==='pause')return;
+ if(state==='play'&&wake===1){qualityElapsed+=wallDt;qualityFrames++;
+  if(qualityElapsed>3&&qualityFrames>5){
+   if(qualityElapsed/qualityFrames>1/36&&qualityRatio>(software?.5:.65)){qualityRatio=Math.max(software?.5:.65,qualityRatio*.85);bloom.enabled=false;resize();}
+   qualityElapsed=0;qualityFrames=0;
+  }
+ }
+ if(state!=='pause'){
+  time+=dt;accumulator+=dt;
+  while(accumulator>=1/90){
+   Object.assign(previousSim,{x:player.x,y:player.y,vx:player.vx});
+   physics(1/90);simTime+=1/90;accumulator-=1/90;
+  }
+ }
+ if(state==='fall'){
+  fade=Math.min(1,fade+dt*1.7);
+  if(fade===1){
+   player.x=checkpoint?25.4:0;player.y=checkpoint?.45:0;player.vy=0;player.vx=0;player.grounded=true;
+   Object.assign(previousSim,{x:player.x,y:player.y,vx:0});lastDrawX=player.x;boy.reset?.();
+   cameraX=player.x;state='play';jumpBuffer=0;coyoteTime=0;resetJumpMotion();mantle=null;ledgeIntent=0;water.reset();
+   say('Steady yourself. Try again.',3);
+  }
+ }else fade=Math.max(0,fade-dt*1.7);
+ if(state==='play'&&time>messageUntil)message.textContent='';
+ const alpha=accumulator/(1/90);
+ const renderedX=THREE.MathUtils.lerp(previousSim.x,player.x,alpha);
+ const renderedY=THREE.MathUtils.lerp(previousSim.y,player.y,alpha);
+ const renderedSpeed=THREE.MathUtils.lerp(previousSim.vx,player.vx,alpha);
+ if(state!=='pause'){
+  const travel=Math.min(.7,Math.abs(renderedX-lastDrawX));lastDrawX=renderedX;
+  boy.group.position.set(renderedX,renderedY,0);
+  boy.group.rotation.y=mantle?mantle.face*Math.PI/2:THREE.MathUtils.damp(boy.group.rotation.y,player.face*Math.PI/2,8,dt);
+  const contact=boy.animate({time:simTime,speed:mantle?0:renderedSpeed,grounded:mantle?true:player.grounded,wake:state==='intro'?0:wake,push,vy:player.vy,dt,travel:mantle?0:travel,acceleration:acceleration*player.face,landImpact,
+   jumpPrep:jumpMotion.preparing?Math.min(1,jumpMotion.elapsed/jumpMotion.duration):0,
+   airTime:mantle?0:jumpMotion.airTime,launchSpeed:jumpMotion.launchSpeed,landingDistance:landingDistance(renderedX,renderedY,colliders()),takeoff:mantle?0:jumpMotion.launched?Math.min(1,jumpMotion.airTime/.12):1,climb:mantle});
+  if(contact?.footstep||landImpact>.35)stepSound(contact?.footstep?contact.intensity:landImpact);
+  if(contact?.footstep&&player.grounded&&!mantle)water.splash({x:renderedX,y:renderedY,strength:.15});
+  water.update(dt);
+  landImpact=0;
+  const openingEvents=state==='play'?opening.update(dt,{wake,x:renderedX}):[];
+  for(const event of openingEvents)if(event==='warning'||event==='edge-break')openingSound(event);
+  openingCue.hidden=!opening.state.active;
+  if(openingCue.textContent!==opening.state.cue)openingCue.textContent=opening.state.cue;
+  document.body.classList.toggle('opening',opening.state.active);
+  Object.assign(openingVisual,{active:opening.state.active,elapsed:opening.state.elapsed,wake,escaped:opening.state.escaped});
+  world.update(time,renderedX,openingVisual);
+  for(let i=0;i<rainCount;i++){
+   const o=i*6;rainPositions[o]-=dt*.8;rainPositions[o+1]-=dt*9;
+   if(rainPositions[o+1]<-6){rainPositions[o+1]=18;rainPositions[o]=cameraX+random(i+time)*62-28}
+   rainPositions[o+3]=rainPositions[o]-.06;rainPositions[o+4]=rainPositions[o+1]-.28;rainPositions[o+5]=rainPositions[o+2];
+  }
+  rainGeometry.attributes.position.needsUpdate=true;
+ }
+ cameraLead=THREE.MathUtils.damp(cameraLead,1.3+player.face*Math.min(1,Math.abs(renderedSpeed)/3.35),2.3,dt);
+ const wakingFocus=opening.state.active&&!opening.state.escaped?1-THREE.MathUtils.smoothstep(wake,.65,1):0;
+ cameraX=THREE.MathUtils.damp(cameraX,state==='intro'?-5.5:renderedX-wakingFocus*2.2,3.2,dt);
+ cameraY=THREE.MathUtils.damp(cameraY,Math.max(0,renderedY-.8)*.18,2,dt);
+ const centerX=cameraX+cameraLead;
+ const zoom=state==='intro'?19:16.3+wakingFocus*.9;
+ const impact=(!reducedMotion&&opening.state.edgeImpact>0)?Math.sin(opening.state.elapsed*46)*.027*opening.state.edgeImpact:0;
+ camera.position.set(centerX+impact,5.3+cameraY+Math.abs(impact)*.3,THREE.MathUtils.damp(camera.position.z||19,zoom,1.8,dt));
+ camera.lookAt(centerX,1.8+cameraY,0);
+ sun.position.x=renderedX+7;sun.target.position.set(renderedX+2,-1,0);sun.target.updateMatrixWorld();
+ const movingShadow=Math.abs(renderedSpeed)>.04||!player.grounded||mantle||wake<1&&state==='play';
+ if(time-lastShadow>(movingShadow?(software?1/24:1/60):.16)){
+  renderer.shadowMap.needsUpdate=true;lastShadow=time;
+ }
+ grade.uniforms.uTime.value=time;grade.uniforms.uFade.value=fade;
+ if(software){const opacity=String(1-fade);if(canvas.style.opacity!==opacity)canvas.style.opacity=opacity;renderer.render(scene,camera)}else composer.render();
+}
+boy.group.position.set(0,0,0);boy.group.rotation.y=Math.PI/2;requestAnimationFrame(frame);
+canvas.addEventListener('webglcontextlost',e=>{e.preventDefault();state='pause';$('#error').hidden=false;$('#error').textContent='3D graphics were interrupted. Reload the page to continue.'});
+// Non-enumerable observation hook for repeatable browser smoke tests.
+Object.defineProperty(window,'__game',{value:{get state(){return state},get wake(){return wake},get opening(){return {...opening.state}},get jump(){return {...jumpMotion}},get animation(){return boy.group.userData.animation},get climb(){return mantle?{...mantle}:null},get climbsCompleted(){return climbsCompleted},get splashes(){return {active:water.activeCount,emitted:water.emittedCount}},get software(){return software},player,get crateX(){return world.crate.position.x},get drawCalls(){return renderer.info.render.calls},get triangles(){return renderer.info.render.triangles}}});

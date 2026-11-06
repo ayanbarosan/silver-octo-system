@@ -1,0 +1,537 @@
+import {MOVEMENT} from './movement.js';
+
+/** A small, fully rigged child. Local forward is +Z and the soles rest on Y=0. */
+export function createBoy(THREE) {
+  const group = new THREE.Group();
+  group.name = 'Boy';
+  const pose = new THREE.Group();
+  group.add(pose);
+  const M = {
+    jacket: new THREE.MeshStandardMaterial({ color: 0x11171b, roughness: 0.94 }),
+    jacketLight: new THREE.MeshStandardMaterial({ color: 0x1b2226, roughness: 0.92 }),
+    trousers: new THREE.MeshStandardMaterial({ color: 0x11181c, roughness: 0.96 }),
+    seam: new THREE.MeshStandardMaterial({ color: 0x354044, roughness: 0.88 }),
+    stripe: new THREE.MeshStandardMaterial({ color: 0xd1d3c8, roughness: 0.8 }),
+    skin: new THREE.MeshStandardMaterial({ color: 0xc49f89, roughness: 0.81 }),
+    cheek: new THREE.MeshStandardMaterial({ color: 0xb88c78, roughness: 0.88 }),
+    hair: new THREE.MeshStandardMaterial({ color: 0x17171d, roughness: 0.99 }),
+    hairHighlight: new THREE.MeshStandardMaterial({ color: 0x24222a, roughness: 0.96 }),
+    eye: new THREE.MeshStandardMaterial({ color: 0x20252b, roughness: 0.7 }),
+    sole: new THREE.MeshStandardMaterial({ color: 0x0c1317, roughness: 0.92 }),
+    shoe: new THREE.MeshStandardMaterial({ color: 0x202b30, roughness: 0.85 }),
+    bag: new THREE.MeshStandardMaterial({ color: 0xb3da45, roughness: 0.88 }),
+    bagSide: new THREE.MeshStandardMaterial({ color: 0x819e34, roughness: 0.93 }),
+    bagTrim: new THREE.MeshStandardMaterial({ color: 0xd1e978, roughness: 0.86 }),
+    strap: new THREE.MeshStandardMaterial({ color: 0x4d6031, roughness: 0.93 }),
+    metal: new THREE.MeshStandardMaterial({ color: 0x7d8780, roughness: 0.48, metalness: 0.65 }),
+  };
+  const sphereGeo = new THREE.SphereGeometry(1, 20, 16);
+  function mesh(geometry, material, parent, x=0, y=0, z=0) {
+    const m = new THREE.Mesh(geometry, material);
+    m.position.set(x,y,z);
+    m.castShadow = true;
+    m.receiveShadow = true;
+    parent.add(m);
+    return m;
+  }
+  function oval(parent, material, x,y,z, sx,sy,sz) {
+    const m=mesh(sphereGeo,material,parent,x,y,z);
+    m.scale.set(sx,sy,sz);
+    return m;
+  }
+  function capsule(parent, material, x,y,z, radius,length, scaleZ=1) {
+    const m=mesh(new THREE.CapsuleGeometry(radius,Math.max(.001,length-radius*2),5,12),material,parent,x,y,z);
+    m.scale.z=scaleZ;
+    return m;
+  }
+  function line(parent, points, material, radius=.004) {
+    return mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points.map(p=>new THREE.Vector3(...p))),14,radius,5,false),material,parent);
+  }
+  function softBox(parent,material,x,y,z,w,h,d,r=.035) {
+    const hw=w/2,hh=h/2;
+    const s=new THREE.Shape();
+    s.moveTo(-hw+r,-hh); s.lineTo(hw-r,-hh);
+    s.quadraticCurveTo(hw,-hh,hw,-hh+r);s.lineTo(hw,hh-r);
+    s.quadraticCurveTo(hw,hh,hw-r,hh);s.lineTo(-hw+r,hh);
+    s.quadraticCurveTo(-hw,hh,-hw,hh-r);s.lineTo(-hw,-hh+r);
+    s.quadraticCurveTo(-hw,-hh,-hw+r,-hh);
+    const bevel=Math.min(r*.45,d*.2);
+    const geo=new THREE.ExtrudeGeometry(s,{depth:d-2*bevel,bevelEnabled:true,bevelSegments:3,steps:1,bevelSize:bevel,bevelThickness:bevel,curveSegments:6});
+    geo.translate(0,0,-(d-2*bevel)/2);
+    return mesh(geo,material,parent,x,y,z);
+  }
+
+  // Broad padded jacket, soft belly and small hips give a child's proportions.
+  const torso=new THREE.Group();torso.name='pelvis';torso.position.y=.64;pose.add(torso);
+  oval(torso,M.trousers,0,.025,0,.205,.145,.145);
+  oval(torso,M.jacket,0,.25,0,.235,.285,.165);
+  oval(torso,M.jacketLight,0,.14,.021,.225,.19,.17);
+  capsule(torso,M.jacket,0,.038,.005,.193,.10,.78);
+  oval(torso,M.jacket,0,.495,0,.119,.065,.118);
+  line(torso,[[0,.04,.177],[0,.22,.186],[0,.42,.141],[0,.5,.1]],M.seam,.004);
+  mesh(new THREE.BoxGeometry(.012,.027,.007),M.metal,torso,0,.43,.143);
+  // Slightly curved pocket seams are visible when light grazes the jacket.
+  for(const side of [-1,1]) line(torso,[[side*.165,.11,.133],[side*.12,.2,.168],[side*.11,.235,.164]],M.seam,.0025);
+
+  const legs=[];
+  for(const side of [-1,1]) {
+    const hip=new THREE.Group();hip.name=side===-1?'leftHip':'rightHip';hip.position.set(side*.108,.64,0);pose.add(hip);
+    capsule(hip,M.trousers,0,-.145,0,.086,.33,.98);
+    oval(hip,M.jacketLight,0,-.276,.006,.079,.077,.079);
+    const knee=new THREE.Group();knee.name=side===-1?'leftKnee':'rightKnee';knee.position.y=-.305;hip.add(knee);
+    capsule(knee,M.trousers,0,-.139,0,.069,.306,.99);
+    capsule(knee,M.jacket,0,-.282,0,.068,.05,1.05);
+    // Two thin pale fabric stripes on the outside of both trouser legs.
+    for(const z of [-.025,.018]) {
+      capsule(hip,M.stripe,side*.079,-.147,z,.006,.276,1);
+      capsule(knee,M.stripe,side*.064,-.137,z,.0055,.247,1);
+    }
+    const foot=new THREE.Group();foot.name=side===-1?'leftAnkle':'rightAnkle';foot.position.set(0,-.31,0);knee.add(foot);
+    oval(foot,M.sole,0,-.027,.026,.085,.033,.145);
+    oval(foot,M.shoe,0,.002,.018,.08,.057,.13);
+    oval(foot,M.shoe,0,.015,-.046,.072,.062,.067);
+    line(foot,[[-.047,.041,.017],[0,.05,.023],[.047,.041,.017]],M.seam,.003);
+    line(foot,[[-.043,.033,.045],[0,.043,.055],[.043,.033,.045]],M.seam,.003);
+    const sole=new THREE.Object3D();sole.name=side===-1?'leftSole':'rightSole';sole.position.set(0,-.06,.026);foot.add(sole);
+    legs.push({hip,knee,foot,sole,side});
+  }
+
+  const arms=[];
+  for(const side of [-1,1]) {
+    const shoulder=new THREE.Group();shoulder.position.set(side*.227,.405,0);torso.add(shoulder);
+    capsule(shoulder,M.jacketLight,0,-.09,0,.086,.235,.92);
+    oval(shoulder,M.jacket,0,-.015,0,.092,.1,.089);
+    const elbow=new THREE.Group();elbow.position.set(0,-.192,0);shoulder.add(elbow);
+    capsule(elbow,M.jacket,0,-.082,0,.071,.205,.94);
+    capsule(elbow,M.jacketLight,0,-.167,0,.07,.047,.96);
+    for(const z of [-.024,.019]) {
+      capsule(shoulder,M.stripe,side*.079,-.088,z,.006,.188,1);
+      capsule(elbow,M.stripe,side*.065,-.077,z,.0055,.158,1);
+    }
+    const wrist=new THREE.Group();wrist.position.set(0,-.22,0);elbow.add(wrist);
+    oval(wrist,M.skin,0,0,.008,.049,.061,.04);
+    oval(wrist,M.skin,-side*.031,.006,.038,.018,.034,.023);
+    const palm=new THREE.Object3D();palm.name=side===-1?'leftPalm':'rightPalm';palm.position.set(0,0,.048);wrist.add(palm);
+    arms.push({shoulder,elbow,wrist,palm,side});
+  }
+
+  // A small face under a heavy fringe. No exaggerated cartoon eyes.
+  capsule(torso,M.skin,0,.53,.011,.069,.13,1);
+  const head=new THREE.Group();head.name='head';head.position.set(0,.679,.026);torso.add(head);
+  oval(head,M.skin,0,0,0,.172,.198,.163);
+  oval(head,M.skin,0,-.075,.049,.137,.133,.139);
+  oval(head,M.skin,0,-.125,.046,.101,.069,.102);
+  for(const side of [-1,1]) {
+    oval(head,M.skin,side*.171,-.019,.007,.035,.058,.037);
+    oval(head,M.cheek,side*.184,-.021,.022,.011,.031,.018);
+    oval(head,M.eye,side*.061,.001,.153,.011,.014,.006);
+    line(head,[[side*.084,.029,.144],[side*.061,.034,.157],[side*.041,.027,.158]],M.hair,.004);
+  }
+  oval(head,M.skin,0,-.027,.163,.028,.038,.029);
+  line(head,[[-.024,-.081,.163],[0,-.085,.169],[.026,-.08,.163]],M.cheek,.003);
+  // A cap plus asymmetrical locks avoids the spherical helmet appearance.
+  const cap=mesh(new THREE.SphereGeometry(.183,24,16,0,Math.PI*2,0,Math.PI*.62),M.hair,head,0,.034,-.013);
+  cap.scale.set(1.015,1.02,1.025);
+  oval(head,M.hair,-.147,.025,-.026,.045,.12,.101);
+  oval(head,M.hair,.146,.034,-.026,.04,.112,.095);
+  const locks=[[-.122,.116,.092,.073,.064,.105],[-.065,.145,.121,.082,.07,.078],[.012,.138,.142,.071,.076,.067],[.071,.119,.134,.071,.086,.07],[.127,.083,.102,.055,.094,.073],[-.027,.169,-.024,.115,.045,.115]];
+  locks.forEach((p,i)=>{const lock=oval(head,i%3===0?M.hairHighlight:M.hair,...p);lock.rotation.z=(i-2)*.12;});
+  line(head,[[-.115,.162,.044],[-.06,.187,.079],[.012,.174,.137]],M.hairHighlight,.002);
+
+  // Canvas backpack: rounded body, separate front pocket, zipper and shoulder straps.
+  const bag=new THREE.Group();bag.position.set(0,.263,-.195);torso.add(bag);
+  softBox(bag,M.bagSide,0,0,-.012,.335,.415,.135,.052);
+  softBox(bag,M.bag,0,.008,-.058,.319,.401,.133,.055);
+  softBox(bag,M.bagSide,0,-.082,-.137,.267,.148,.047,.028);
+  softBox(bag,M.bag,0,-.077,-.153,.256,.137,.037,.024);
+  line(bag,[[-.112,-.037,-.177],[0,-.025,-.18],[.111,-.037,-.177]],M.bagTrim,.0035);
+  mesh(new THREE.BoxGeometry(.012,.024,.005),M.metal,bag,.099,-.048,-.18);
+  line(bag,[[-.13,-.16,-.13],[-.152,0,-.13],[-.112,.176,-.12],[0,.194,-.12],[.112,.176,-.12],[.152,0,-.13],[.13,-.16,-.13]],M.bagTrim,.003);
+  line(bag,[[-.052,.206,-.025],[-.049,.253,-.025],[.049,.253,-.025],[.052,.206,-.025]],M.strap,.012);
+  for(const side of [-1,1]) {
+    line(torso,[[side*.135,.434,-.225],[side*.149,.511,-.069],[side*.17,.456,.096],[side*.167,.249,.164],[side*.137,.085,.106],[side*.128,.085,-.179]],M.strap,.017);
+    softBox(torso,M.bagSide,side*.164,.203,.159,.039,.049,.013,.008);
+    softBox(bag,M.bagSide,side*.167,-.093,-.044,.052,.126,.089,.015);
+  }
+
+  group.userData.height=1.56;
+  const clamp=THREE.MathUtils.clamp,lerp=THREE.MathUtils.lerp;
+  const smooth=(x,a=0,b=1)=>THREE.MathUtils.smoothstep(x,a,b);
+  const damp=(a,b,rate,dt)=>lerp(a,b,1-Math.exp(-rate*dt));
+  const cycle=x=>((x%1)+1)%1;
+  const TAU=Math.PI*2,THIGH=.305,SHIN=.31;
+  const footWorld=new THREE.Vector3(),temporary=new THREE.Vector3();
+  const animation={phase:0,mode:'idle',wakeStage:'awake',jumpStage:'grounded',climbStage:'none',launchLead:0,launchSpeed:0,landingReach:0,feet:legs.map(()=>({stance:true,contactWeight:1,position:{x:0,y:0,z:0}})),hands:arms.map(()=>({contactWeight:0,position:{x:0,y:0,z:0}}))};
+  group.userData.animation=animation;
+  let phase=0,moving=0,running=0,pushing=0,air=0,lean=0,headLean=0,bagLean=0;
+  let landing=0,landingVelocity=0,previousGrounded=true,previousTime=0,initialized=false;
+  let internalAirTime=0,previousPrep=0,launchCrouch=0;
+  let launchLead=0,takeoffSpeed=0,takeoffRun=0,landingReach=0,landingAge=Infinity,landingFoot=0,bagVelocity=0;
+  const footState=legs.map(()=>({anchor:new THREE.Vector3(),hasAnchor:false,wasStance:false,landingPlant:false,roll:0,target:new THREE.Vector3(0,0,.025)}));
+  const legTargets=legs.map(()=>new THREE.Vector3());
+  const handTargets=arms.map(()=>new THREE.Vector3());
+  const noHands=[0,0],stanceScratch=[true,true],weightScratch=[1,1],forwardScratch=[0,0];
+  const stepResult={footstep:false,intensity:0};
+  const climbEdge=new THREE.Vector3(),climbFeet=legs.map(()=>new THREE.Vector3()),climbAnchors=arms.map(()=>new THREE.Vector3()),climbRest=arms.map(()=>new THREE.Vector3());
+  const climbContacts={hands:[0,0],stances:[false,false],weights:[0,0]};
+  const wakeChannels=new Float64Array(12),flightChannels=new Float64Array(14);
+
+  function reset() {
+    phase=.04;moving=running=pushing=air=lean=headLean=bagLean=0;
+    landing=landingVelocity=0;previousGrounded=true;previousTime=0;initialized=false;internalAirTime=previousPrep=launchCrouch=0;launchLead=takeoffSpeed=takeoffRun=landingReach=landingFoot=bagVelocity=0;landingAge=Infinity;
+    pose.position.set(0,0,0);pose.rotation.set(0,0,0);
+    torso.position.set(0,.64,0);torso.rotation.set(0,0,0);torso.scale.set(1,1,1);
+    head.position.set(0,.679,.026);head.rotation.set(.045,0,0);
+    bag.position.set(0,.263,-.195);bag.rotation.set(0,0,0);
+    footState.forEach((s,i)=>{s.anchor.set(0,0,0);s.hasAnchor=false;s.wasStance=false;s.landingPlant=false;s.roll=0;s.target.set(legs[i].side*.108,0,.025);});
+    for(const arm of arms){arm.shoulder.position.x=arm.side*.227;arm.shoulder.rotation.set(.02,0,-arm.side*.045);arm.elbow.rotation.set(-.18,0,0);arm.wrist.rotation.set(0,0,0);}
+    // Initialization uses the same IK as moving poses, so restarting cannot
+    // retain a knee angle, a contact anchor or a backpack spring from last time.
+    legs.forEach((leg,i)=>solveLeg(leg,footState[i].target,0,.64));
+    animation.phase=phase;animation.mode='idle';animation.wakeStage='awake';animation.jumpStage='grounded';animation.climbStage='none';animation.launchLead=0;animation.launchSpeed=0;animation.landingReach=0;
+    updateDiagnostics([true,true],[1,1]);
+  }
+
+  function updateDiagnostics(stance,weights,handWeights=noHands) {
+    group.updateWorldMatrix(true,true);
+    for(let i=0;i<legs.length;i++) {
+      const info=animation.feet[i];legs[i].sole.getWorldPosition(footWorld);
+      info.stance=stance[i];info.contactWeight=weights[i];
+      info.position.x=footWorld.x;info.position.y=footWorld.y;info.position.z=footWorld.z;
+    }
+    for(let i=0;i<arms.length;i++){const info=animation.hands[i];arms[i].palm.getWorldPosition(footWorld);info.contactWeight=handWeights[i];info.position.x=footWorld.x;info.position.y=footWorld.y;info.position.z=footWorld.z;}
+    animation.phase=phase;
+  }
+
+  function solveLeg(leg,soleTarget,roll,hipHeight,hipZ=0) {
+    // The ankle is offset from the shoe's real contact marker. Removing that
+    // rotated offset before IK keeps the rendered sole planted, not just a
+    // mathematical target somewhere inside the shoe.
+    const ankleY=soleTarget.y+.06*Math.cos(roll)+.026*Math.sin(roll);
+    const ankleZ=soleTarget.z+.06*Math.sin(roll)-.026*Math.cos(roll);
+    const dy=ankleY-hipHeight,dz=ankleZ-hipZ;
+    const distance=clamp(Math.hypot(dy,dz),.015,THIGH+SHIN-.001);
+    const kneeAngle=Math.acos(clamp((distance*distance-THIGH*THIGH-SHIN*SHIN)/(2*THIGH*SHIN),-1,1));
+    const hipAngle=Math.atan2(-dz,-dy)-Math.atan2(SHIN*Math.sin(kneeAngle),THIGH+SHIN*Math.cos(kneeAngle));
+    leg.hip.position.set(soleTarget.x,hipHeight,hipZ);
+    leg.hip.rotation.set(hipAngle,0,0);
+    leg.knee.rotation.set(kneeAngle,0,0);
+    leg.foot.rotation.set(roll-hipAngle-kneeAngle,0,0);
+  }
+
+  const wakeKeys=[
+    // progress, pelvisY, pelvisZ, chest lean, left/right sole Y,Z, left/right palm Y,Z
+    [0,   .21,-.10,1.50, .070,-.72,.065,-.70, .030,.65,.030,.67],
+    [.10, .21,-.10,1.50, .070,-.72,.065,-.70, .030,.65,.030,.67],
+    [.18, .215,-.10,1.42,.070,-.72,.065,-.70, .014,.50,.014,.55],
+    [.30, .23,-.08,1.20, .070,-.72,.065,-.70, .014,.50,.014,.55],
+    [.38, .350,-.07,1.47,.055,-.56,.055,-.52, .014,.50,.014,.55],
+    [.42, .365,-.065,1.47,.055,-.34,.055,-.30, .014,.50,.014,.55],
+    [.46, .355,-.06,1.47,.055,-.25,.055,-.20, .014,.50,.014,.55],
+    [.60, .375,.015,1.43, 0,.24,.050,-.20, .300,.31,.014,.55],
+    [.70, .430,.11,1.02, 0,.24,.050,-.16, .400,.32,.220,.50],
+    [.82, .580,.065,.30, 0,.12,.025,-.07, .580,.23,.570,.10],
+    [.93, .635,.008,.035,0,.04,0,.015, .642,.07,.642,.07],
+    [1,   .640,0,.0,    0,.025,0,.025, .642,.07,.642,.07],
+  ];
+  const wakeObjects=[pose,torso,head,bag,...legs.flatMap(l=>[l.hip,l.knee,l.foot]),...arms.flatMap(a=>[a.shoulder,a.elbow,a.wrist])];
+  const awakePose=wakeObjects.map(()=>({position:new THREE.Vector3(),quaternion:new THREE.Quaternion(),scale:new THREE.Vector3()}));
+  function capturePose(){for(let i=0;i<wakeObjects.length;i++){const object=wakeObjects[i],base=awakePose[i];base.position.copy(object.position);base.quaternion.copy(object.quaternion);base.scale.copy(object.scale);}}
+  function blendPose(amount){for(let i=0;i<wakeObjects.length;i++){const object=wakeObjects[i],base=awakePose[i];object.position.lerp(base.position,amount);object.quaternion.slerp(base.quaternion,amount);object.scale.lerp(base.scale,amount);}}
+  function solveArm(arm,palmTarget,palmPitch) {
+    // Work in the actual shoulder's sagittal plane, then subtract the chest's
+    // current angle. A chest push-up therefore extends elbows around fixed
+    // palms rather than dragging the hands along with a rotating upper body.
+    arm.shoulder.position.x=palmTarget.x-torso.position.x;
+    arm.shoulder.rotation.set(0,0,0);
+    torso.updateWorldMatrix(true,false);
+    arm.shoulder.getWorldPosition(temporary);group.worldToLocal(temporary);
+    const dy=palmTarget.y+.048*Math.sin(palmPitch)-temporary.y;
+    const dz=palmTarget.z-.048*Math.cos(palmPitch)-temporary.z;
+    const upper=.192,fore=.22,distance=clamp(Math.hypot(dy,dz),.025,upper+fore-.0005);
+    const bend=-Math.acos(clamp((distance*distance-upper*upper-fore*fore)/(2*upper*fore),-1,1));
+    const worldAngle=Math.atan2(-dz,-dy)-Math.atan2(fore*Math.sin(bend),upper+fore*Math.cos(bend));
+    arm.shoulder.rotation.x=worldAngle-torso.rotation.x;
+    arm.elbow.rotation.set(bend,0,0);
+    arm.wrist.rotation.set(palmPitch-worldAngle-bend,0,0);
+  }
+  function applyWake(progress,time) {
+    capturePose();
+    let a=wakeKeys[0],b=wakeKeys[1];
+    for(let i=1;i<wakeKeys.length;i++)if(progress<=wakeKeys[i][0]){a=wakeKeys[i-1];b=wakeKeys[i];break;}
+    const u=smooth(progress,a[0],b[0]),v=wakeChannels;
+    for(let i=0;i<a.length;i++)v[i]=i===0?progress:lerp(a[i],b[i],u);
+    const hipY=v[1],hipZ=v[2],tilt=v[3];
+    pose.position.set(0,0,0);pose.rotation.set(0,0,0);
+    torso.position.set(0,hipY,hipZ);torso.rotation.set(tilt,0,0);torso.scale.set(1,1,1);
+    head.position.set(0,.679,.026);
+    head.rotation.set(-.10-.23*smooth(progress,.1,.31)+.36*smooth(progress,.64,.93),0,0);
+    bag.position.set(0,.263,-.195);bag.rotation.set(-.025*Math.sin(progress*Math.PI),0,0);
+    for(let i=0;i<legs.length;i++){
+      const leg=legs[i],roll=lerp(.55,0,smooth(progress,.28,.62));
+      const target=legTargets[i].set(leg.side*.108,v[4+i*2],v[5+i*2]);
+      solveLeg(leg,target,roll,hipY,hipZ);
+    }
+    const palmPitch=lerp(Math.PI/2,-.16,smooth(progress,.70,.98));
+    for(let i=0;i<arms.length;i++){const arm=arms[i];solveArm(arm,handTargets[i].set(arm.side*.255,v[8+i*2],v[9+i*2]),palmPitch);}
+    // The last weight transfer blends into the live idle pose. This includes
+    // breathing, so the end of the authored action cannot snap to another rig.
+    const awakeBlend=smooth(progress,.88,1);
+    if(awakeBlend>0)blendPose(awakeBlend);
+    animation.wakeStage=progress<.12?'prone':progress<.31?'palms-support':progress<.48?'knees-under':progress<.63?'half-kneel':progress<.83?'push-to-stand':'balance';
+    climbContacts.hands[0]=smooth(progress,.105,.17)*(1-smooth(progress,.46,.53));climbContacts.hands[1]=smooth(progress,.105,.17)*(1-smooth(progress,.60,.68));return climbContacts.hands;
+  }
+
+  // A long airborne silhouette: thighs stay below the pelvis and relaxed heels
+  // trail behind. On descent the leading leg reaches first; the other follows.
+  // Phase, hip offset, chest lean, lead Z/Y/roll, trail Z/Y/roll,
+  // lead shoulder/elbow, trail shoulder/elbow, lateral arm balance.
+  const flightKeys=[
+    [0,   -.015,.060, .025,0,.06, -.025,0,.12, .18,-.27,.30,-.32,.025],
+    [.12, .008,.075, -.025,.035,.09, -.120,.070,.20, -1.05,-.52,-.72,-.62,.045],
+    [.28, .006,.050, -.060,.065,.12, -.185,.110,.30, -.62,-.66,-.46,-.72,.065],
+    [.48, 0,.025, -.045,.060,.10, -.160,.105,.28, -.34,-.65,-.28,-.60,.075],
+    [.64, 0,.040, .045,.028,-.09, -.135,.095,.25, -.44,-1.15,-.29,-.54,.065],
+    [.82,-.004,.055, .100,.008,-.15, -.090,.055,.14, -.52,-1.08,-.36,-.43,.055],
+    [1,   0,.060, .090,.001,-.12, -.065,.004,-.05, -.45,-.92,-.32,-.36,.045],
+  ];
+  // Shape-preserving Hermite tangents keep velocity flowing across poses.
+  // Unlike smoothstep at every key, only a channel's actual extremum pauses.
+  const flightTangents=flightKeys.map(row=>new Float64Array(row.length));
+  for(let k=1;k<flightKeys.length-1;k++)for(let c=1;c<flightKeys[k].length;c++){
+    const h0=flightKeys[k][0]-flightKeys[k-1][0],h1=flightKeys[k+1][0]-flightKeys[k][0];
+    const d0=(flightKeys[k][c]-flightKeys[k-1][c])/h0,d1=(flightKeys[k+1][c]-flightKeys[k][c])/h1;
+    if(d0*d1>0){const w0=2*h1+h0,w1=h1+2*h0;flightTangents[k][c]=(w0+w1)/(w0/d0+w1/d1);}
+  }
+  function sampleChannels(keys,progress,out=flightChannels) {
+    let segment=keys.length-2;
+    for(let i=1;i<keys.length;i++)if(progress<=keys[i][0]){segment=i-1;break;}
+    const a=keys[segment],b=keys[segment+1],h=b[0]-a[0],t=clamp((progress-a[0])/h,0,1),t2=t*t,t3=t2*t;
+    out[0]=progress;
+    for(let i=1;i<a.length;i++)out[i]=(2*t3-3*t2+1)*a[i]+(t3-2*t2+t)*h*flightTangents[segment][i]+(-2*t3+3*t2)*b[i]+(t3-t2)*h*flightTangents[segment+1][i];
+    return out;
+  }
+  function applyClimb(climb) {
+    const p=clamp(climb.progress,0,1),face=climb.face===-1?-1:1;
+    const startX=Number.isFinite(climb.startX)?climb.startX:climb.edgeX-face*.4;
+    const startY=Number.isFinite(climb.startY)?climb.startY:climb.topY-.85;
+    const endX=Number.isFinite(climb.endX)?climb.endX:climb.edgeX+face*.25;
+    capturePose();
+    pose.position.set(0,0,0);pose.rotation.set(0,0,0);
+    group.updateWorldMatrix(true,false);
+    const localEdge=climbEdge.set(climb.edgeX,climb.topY,0);group.worldToLocal(localEdge);
+    const risingLean=lerp(.13,1.07,smooth(p,.22,.60));
+    const tilt=lerp(risingLean,0,smooth(p,.69,.96));
+    const supportHip=clamp(localEdge.y+.30-.405*Math.cos(risingLean),.18,.64);
+    const hipHeight=lerp(supportHip,.64,smooth(p,.69,.96));
+    const hipZ=-.015*Math.sin(Math.PI*smooth(p,.22,.90));
+    torso.position.set(0,hipHeight,hipZ);torso.rotation.set(tilt,0,0);torso.scale.set(1,1,1);
+    head.position.set(0,.679,.026);head.rotation.set(-tilt*.56+.035,0,0);
+    bag.position.set(0,.263,-.195);bag.rotation.set(-.075*Math.sin(p*Math.PI),0,.025*Math.sin(p*TAU));
+
+    const leadLift=smooth(p,.28,.48),leadReach=smooth(p,.48,.64);
+    let leadWorldY=lerp(startY,climb.topY+.08,leadLift)-.072*smooth(p,.52,.65);
+    let leadWorldX=lerp(startX+face*.025,climb.edgeX-face*.45,smooth(p,0,.28));
+    leadWorldX=lerp(leadWorldX,climb.edgeX+face*.18,leadReach);
+    leadWorldX=lerp(leadWorldX,endX+face*.025,smooth(p,.90,1));
+    leadWorldY=lerp(leadWorldY,climb.topY,smooth(p,.90,1));
+    let trailWorldX=lerp(startX-face*.025,climb.edgeX-face*.39,smooth(p,.14,.38));
+    const trailLift=smooth(p,.74,.86);
+    let trailWorldY=lerp(startY,climb.topY-.30,smooth(p,.22,.60));
+    trailWorldY=lerp(trailWorldY,climb.topY+.12,trailLift);
+    trailWorldX=lerp(trailWorldX,endX-face*.025,smooth(p,.82,.98));
+    trailWorldY=lerp(trailWorldY,climb.topY,smooth(p,.90,1));
+    const feetWorld=climbFeet;feetWorld[0].set(leadWorldX,leadWorldY,-face*legs[0].side*.108);feetWorld[1].set(trailWorldX,trailWorldY,-face*legs[1].side*.108);
+    for(let i=0;i<legs.length;i++){
+      const leg=legs[i],target=group.worldToLocal(feetWorld[i]);
+      const roll=i===0?-.25*Math.sin(Math.PI*smooth(p,.27,.65)):.55*Math.sin(Math.PI*smooth(p,.20,.90));
+      solveLeg(leg,target,roll,hipHeight,hipZ);
+    }
+    const handWeights=climbContacts.hands;
+    for(let i=0;i<arms.length;i++){
+      const arm=arms[i],anchor=climbAnchors[i].set(climb.edgeX,climb.topY+.015,-face*arm.side*.19);
+      group.worldToLocal(anchor);
+      const release=smooth(p,i===0?.58:.66,i===0?.66:.74);
+      const rest=climbRest[i].set(arm.side*.227,hipHeight-.002,.07);
+      // The gripping palm turns away only after it has unloaded its weight.
+      const reach=smooth(p,0,.22);
+      const target=handTargets[i].copy(rest).lerp(anchor,reach).lerp(rest,release);
+      solveArm(arm,target,lerp(Math.PI/2,-.16,release));
+      handWeights[i]=smooth(p,.17,.24)*(1-release);
+    }
+    const weight=smooth(p,0,.18)*(1-smooth(p,.92,1));
+    if(weight<1)blendPose(1-weight);
+    const plantedLead=smooth(p,.62,.67)*(1-smooth(p,.88,.94));
+    const plantedTrail=smooth(p,.96,1);
+    animation.mode='climb';animation.climbStage=p<.22?'reach-and-grip':p<.46?'pull-chest':p<.63?'knee-up':p<.74?'plant-and-press':p<.94?'step-over':'settle';
+    animation.jumpStage='grounded';
+    handWeights[0]*=weight;handWeights[1]*=weight;climbContacts.stances[0]=plantedLead>.5;climbContacts.stances[1]=plantedTrail>.5;climbContacts.weights[0]=plantedLead;climbContacts.weights[1]=plantedTrail;return climbContacts;
+  }
+
+  /**
+   * Distance advances a gait; time only drives breathing and secondary motion.
+   * Both legs use a planted stance and an airborne Hermite recovery arc. The
+   * foot's world anchor survives changing speeds, which avoids skating while
+   * accelerating or settling into a stop.
+   */
+  function animate({time=0,speed=0,grounded=true,wake=1,push=false,vy=0,dt,travel,acceleration=0,landImpact=0,jumpPrep=0,airTime,takeoff,climb=null,launchSpeed,landingDistance}={}) {
+    if(climb){grounded=true;speed=0;travel=0;jumpPrep=0;airTime=0;takeoff=0;}
+    const delta=clamp(Number.isFinite(dt)?dt:(initialized?time-previousTime:1/60),0,.1);
+    previousTime=time;
+    stepResult.footstep=false;stepResult.intensity=0;
+    if(initialized&&delta===0)return stepResult;
+    initialized=true;
+    const speedAbs=Math.abs(speed),wakeProgress=clamp(wake,0,1),stand=1;
+    const justLanded=!previousGrounded&&grounded;
+    if(!grounded&&previousGrounded){
+      internalAirTime=0;launchCrouch=previousPrep;
+      launchLead=footState[0].target.z>=footState[1].target.z?0:1;
+      takeoffSpeed=Math.abs(Number.isFinite(launchSpeed)?launchSpeed:speed);takeoffRun=smooth(takeoffSpeed,2.15,3.35);
+      landingAge=Infinity;
+    }
+    if(grounded){internalAirTime=0;previousPrep=jumpPrep;}else internalAirTime+=delta;
+    const flightTime=Number.isFinite(airTime)?airTime:internalAirTime;
+    const launchProgress=Number.isFinite(takeoff)?takeoff:clamp(flightTime/.12,0,1);
+    const tuck=smooth(flightTime,.075,.29)*(1-smooth(-vy,1.0,4.8));
+    const burst=grounded?0:Math.sin(Math.PI*clamp(flightTime/.18,0,1));
+    const flightDuration=2*MOVEMENT.jumpVelocity/MOVEMENT.gravity;
+    const velocityProgress=(MOVEMENT.jumpVelocity-vy)/(2*MOVEMENT.jumpVelocity);
+    const flightProgress=clamp(.65*flightTime/flightDuration+.35*velocityProgress,0,1);
+    const flight=sampleChannels(flightKeys,flightProgress);
+    const squat=(grounded?smooth(jumpPrep):launchCrouch*(1-smooth(launchProgress,0,.6)))*lerp(1,.64,grounded?smooth(speedAbs,2.15,3.35):takeoffRun);
+    let reachTarget=grounded?0:smooth(-vy,.5,4.6)*smooth(flightProgress,.57,.90);
+    if(!grounded&&Number.isFinite(landingDistance))reachTarget=Math.max(reachTarget,(1-smooth(Math.max(0,landingDistance),.06,.65))*smooth(-vy,.2,2));
+    landingReach=damp(landingReach,reachTarget,grounded?9:15,delta);
+    if(justLanded){landingAge=0;landingFoot=Math.abs(footState[0].target.y-footState[1].target.y)>.035?(footState[0].target.y<footState[1].target.y?0:1):(footState[0].target.z>=footState[1].target.z?0:1);}
+    else if(grounded&&Number.isFinite(landingAge))landingAge+=delta;
+    const runTarget=smooth(speedAbs,2.2,3.35);
+    moving=damp(moving,smooth(speedAbs,.035,.65),10,delta);
+    running=damp(running,runTarget,7,delta);
+    pushing=damp(pushing,push?1:0,9,delta);
+    air=damp(air,grounded?0:1,grounded?15:11,delta);
+    if(landImpact>0&&previousGrounded===false)landingVelocity+=clamp(landImpact,0,1.7)*1.65;
+    // Exact critically damped spring: consistent compression at any frame rate.
+    const landingFrequency=12,decay=Math.exp(-landingFrequency*delta);
+    const transient=landingVelocity+landingFrequency*landing;
+    landing=(landing+transient*delta)*decay;
+    landingVelocity=(landingVelocity-landingFrequency*transient*delta)*decay;
+    if(justLanded)for(const f of footState){f.hasAnchor=false;f.wasStance=false;f.landingPlant=false;}
+    previousGrounded=grounded;
+
+    // The short walking stride has double support; sprinting has short contact
+    // and a recovery flight. Feet retract before touch-down rather than tracing
+    // a circular clockwork motion.
+    const stride=lerp(.66+Math.min(speedAbs,2.2)*.235,1.82,runTarget);
+    const duty=lerp(.57,.36,runTarget);
+    const actualTravel=Number.isFinite(travel)?Math.max(0,travel):speedAbs*delta;
+    if(justLanded&&speedAbs>.15){const footPhase=clamp((.025+stride*duty*.5-footState[landingFoot].target.z)/stride,.055,duty-.085);phase=cycle(footPhase-landingFoot*.5);}
+    if(grounded&&wakeProgress>.98&&speedAbs>.025)phase=cycle(phase+actualTravel/Math.max(.5,stride));
+    const angle=phase*TAU,breathe=Math.sin(time*1.85),bodyMotion=moving*(1-air);
+    const gaitHeight=lerp(.595,.607,running)-lerp(.017,.035,running)*Math.cos(angle*2);
+    const hipHeight=lerp(.64+.0015*breathe,gaitHeight,bodyMotion)-landing-.095*squat+air*flight[1];
+    pose.rotation.x=(1-stand)*Math.PI*.5;
+    pose.position.y=(1-stand)*.205;
+    const accelerationLean=clamp(acceleration,-10,10)*.0065;
+    lean=damp(lean,lerp(.065,.225,running)*moving+accelerationLean+ pushing*.19,9,delta);
+    torso.position.set(Math.sin(angle)*.013*bodyMotion,hipHeight,0);
+    torso.rotation.x=lerp(lean+.17*squat+landing*.7,flight[2]+.025*takeoffRun,air);
+    torso.rotation.y=Math.cos(angle)*lerp(.045,.07,running)*moving*(1-pushing);
+    torso.rotation.z=Math.sin(angle)*.019*bodyMotion+air*Math.sin(flightProgress*TAU)*.012;
+    torso.scale.set(1,1+.003*breathe*(1-moving),1+.008*breathe*(1-moving));
+    // The upper body responds after the pelvis: less head bounce, no rigid bag.
+    headLean=damp(headLean,-torso.rotation.x*.76+landing*.18,7.5,delta);
+    head.rotation.set(.025+headLean+(1-stand)*.12,Math.sin(time*.42)*.018*(1-moving),-torso.rotation.z*.6);
+    head.position.y=.679-(hipHeight-.64)*.42-.003*Math.cos(angle*2)*moving;
+    const bagTarget=-lean*.32+Math.sin(angle*2-.7)*.055*moving+landing*1.1+air*Math.sin(flightProgress*TAU-.4)*.035;
+    const bagFrequency=10,bagDecay=Math.exp(-bagFrequency*delta),bagError=bagLean-bagTarget,bagTransient=bagVelocity+bagFrequency*bagError;
+    bagLean=bagTarget+(bagError+bagTransient*delta)*bagDecay;bagVelocity=(bagVelocity-bagFrequency*bagTransient*delta)*bagDecay;
+    bag.rotation.set(bagLean,Math.sin(angle-.6)*.025*moving,Math.sin(angle-.5)*.026*moving);
+    bag.position.y=.263+Math.sin(angle*2-.8)*.009*moving+landing*.42;
+
+    group.updateWorldMatrix(true,false);
+    let footstep=false,contactIntensity=0;
+    const stances=stanceScratch,weights=weightScratch,forward=forwardScratch;
+    for(let i=0;i<legs.length;i++) {
+      const leg=legs[i],f=footState[i],p=cycle(phase+i*.5);
+      const isStance=p<duty;
+      const span=stride*duty,front=.025+span*.5,rear=.025-span*.5;
+      let z,y=0,roll=0,weight=0;
+      if(isStance) {
+        z=front-p*stride;
+        weight=smooth(p,0,.07)*(1-smooth(p,duty-.085,duty));
+        // Flat support through most of stance; heel acceptance and toe-off only
+        // occupy the ends, with enough lift to keep the full shoe above concrete.
+        roll=-.19*(1-smooth(p,0,.095))+.43*smooth(p,duty-.10,duty);
+        y=.12*Math.abs(Math.sin(roll));
+        if(!f.hasAnchor||!f.wasStance||stand<.98) {
+          temporary.set(leg.side*.108,0,z);group.localToWorld(temporary);f.anchor.copy(temporary);f.hasAnchor=true;
+          if(f.wasStance===false&&moving>.6&&grounded&&stand>.99&&air<.35){footstep=true;contactIntensity=Math.max(contactIntensity,lerp(.45,1,running));}
+        }
+        temporary.copy(f.anchor);group.worldToLocal(temporary);
+        z=temporary.z;
+      }else{
+        f.hasAnchor=false;
+        const u=(p-duty)/(1-duty),u2=u*u,u3=u2*u;
+        const tangent=-stride*(1-duty);
+        z=(2*u3-3*u2+1)*rear+(u3-2*u2+u)*tangent+(-2*u3+3*u2)*front+(u3-u2)*tangent;
+        const lift=Math.sin(Math.PI*u)**2;
+        y=lerp(.14,.34,running)*lift*(1+.35*Math.cos(Math.PI*u));
+        roll=lerp(.43,-.19,smooth(u))+.12*Math.sin(Math.PI*u);
+      }
+      f.wasStance=isStance;
+      // Feet settle to a relaxed parallel stance when the actual root stops.
+      z=lerp(.025,z,moving);y*=moving;roll*=moving;
+      const role=i===launchLead?0:1;
+      let airFront=flight[3+role*3]*lerp(.88,1.14,takeoffRun);
+      let airHeight=flight[4+role*3]*lerp(.94,1.06,takeoffRun);
+      airFront=lerp(airFront,role===0?.15+.07*takeoffRun:-.10,landingReach*.70);airHeight*=1-landingReach*.55;
+      if(!grounded||!isStance)f.landingPlant=false;
+      // Acquire the rendered shoe's last world contact, not a distant ideal
+      // stride target. This avoids a visible catch-up slide after touchdown.
+      if(grounded&&isStance&&landingAge<.65&&!f.landingPlant&&f.target.y<.025){
+        const actual=animation.feet[i].position;f.anchor.set(actual.x,group.position.y,actual.z);
+        temporary.copy(f.anchor);group.worldToLocal(temporary);z=temporary.z;f.hasAnchor=true;f.landingPlant=true;
+      }
+      const contactBlend=grounded&&f.landingPlant?0:air;
+      z=lerp(z,airFront,contactBlend);y=lerp(y,airHeight,contactBlend);
+      roll=lerp(roll,lerp(flight[5+role*3],role===0?-.16:-.08,landingReach),contactBlend);
+      if(stand<.99){z=lerp(.025,z,stand);y*=stand;roll*=stand;}
+      const target=legTargets[i].set(leg.side*.108,y,z);
+      // Smooth state transitions, not the planted ground constraint. Once fully
+      // supporting the body the IK uses the anchor directly, with zero lag.
+      const landingContact=grounded&&f.landingPlant;
+      const planted=isStance&&grounded&&moving>.985&&(air<.015||landingContact)&&stand>.999;
+      if(planted)f.target.copy(target);else f.target.lerp(target,1-Math.exp(-25*delta));
+      f.roll=damp(f.roll,roll,22,delta);
+      solveLeg(leg,f.target,f.roll,hipHeight);
+      stances[i]=grounded&&(moving<.05||isStance);
+      weights[i]=grounded?lerp(1,weight,moving)*(landingContact?1:1-air)*stand:0;
+      forward[i]=clamp((z-.025)/Math.max(.2,span*.5),-1,1);
+    }
+    for(let i=0;i<arms.length;i++) {
+      const arm=arms[i];
+      const swing=forward[i]*lerp(.44,.84,running)*moving;
+      const shoulderTarget=lerp(swing,-1.04,pushing)+.72*squat;
+      const elbowTarget=lerp(lerp(-.23,-1.14,running)-Math.max(0,-forward[i])*.12*moving,-.31,pushing);
+      const armRole=i===launchLead?0:1;
+      const jumpArm=flight[9+armRole*2]-.09*takeoffRun;
+      arm.shoulder.position.x=damp(arm.shoulder.position.x,arm.side*.227,14,delta);
+      arm.shoulder.rotation.x=damp(arm.shoulder.rotation.x,lerp(shoulderTarget,jumpArm,air),15,delta);
+      arm.shoulder.rotation.z=damp(arm.shoulder.rotation.z,-arm.side*(lerp(.055,.023,running)+air*flight[13]),12,delta);
+      arm.elbow.rotation.x=damp(arm.elbow.rotation.x,lerp(elbowTarget,flight[10+armRole*2]-.12*takeoffRun,air),12,delta);
+      arm.wrist.rotation.x=damp(arm.wrist.rotation.x,air*(-.10+.12*tuck),12,delta);
+    }
+    animation.mode=wakeProgress<1?'wake':!grounded?'air':pushing>.5?'push':moving<.05?'idle':running>.5?'run':'walk';
+    animation.wakeStage='awake';
+    animation.jumpStage=grounded?(jumpPrep>0?'anticipation':landing>.008?'landing':'grounded'):(launchProgress<1?'takeoff':vy>1.2?'rising':vy>-.9?'apex':'descent');
+    let handWeights=wakeProgress<1?applyWake(wakeProgress,time):noHands;
+    animation.climbStage='none';
+    if(climb){const contacts=applyClimb(climb);handWeights=contacts.hands;stances[0]=contacts.stances[0];stances[1]=contacts.stances[1];weights[0]=contacts.weights[0];weights[1]=contacts.weights[1];footstep=false;}
+    if(wakeProgress<1){stances.fill(false);weights.fill(0);}
+    animation.launchLead=launchLead;animation.launchSpeed=takeoffSpeed;animation.landingReach=landingReach;
+    updateDiagnostics(stances,weights,handWeights);
+    stepResult.footstep=footstep;stepResult.intensity=contactIntensity;return stepResult;
+  }
+  reset();
+  return {group,animate,reset};
+}

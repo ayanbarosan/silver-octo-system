@@ -1,0 +1,17 @@
+{
+  "name": "the-last-floor",
+  "version": "0.7.0",
+  "private": true,
+  "scripts": {
+    "dev": "npm run build && node server.js",
+    "start": "node server.js",
+    "build": "node scripts/build.mjs",
+    "test": "node --check src/main.js && node --check src/world.js && node --check server.js && node tests/animation.test.mjs && node tests/climb-water.test.mjs && node tests/movement-opening.test.mjs"
+  },
+  "dependencies": {
+    "three": "0.180.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.12"
+  }
+}
