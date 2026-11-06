@@ -32,3 +32,14 @@ export function groundStepY(x,y,surfaces,maxStep=.16){
  }
  return support;
 }
+
+// Side contact blocks travel into a low solid. Moving away remains possible
+// while the trailing shoe clears a ledge during a drop.
+export function crateSideContact(player,nextX,crate,radius=.21){
+ if(player.y>=crate.y-.02)return null;
+ if(nextX+radius<=crate.x||nextX-radius>=crate.x+crate.w)return null;
+ const side=player.x<=crate.x+crate.w/2?-1:1;
+ if((nextX-player.x)*side>=0)return null;
+ const boundary=side<0?crate.x-radius:crate.x+crate.w+radius;
+ return {side,x:side<0?Math.min(nextX,Math.max(player.x,boundary)):Math.max(nextX,Math.min(player.x,boundary))};
+}

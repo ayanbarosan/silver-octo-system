@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {LEVEL} from '../src/level.js';
 import {createLadder,canMountLadder} from '../src/ladder.js';
-import {groundStepY} from '../src/movement.js';
+import {MOVEMENT,groundStepY} from '../src/movement.js';
 
 const config=LEVEL.ladder;
 const player=(x=config.x-.2,y=config.bottomY)=>({x,y,vx:0,vy:0,grounded:true,face:1});
@@ -149,4 +149,22 @@ test('reset releases an interrupted ladder and starts a fresh complete traversal
   Object.assign(p,player());assert(ladder.begin(p));
   assert.equal(ladder.state.phase,'mount');assert.equal(ladder.state.progress,0);assert.equal(ladder.state.velocity,0);
   const events=finish(ladder,p,{up:true});assert.equal(events.filter(e=>e==='complete-top').length,1);
+});
+
+test('the upper mantle approaches the roof progressively without a late sideways rush',()=>{
+  const {ladder,p}=mounted();
+  for(let frame=0;frame<1800&&ladder.state?.phase!=='top-out';frame++)ladder.update(1/120,{up:true},p);
+  assert.equal(ladder.state?.phase,'top-out');
+  const startX=p.x;
+  let previous=p.x,peakLateralSpeed=0,halfwayX,elapsed=0;
+  for(let frame=0;frame<400&&ladder.active;frame++) {
+    ladder.update(1/120,{up:true},p);elapsed+=1/120;
+    peakLateralSpeed=Math.max(peakLateralSpeed,Math.abs(p.x-previous)*120);previous=p.x;
+    if(halfwayX===undefined&&ladder.state?.progress>=.5)halfwayX=p.x;
+    if(p.x>config.wallX+.02)assert(p.y>=config.topY-.02,'A smoother approach still has to lift the feet clear of the wall before crossing.');
+  }
+  assert.equal(ladder.active,false);assert(halfwayX!==undefined);
+  assert(halfwayX-startX>.06,'The child should approach the roof during the pull, instead of waiting until the final moment to slide sideways.');
+  assert(peakLateralSpeed<MOVEMENT.walk*1.15,`The mantle rushes sideways at ${peakLateralSpeed.toFixed(2)}m/s, faster than a deliberate normal step.`);
+  assert(elapsed>1.45&&elapsed<2.2,'The pull and step should remain a readable continuous action.');
 });

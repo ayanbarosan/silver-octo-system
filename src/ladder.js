@@ -3,8 +3,28 @@ import {LEVEL} from './level.js';
 const clamp=(value,min,max)=>Math.max(min,Math.min(max,value));
 const smooth=(value,min=0,max=1)=>{const p=clamp((value-min)/(max-min),0,1);return p*p*(3-2*p)};
 const mix=(a,b,p)=>a+(b-a)*p;
-const MOUNT_TIME=.68,EXIT_TIME=1.35,BOTTOM_TIME=.55;
+const MOUNT_TIME=.68,EXIT_TIME=1.70,BOTTOM_TIME=.55;
 const CLIMB_SPEED=.78,RESPONSE=9;
+
+// Monotone Hermite channels carry velocity through each weight transfer. Only
+// the beginning/end and the small vertical settling crest come to rest.
+function curve(keys,startSlope=0) {
+  const tangents=keys.map(()=>0);tangents[0]=startSlope;
+  for(let i=1;i<keys.length-1;i++) {
+    const h0=keys[i][0]-keys[i-1][0],h1=keys[i+1][0]-keys[i][0];
+    const d0=(keys[i][1]-keys[i-1][1])/h0,d1=(keys[i+1][1]-keys[i][1])/h1;
+    if(d0*d1>0){const w0=2*h1+h0,w1=h1+2*h0;tangents[i]=(w0+w1)/(w0/d0+w1/d1);}
+  }
+  return p=>{
+    p=clamp(p,0,1);let i=keys.length-2;
+    for(let n=1;n<keys.length;n++)if(p<=keys[n][0]){i=n-1;break;}
+    const a=keys[i],b=keys[i+1],h=b[0]-a[0],u=(p-a[0])/h,u2=u*u,u3=u2*u;
+    return (2*u3-3*u2+1)*a[1]+(u3-2*u2+u)*h*tangents[i]+(-2*u3+3*u2)*b[1]+(u3-u2)*h*tangents[i+1];
+  };
+}
+const exitForward=curve([[0,0],[.2,.02/1.07],[.4,.10/1.07],[.55,.17/1.07],[.7,.44/1.07],[.85,.80/1.07],[1,1]]);
+const exitHeight=curve([[0,-.60],[.2,-.45],[.4,-.22],[.55,-.04],[.7,.02],[.85,.01],[1,0]],CLIMB_SPEED*EXIT_TIME);
+
 
 export function canMountLadder(player,config=LEVEL.ladder,entry='bottom') {
   if(!player.grounded)return false;
@@ -28,8 +48,8 @@ export function createLadder(config=LEVEL.ladder) {
     velocity=0;sync(player);return true;
   }
   function topPath(player,p,exitX=config.exitX) {
-    player.x=mix(config.x,exitX,smooth(p,.62,.98));
-    player.y=mix(high,config.topY+.035,smooth(p,0,.58))-.035*smooth(p,.58,1);
+    player.x=mix(config.x,exitX,exitForward(p));
+    player.y=config.topY+exitHeight(p);
   }
   function update(dt,input,player) {
     if(!state)return;

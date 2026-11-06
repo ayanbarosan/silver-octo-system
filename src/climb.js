@@ -3,6 +3,15 @@ const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
 const smooth=(x,a,b)=>{const t=clamp((x-a)/(b-a),0,1);return t*t*(3-2*t)};
 const mix=(a,b,t)=>a+(b-a)*t;
 
+// A movable crate is an explicit action, so walking into it (or returning to
+// it after a drop) cannot unexpectedly take control away from the player.
+export function shouldStartClimb(target,{jumpBuffered=0,ledgeIntent=0,direction=0,face=1,pushing=false}={}){
+ if(!target||pushing)return false;
+ if(jumpBuffered>0)return true;
+ if(target.id==='crate')return false;
+ return direction===face&&ledgeIntent>(target.id==='pipe'?.015:.13);
+}
+
 export function findClimbTarget(player,obstacles,maxReach=.58){
  if(!player.grounded)return null;
  let best=null,bestDistance=Infinity;

@@ -264,3 +264,73 @@ test('top entry initially facing left turns continuously and clears the actual r
     assert(maxStep<.09,`The left-facing top entry teleports a visible limb by ${maxStep.toFixed(3)}m in one frame.`);
   } finally {r.dispose();}
 });
+
+test('the upper mantle transfers real ladder support into a planted roof foot before releasing the hands',()=>{
+  const r=rig();
+  try {
+    r.settle();r.begin();
+    const anchors=Array(4).fill(null);
+    let samples=0,unsupportedTime=0,longestUnsupported=0,handFootOverlap=0,maxContactDrift=0;
+    const onRung=point=>{
+      const index=Math.round((point.y-config.rungBaseY)/config.spacing),y=config.rungBaseY+index*config.spacing;
+      return index>=0&&y<config.topY&&Math.abs(point.x-config.rungX)<.04&&Math.abs(point.y-y)<.04;
+    };
+    const onLedge=point=>Math.abs(point.x-config.wallX)<.045&&Math.abs(point.y-config.topY)<.035;
+    const onRoof=point=>point.x>=config.wallX+.02&&Math.abs(point.y-config.topY)<.02;
+    // Independent physical surfaces from world.js: two straight steel rails
+    // and their curved extensions, rather than authored animation targets.
+    const grabPoints=[-config.width/2,config.width/2].flatMap(z=>new THREE.CatmullRomCurve3([
+      [0,.45],[0,.66],[.06,.80],[.19,.85],[.38,.80],[.50,.65]
+    ].map(([x,y])=>new THREE.Vector3(config.rungX+x,config.topY+y,z))).getPoints(90));
+    const onHandrail=point=>{
+      const railZ=Math.abs(Math.abs(point.z)-config.width/2);
+      const onStraight=point.y>=config.bottomY&&point.y<=config.topY+.55&&Math.hypot(point.x-config.rungX,railZ)<.06;
+      return onStraight||grabPoints.some(center=>separation(point,center)<.06);
+    };
+    for(let frame=0;frame<1800&&r.ladder.active;frame++) {
+      const sample=r.step({up:true});if(sample.phase!=='top-out')continue;samples++;
+      let supportingHand=false,supportingFoot=false;
+      const contacts=[...sample.state.hands,...sample.state.feet];
+      contacts.forEach((contact,index)=>{
+        const point=sample.points[index],hand=index<2;
+        if(contact.contactWeight>.6) {
+          assert(hand?onRung(point)||onLedge(point)||onHandrail(point):onRung(point)||onRoof(point),`Loaded ${markerNames[index]} misses real support at progress ${r.ladder.state.progress.toFixed(3)}: (${point.x.toFixed(3)},${point.y.toFixed(3)},${point.z.toFixed(3)}).`);
+          if(hand)supportingHand=true;else supportingFoot=true;
+        }
+        if(contact.contactWeight>.98) {
+          if(!anchors[index])anchors[index]=point.clone();
+          maxContactDrift=Math.max(maxContactDrift,separation(point,anchors[index]));
+        } else anchors[index]=null;
+      });
+      const roofFoot=sample.points.slice(2,4).some(onRoof);
+      if(supportingHand&&roofFoot)handFootOverlap++;
+      // At the final idle blend the actual flat sole already rests on the
+      // roof, even while the authored contact weight fades out.
+      const supported=supportingHand||supportingFoot||(r.ladder.state.progress>.9&&roofFoot);
+      if(supported)unsupportedTime=0;
+      else{unsupportedTime+=dt;longestUnsupported=Math.max(longestUnsupported,unsupportedTime);}
+    }
+    assert(samples>150,'The fixture must cover a full deliberate upper mantle.');
+    assert(handFootOverlap>=6,'A hand must keep real support until a foot has visibly reached the roof.');
+    assert(longestUnsupported<.12,`The child floats without a supporting grip or planted foot for ${longestUnsupported.toFixed(3)}s.`);
+    assert(maxContactDrift<.03,`An allegedly planted mantle contact slides ${maxContactDrift.toFixed(3)}m across its support.`);
+  } finally {r.dispose();}
+});
+
+test('the free upper hand returns from the rail without a last-moment sweep at normal frame rate',()=>{
+  const r=rig();
+  try {
+    r.settle();r.begin();let previous=null,samples=0,maxTravel=0;
+    for(let frame=0;frame<1800&&r.ladder.active;frame++) {
+      const sample=r.step({up:true});
+      if(frame%2)continue; // Observe the rendered hand at 60 Hz.
+      if(sample.phase==='top-out'&&r.ladder.state.progress>.82) {
+        const palm=sample.points[0];
+        if(previous){maxTravel=Math.max(maxTravel,separation(previous,palm));samples++;}
+        previous=palm.clone();
+      } else previous=null;
+    }
+    assert(samples>=12,'The check must include the complete release and balance beat.');
+    assert(maxTravel<.09,`The released palm jumps ${maxTravel.toFixed(3)}m within one 60Hz frame instead of settling into the walking pose.`);
+  } finally {r.dispose();}
+});

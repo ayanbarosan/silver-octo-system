@@ -7,8 +7,8 @@ import {UnrealBloomPass} from 'three/addons/postprocessing/UnrealBloomPass.js';
 import {createBoy} from './character.js';
 import {createWorld} from './world.js';
 import {createWaterEffects} from './water.js';
-import {findClimbTarget,createClimb,sampleClimb} from './climb.js';
-import {MOVEMENT,movementVelocity,preparationX,landingDistance,groundStepY} from './movement.js';
+import {findClimbTarget,createClimb,sampleClimb,shouldStartClimb} from './climb.js';
+import {MOVEMENT,movementVelocity,preparationX,landingDistance,groundStepY,crateSideContact} from './movement.js';
 import {createOpening} from './opening.js';
 import {LEVEL} from './level.js';
 import {createBridge} from './bridge.js';
@@ -25,6 +25,7 @@ let jumpBuffer=0,coyoteTime=0,acceleration=0,landImpact=0,cameraY=0,cameraLead=1
 const jumpMotion={preparing:false,elapsed:0,duration:.12,airTime:0,launched:false,launchSpeed:0};
 function resetJumpMotion(){Object.assign(jumpMotion,{preparing:false,elapsed:0,duration:.12,airTime:0,launched:false,launchSpeed:0});}
 const previousSim={x:0,y:0,vx:0};
+const previousWobble={},drawWobble={},drawClimb={},drawLadder={},drawSlip={};
 let lastDrawX=0,mantle=null,ledgeIntent=0,climbsCompleted=0;
 const player={x:0,y:0,vx:0,vy:0,grounded:true,face:1};
 const opening=createOpening(),openingVisual={active:false,elapsed:0,wake:0,escaped:false};
@@ -199,7 +200,7 @@ function physics(dt){
  coyoteTime=player.grounded?MOVEMENT.coyote:Math.max(0,coyoteTime-dt);jumpBuffer=Math.max(0,jumpBuffer-dt);
  const ledge=findClimbTarget(player,obstacles());
  if(ledge&&!keys.has('e')&&direction===player.face)ledgeIntent+=dt;else ledgeIntent=0;
- if(ledge&&!keys.has('e')&&(jumpBuffer>0||ledgeIntent>(ledge.id==='pipe'?.015:.13))){
+ if(shouldStartClimb(ledge,{jumpBuffered:jumpBuffer,ledgeIntent,direction,face:player.face,pushing:keys.has('e')})){
   if(beginClimb(ledge))return;
  }
  if(jumpBuffer>0&&coyoteTime>0&&!jumpMotion.preparing){
@@ -219,12 +220,14 @@ function physics(dt){
  // off the roof while the knees load. Airborne trajectory remains unchanged.
  let previousY=player.y;let nextX=jumpMotion.preparing?preparationX({x:player.x,y:player.y,vx:player.vx,running,dt,grounded:player.grounded,surfaces:colliders()}):player.x+player.vx*dt;push=false;
  const crate=world.crate.position;
- if(player.y<.84&&Math.abs(nextX-crate.x)<.77){
+ crateCollider.x=crate.x-.55;
+ const crateContact=crateSideContact(player,nextX,crateCollider);
+ if(crateContact){
   if(keys.has('e')&&direction&&player.grounded&&!jumpMotion.preparing){
    const desired=THREE.MathUtils.clamp(crate.x+direction*.9*dt,10.5,16.0);
    const delta=desired-crate.x;crate.x=desired;nextX=player.x+delta;player.vx=delta/dt;push=Math.abs(delta)>.0001;
    say('Move the crate to the pipe. Climb up, then keep going.',.15);
-  }else{nextX=player.x;player.vx=0;say('Hold E + A / D to push the crate. Release E to climb.',.15);}
+  }else{nextX=crateContact.x;player.vx=0;say('SPACE / W / UP — Climb. Hold E + A / D to push.',.15);}
  }
  for(const c of obstacleList){
   if(c.id==='crate')continue;
@@ -254,7 +257,7 @@ function physics(dt){
  if(player.y<-5){state='fall';fade=0;clearInput();message.textContent='';}
  player.x=Math.min(player.x,LEVEL.roofs.final.x+LEVEL.roofs.final.w-.5);
 
- setObjective(player.x<5?'Leave your shelter. Follow the roof to the right.':player.x<10?'Hold toward the vent to climb. SPACE also grabs the ledge.':player.x<18?'Push the crate all the way to the pipe. Climb the crate, then the pipe.':player.x<LEVEL.roofs.middle.x+.5?'Hold SHIFT + D to run. Jump close to the edge.':player.x<LEVEL.bridge.safeX?'Cross the wooden plank to the next roof.':player.y<LEVEL.roofs.final.y-.2?'Climb the ladder to reach the upper roof.':'Reach the lit doorway.');
+ setObjective(player.x<5?'Leave your shelter. Follow the roof to the right.':player.x<10?'Hold toward the vent to climb. SPACE also grabs the ledge.':player.x<18?'Push the crate to the pipe. Press SPACE / W / UP to climb it.':player.x<LEVEL.roofs.middle.x+.5?'Hold SHIFT + D to run. Jump close to the edge.':player.x<LEVEL.bridge.safeX?'Cross the wooden plank to the next roof.':player.y<LEVEL.roofs.final.y-.2?'Climb the ladder to reach the upper roof.':'Reach the lit doorway.');
  if(player.grounded&&Math.abs(player.y-LEVEL.roofs.final.y)<.09&&player.x>LEVEL.doorX-1.2&&player.x<LEVEL.doorX+2){say('E — Open the door.',.2);if(keys.has('e')){state='end';ending.hidden=false;objective.hidden=true;message.textContent='';clearInput();}}
 }
 let audio=null,muted=true,master,stepNoise;
@@ -329,7 +332,11 @@ function frame(now){
  if(state!=='pause'){
   time+=dt;accumulator+=dt;
   while(accumulator>=1/90){
-   Object.assign(previousSim,{x:player.x,y:player.y,vx:player.vx});
+   Object.assign(previousSim,{x:player.x,y:player.y,vx:player.vx,
+    climbId:mantle?.targetId,climbProgress:mantle?.progress,
+    ladderPhase:ladder.state?.phase,ladderProgress:ladder.state?.progress,
+    slipPhase:slip.state?.phase,slipProgress:slip.state?.progress,slipElapsed:slip.state?.elapsed,slipImpact:slip.state?.impact});
+   if(slip.active)Object.assign(previousWobble,slip.state.wobble);
    physics(1/90);simTime+=1/90;accumulator-=1/90;
   }
  }
@@ -348,19 +355,35 @@ function frame(now){
  const renderedX=THREE.MathUtils.lerp(previousSim.x,player.x,alpha);
  const renderedY=THREE.MathUtils.lerp(previousSim.y,player.y,alpha);
  const renderedSpeed=THREE.MathUtils.lerp(previousSim.vx,player.vx,alpha);
+ // Actions use the same render time as their root. Otherwise a 90 Hz action
+ // advances by alternating one/two steps on a 60 Hz screen, speeding up and
+ // slowing down a hand even though the underlying path is continuous.
+ const renderedClimb=mantle?Object.assign(drawClimb,mantle):null;
+ if(renderedClimb&&previousSim.climbId===mantle.targetId)renderedClimb.progress=THREE.MathUtils.lerp(previousSim.climbProgress,mantle.progress,alpha);
+ const renderedLadder=ladder.active?Object.assign(drawLadder,ladder.state):null;
+ if(renderedLadder&&previousSim.ladderPhase===renderedLadder.phase)renderedLadder.progress=THREE.MathUtils.lerp(previousSim.ladderProgress,renderedLadder.progress,alpha);
+ const renderedSlip=slip.active?Object.assign(drawSlip,slip.state):null;
+ if(renderedSlip&&previousSim.slipPhase===renderedSlip.phase){
+  renderedSlip.progress=THREE.MathUtils.lerp(previousSim.slipProgress,renderedSlip.progress,alpha);
+  renderedSlip.phaseTime=renderedSlip.progress*renderedSlip.duration;
+  renderedSlip.elapsed=THREE.MathUtils.lerp(previousSim.slipElapsed,renderedSlip.elapsed,alpha);
+  renderedSlip.impact=THREE.MathUtils.lerp(previousSim.slipImpact,renderedSlip.impact,alpha);
+  for(const key of Object.keys(renderedSlip.wobble))drawWobble[key]=THREE.MathUtils.lerp(previousWobble[key],renderedSlip.wobble[key],alpha);
+  renderedSlip.wobble=drawWobble;
+ }
  if(state!=='pause'){
   const travel=Math.min(.7,Math.abs(renderedX-lastDrawX));lastDrawX=renderedX;
   boy.group.position.set(renderedX,renderedY,0);
   const attached=!!mantle||ladder.active||slip.active;
   if(slip.active){
-   const motion=slip.state;boy.group.rotation.y=THREE.MathUtils.lerp(motion.turnStart??motion.face*Math.PI/2,motion.face*Math.PI/2,THREE.MathUtils.smoothstep(motion.elapsed,0,.18));
+   const motion=renderedSlip;boy.group.rotation.y=THREE.MathUtils.lerp(motion.turnStart??motion.face*Math.PI/2,motion.face*Math.PI/2,THREE.MathUtils.smoothstep(motion.elapsed,0,.18));
   }else if(ladder.active){
-   const motion=ladder.state,turn=motion.phase==='mount'||motion.phase==='top-in'?THREE.MathUtils.smoothstep(motion.progress,0,.22):1;
+   const motion=renderedLadder,turn=motion.phase==='mount'||motion.phase==='top-in'?THREE.MathUtils.smoothstep(motion.progress,0,.22):1;
    boy.group.rotation.y=THREE.MathUtils.lerp(motion.turnStart??Math.PI/2,Math.PI/2,turn);
   }else boy.group.rotation.y=mantle?mantle.face*Math.PI/2:THREE.MathUtils.damp(boy.group.rotation.y,player.face*Math.PI/2,8,dt);
   const contact=boy.animate({time:simTime,speed:attached?0:renderedSpeed,grounded:attached?true:player.grounded,wake:state==='intro'?0:wake,push,vy:player.vy,dt,travel:attached?0:travel,acceleration:acceleration*player.face,landImpact,
    jumpPrep:jumpMotion.preparing?Math.min(1,jumpMotion.elapsed/jumpMotion.duration):0,
-   airTime:attached?0:jumpMotion.airTime,launchSpeed:jumpMotion.launchSpeed,landingDistance:landingDistance(renderedX,renderedY,colliders()),takeoff:attached?0:jumpMotion.launched?Math.min(1,jumpMotion.airTime/.12):1,climb:mantle,ladder:ladder.state,slip:slip.state});
+   airTime:attached?0:jumpMotion.airTime,launchSpeed:jumpMotion.launchSpeed,landingDistance:landingDistance(renderedX,renderedY,colliders()),takeoff:attached?0:jumpMotion.launched?Math.min(1,jumpMotion.airTime/.12):1,climb:renderedClimb,ladder:renderedLadder,slip:renderedSlip});
   if(contact?.footstep||landImpact>.35)stepSound(contact?.footstep?contact.intensity:landImpact);
   if(contact?.footstep&&player.grounded&&!mantle&&!onPlank(renderedX))water.splash({x:renderedX,y:renderedY,strength:.15});
   water.update(dt);

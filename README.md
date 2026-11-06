@@ -17,7 +17,8 @@ Open the generated `dist/The-last-floor.html` file in Chrome, Edge, or Firefox. 
 - **A / D** or **Left / Right**: move.
 - **Shift + a direction**: run. Use a running jump to cross the gap between buildings.
 - **Space**, **W**, or **Up**: jump; near a reachable ledge, climb up.
-- **Hold a direction toward a reachable ledge**: automatically grab the edge and pull yourself up.
+- **Hold a direction toward a reachable vent or pipe ledge**: automatically grab the edge and pull yourself up.
+- **Space**, **W**, or **Up** beside the crate: climb onto it. Walking into the crate or waiting beside it does not start a climb.
 - **W**, **Up**, or **Space** at the wall ladder: climb up.
 - **S** or **Down** at the wall ladder: climb down, including entering the ladder from the upper roof.
 - **D / Right** or **A / Left** while on the ladder: climb up or down, respectively. Release the controls to hold still; reverse direction at any point.
@@ -26,15 +27,15 @@ Open the generated `dist/The-last-floor.html` file in Chrome, Edge, or Firefox. 
 - **Esc**: pause or resume. On a touchscreen, tap the scene to resume.
 - **R**: restart the level.
 
-Touch controls appear on touchscreen devices. **RUN** toggles running so you can jump without holding three buttons at once. Near the ladder, an extra **↓** button appears for climbing down; the **↑** button climbs up. The existing **← / →** buttons also move down or up while on the ladder. Release the buttons to hold your place. Use the **SOUND** button in the top right to turn the ambient audio on or off.
+Touch controls appear on touchscreen devices. **RUN** toggles running so you can jump without holding three buttons at once. Press **↑** beside the crate to climb onto it. Near the ladder, an extra **↓** button appears for climbing down; the **↑** button climbs up. The existing **← / →** buttons also move down or up while on the ladder. Release the buttons to hold your place. Use the **SOUND** button in the top right to turn the ambient audio on or off.
 
-After **WAKE UP**, the boy automatically braces his palms against the roof, brings a knee beneath him, and stands. Jumps preserve forward momentum, choose a leading leg from the current stride, and blend through anticipation, takeoff, airborne recovery, landing reach, and a step back into movement. A short input buffer and edge grace make repeated jumps more forgiving. Near a reachable ledge, he grabs the edge and pulls himself onto the roof.
+After **WAKE UP**, the boy automatically braces his palms against the roof, brings a knee beneath him, and stands. Jumps preserve forward momentum, choose a leading leg from the current stride, and blend through anticipation, takeoff, airborne recovery, landing reach, and a step back into movement. A short input buffer and edge grace make repeated jumps more forgiving. At reachable vent and pipe ledges, he grabs the edge and pulls himself onto the roof automatically. Climbing onto the crate requires **Space**, **W**, **Up**, or the phone’s **↑** button.
 
 ## Rooftop route
 
 1. Leave the mattress shelter and get over the vent.
 2. Cross the marked puddle before the crate. The first grounded crossing causes a slip and automatic recovery; jump clear of it to avoid the fall.
-3. Push the crate toward the tall pipe, then use it as a step to climb across.
+3. Push the crate toward the tall pipe, then stand beside it and press **Space**, **W**, or **Up** (**↑** on a phone) to climb onto it. Continue over the pipe. The crate does not trigger an automatic climb when you approach, wait beside it, or return after stepping off.
 4. Take a running jump over the first gap to the middle apartment block.
 5. Walk across the wooden plank spanning the second gap to the lower landing beside the final building. It breaks behind you only after you reach the landing safely.
 6. At the left wall, hold **W**, **Up**, or **Space** to climb the ladder. Stop to hold still, or use **S / Down** to reverse. You can also use **D / A** while climbing.
@@ -100,3 +101,11 @@ The final building rises above the plank landing. A wall ladder connects the low
 The marked puddle between the vent and the crate causes a slip on the first grounded crossing of each restart. The boy falls backward, settles briefly, supports himself to stand, brushes his jacket, and looks back before normal movement resumes. The sequence is automatic and needs no new controls. Jumping over the puddle does not trigger it, and crossing it again after the recovery does not repeat the fall until you restart.
 
 For a browser check, walk into the puddle and let the complete recovery finish, then cross it again to confirm it does not repeat. Restart and jump clear of it to check that passing overhead does not trigger the sequence.
+
+## Deliberate crate climb and ladder transfer — v0.12
+
+The crate now requires a jump/climb press: **Space**, **W**, **Up**, or **↑** on a phone. Walking into it, staying beside it, or returning after stepping off never starts a climb by itself. Stepping off the crate returns to normal falling and movement instead of leaving the boy frozen at its edge. Automatic ledge climbing remains available on the vent and pipe.
+
+At the top of the ladder, the boy gradually transfers support from the handrails to a planted leading foot, brings the trailing leg up, and stands on the roof. The body moves progressively instead of rushing sideways at the end.
+
+Slip and recovery body poses carry motion through their intermediate positions while hands and feet retain their supporting contacts. Climbing, ladder and slip poses use the same interpolated render time as the character's position, keeping their motion even between physics steps.

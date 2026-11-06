@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {MOVEMENT,movementVelocity,preparationX,landingDistance,groundStepY} from '../src/movement.js';
+import {MOVEMENT,movementVelocity,preparationX,landingDistance,groundStepY,crateSideContact} from '../src/movement.js';
 import {createOpening} from '../src/opening.js';
 
 test('jump preparation advances the stride without stepping off either roof edge',()=>{
@@ -60,4 +60,42 @@ test('the mattress is a low step while the real rooftop gap stays unsupported',(
  assert.equal(groundStepY(1.6,.12,surfaces),0,'Walking off bedding should return to the roof.');
  assert.equal(groundStepY(-.65,.12,surfaces),.12,'The guard must not become a giant automatic step.');
  assert.equal(groundStepY(23,0,surfaces),undefined,'Low-step handling must not bridge the rooftop gap.');
+});
+
+test('stepping off either crate edge keeps moving away while the trailing shoe passes below the top',()=>{
+ const crate={x:12.45,w:1.1,y:.85},dt=1/120;
+ for(const face of [-1,1]){
+  const edge=face>0?crate.x+crate.w:crate.x;
+  const player={x:edge+face*.03,y:crate.y,vx:face*MOVEMENT.walk,vy:0,grounded:false};
+  const startX=player.x;let samplesBelowTop=0,landed=false;
+  for(let frame=0;frame<120&&!landed;frame++){
+   player.vy-=MOVEMENT.gravity*dt;
+   player.y+=player.vy*dt;
+   const nextX=player.x+player.vx*dt;
+   assert.equal(crateSideContact(player,nextX,crate),null,'A departing child cannot be frozen by overlap with the crate they are leaving.');
+   if(player.y<crate.y-.02)samplesBelowTop++;
+   player.x=nextX;
+   if(player.y<=0){player.y=0;player.grounded=true;landed=true;}
+  }
+  assert(landed&&samplesBelowTop>20,'The regression must include a real drop through the height that previously caused the side freeze.');
+  assert((player.x-startX)*face>.6,'Horizontal movement must continue naturally throughout the drop.');
+ }
+});
+
+test('crate sides stop incoming travel at the surface while allowing escape from an existing overlap',()=>{
+ const crate={x:12.45,w:1.1,y:.85},radius=.21;
+ for(const side of [-1,1]){
+  const edge=side<0?crate.x:crate.x+crate.w,boundary=edge+side*radius;
+  for(const y of [0,.4,crate.y-.035]){
+   const incoming={x:boundary+side*.3,y,grounded:y===0};
+   const contact=crateSideContact(incoming,edge-side*.08,crate,radius);
+   assert(contact&&contact.side===side);assert(Math.abs(contact.x-boundary)<1e-9,'Incoming travel must stop at the actual crate side, including the child radius.');
+   const overlapping={x:edge+side*.06,y,grounded:false};
+   assert.equal(crateSideContact(overlapping,overlapping.x+side*.03,crate,radius),null,'A slight existing overlap must allow motion away instead of snapping the character back into the crate.');
+   const blocked=crateSideContact(overlapping,overlapping.x-side*.03,crate,radius);
+   assert(blocked);assert.equal(blocked.x,overlapping.x,'Contact from an overlap may stop incoming movement but cannot reverse it to a remote boundary.');
+  }
+  const onTop={x:edge-side*.12,y:crate.y,grounded:true};
+  assert.equal(crateSideContact(onTop,onTop.x+side*.05,crate,radius),null,'Walking on the crate top must not collide with its own side.');
+ }
 });

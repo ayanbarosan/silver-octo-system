@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
-import {findClimbTarget,createClimb,sampleClimb} from '../src/climb.js';
+import {findClimbTarget,createClimb,sampleClimb,shouldStartClimb} from '../src/climb.js';
 import {createWaterEffects} from '../src/water.js';
 import {MOVEMENT} from '../src/movement.js';
 
@@ -58,4 +58,43 @@ test('the starting guard cannot be climbed or cleared from the mattress',()=>{
  const guard={id:'rest-wall',x:-1.04,w:.18,y:1.32};
  assert.equal(findClimbTarget({x:-.65,y:.12,face:-1,grounded:true},[guard]),null);
  assert(.12+MOVEMENT.jumpVelocity**2/(2*MOVEMENT.gravity)<guard.y,'The guard must remain higher than the maximum normal jump feet height.');
+});
+
+test('the crate requires a fresh buffered climb press from either face even after prolonged walking intent',()=>{
+ const crate={id:'crate',x:12.45,w:1.1,y:.85};
+ for(const face of [-1,1]){
+  const edge=face>0?crate.x:crate.x+crate.w;
+  const target=findClimbTarget({x:edge-face*.35,y:0,face,grounded:true},[crate]);
+  assert.equal(target,crate,'The manual-input test must exercise a genuinely reachable crate face.');
+  for(const ledgeIntent of [0,.2,2,20])assert.equal(shouldStartClimb(target,{jumpBuffered:0,ledgeIntent,direction:face,face}),false,'Walking into a reachable crate must not take control of the character.');
+  for(const jumpBuffered of [.001,.08,.16])assert.equal(shouldStartClimb(target,{jumpBuffered,ledgeIntent:0,direction:face,face}),true,'A buffered SPACE/W/UP action must still grab the reachable crate.');
+  assert.equal(shouldStartClimb(target,{jumpBuffered:.1,ledgeIntent:1,direction:face,face,pushing:true}),false,'Pushing the movable crate must retain priority over climbing.');
+ }
+});
+
+test('returning to a crate after stepping down cannot turn held movement into another automatic climb',()=>{
+ const crate={id:'crate',x:12.45,w:1.1,y:.85};
+ for(const face of [-1,1]){
+  const edge=face>0?crate.x:crate.x+crate.w;
+  const player={x:edge-face*.3,y:0,face,grounded:true};
+  let starts=0;
+  // The old automatic ledge timer can already be large after stepping off and
+  // landing. It must never substitute for a new explicit crate action.
+  for(let frame=0;frame<240;frame++){
+   const target=findClimbTarget(player,[crate]);assert.equal(target,crate);
+   if(shouldStartClimb(target,{jumpBuffered:0,ledgeIntent:1+frame/120,direction:face,face}))starts++;
+  }
+  assert.equal(starts,0);
+  assert(shouldStartClimb(crate,{jumpBuffered:.1,ledgeIntent:3,direction:face,face}),'A new deliberate press after landing must re-enable climbing.');
+ }
+});
+
+test('manual crate input preserves the existing automatic vent and pipe ledges',()=>{
+ for(const face of [-1,1])for(const id of ['vent','pipe']){
+  const target={id,x:3,w:1.6,y:.85};
+  assert(shouldStartClimb(target,{jumpBuffered:0,ledgeIntent:.4,direction:face,face}),'Existing automatic ledges must still accept sustained movement toward the obstacle.');
+  assert.equal(shouldStartClimb(target,{jumpBuffered:0,ledgeIntent:0,direction:-face,face}),false,'Unrelated input cannot start an automatic ledge climb.');
+  assert(shouldStartClimb(target,{jumpBuffered:.1,ledgeIntent:0,direction:0,face}),'An explicit climb press must still work on ordinary ledges.');
+ }
+ assert.equal(shouldStartClimb(null,{jumpBuffered:.1,ledgeIntent:1,direction:1,face:1}),false);
 });

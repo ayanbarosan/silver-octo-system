@@ -398,6 +398,26 @@ export function createBoy(THREE) {
     }
   }
 
+  const ladderPosture=[
+    [0,.3914,.08335,-.025], [.18,.40,.50,-.015], [.36,.42,.55,-.015],
+    [.50,.45,.48,0], [.62,.49,.34,.015], [.74,.54,.22,.015],
+    [.88,.61,.08,.005], [1,.64,0,0]
+  ];
+  const ladderPostureSlopes=ladderPosture.map(()=>new Float64Array(4));
+  const ladderPostureSample=new Float64Array(4);
+  for(let k=1;k<ladderPosture.length-1;k++)for(let c=1;c<4;c++) {
+    const h0=ladderPosture[k][0]-ladderPosture[k-1][0],h1=ladderPosture[k+1][0]-ladderPosture[k][0];
+    const d0=(ladderPosture[k][c]-ladderPosture[k-1][c])/h0,d1=(ladderPosture[k+1][c]-ladderPosture[k][c])/h1;
+    if(d0*d1>0){const w0=2*h1+h0,w1=h1+2*h0;ladderPostureSlopes[k][c]=(w0+w1)/(w0/d0+w1/d1);}
+  }
+  function sampleLadderPosture(p) {
+    let k=ladderPosture.length-2;
+    for(let n=1;n<ladderPosture.length;n++)if(p<=ladderPosture[n][0]){k=n-1;break;}
+    const a=ladderPosture[k],b=ladderPosture[k+1],h=b[0]-a[0],u=(p-a[0])/h,u2=u*u,u3=u2*u;
+    for(let c=1;c<4;c++)ladderPostureSample[c]=(2*u3-3*u2+1)*a[c]+(u3-2*u2+u)*h*ladderPostureSlopes[k][c]+(-2*u3+3*u2)*b[c]+(u3-u2)*h*ladderPostureSlopes[k+1][c];
+    return ladderPostureSample;
+  }
+
   function applyLadder(ladder) {
     capturePose();
     pose.position.set(0,0,0);pose.rotation.set(0,0,0);
@@ -411,43 +431,41 @@ export function createBoy(THREE) {
     sampleLadderRungs(ladder,rootY);
     const coordinate=(rootY-ladder.rungBaseY)/(ladder.spacing*2);
     let tilt=.105+.025*Math.sin(coordinate*TAU);
-    const hipZ=-.025;
+    let hipZ=-.025;
     let hipHeight=Math.min(.61,Math.min(ladderHands[0].y,ladderHands[1].y)-rootY+.28-.405*Math.cos(tilt));
     hipHeight=Math.max(.32,hipHeight);
     let authoredWeight=1;
     if(top) {
-      const initialHip=hipHeight,initialTilt=tilt;
-      tilt=lerp(initialTilt,1.07,smooth(p,0,.46))*(1-smooth(p,.66,.98));
-      hipHeight=lerp(initialHip,.18,smooth(p,0,.46));
-      hipHeight=lerp(hipHeight,.64,smooth(p,.67,.98));
+      const posture=sampleLadderPosture(p);hipHeight=posture[1];tilt=posture[2];hipZ=posture[3];
       const exitX=phaseName==='top-in'&&Number.isFinite(ladder.startX)?ladder.startX:ladder.exitX;
       const wallX=Number.isFinite(ladder.wallX)?ladder.wallX:ladder.rungX+face*.18;
       for(let i=0;i<2;i++) {
-        const target=ladderFeet[i],initialX=target.x,initialY=target.y;
-        const lead=i===0;
-        const lift=smooth(p,lead?.04:.42,lead?.33:.74);
-        target.y=lerp(initialY,ladder.topY+(lead?.095:.12),lift);
-        const cross=smooth(p,lead?.36:.75,lead?.59:.91);
-        target.x=lerp(initialX,lead?wallX+face*.16:exitX-face*.025,cross);
-        if(lead)target.x=lerp(target.x,exitX+face*.025,smooth(p,.80,1));
-        target.y=lerp(target.y,ladder.topY,smooth(p,lead?.57:.88,lead?.67:1));
-        ladderRolls[i]=lead?-.18*Math.sin(Math.PI*smooth(p,.04,.67)):.35*Math.sin(Math.PI*smooth(p,.42,.97));
-        const planted=lead?smooth(p,.66,.69)*(1-smooth(p,.79,.84)):smooth(p,.97,1);
+        const target=ladderFeet[i],initialX=target.x,initialY=target.y,lead=i===0;
+        const lift=smooth(p,lead?.02:.25,lead?.28:.60);
+        target.y=lerp(initialY,ladder.topY+(lead?.12:.13),lift);
+        target.x=lerp(initialX,lead?wallX+face*.13:exitX+face*.025,smooth(p,lead?.24:.57,lead?.44:.86));
+        target.y=lerp(target.y,ladder.topY,smooth(p,lead?.39:.76,lead?.49:.91));
+        const step=lead?smooth(p,.79,1):0;
+        if(lead){target.x=lerp(target.x,exitX+face*.025,step);target.y+=.115*Math.sin(Math.PI*step);}
+        // The loaded shoe stays flat; the heel only rolls while unloaded.
+        ladderRolls[i]=lead?-.10*Math.sin(Math.PI*smooth(p,.02,.49))*(1-smooth(p,.42,.49)):.12*Math.sin(Math.PI*smooth(p,.25,.91))*(1-smooth(p,.82,.91));
+        const planted=lead?smooth(p,.49,.52)*(1-smooth(p,.77,.81)):smooth(p,.91,.94);
         ladderContacts.weights[i]=planted;ladderContacts.stances[i]=planted>.5;
       }
       for(let i=0;i<2;i++) {
-        const target=ladderHands[i];
-        const transfer=smooth(p,i===0?.32:.17,i===0?.44:.30);
-        target.x=lerp(target.x,wallX,transfer);
-        target.y=lerp(target.y,ladder.topY+.015,transfer);
-        const unload=1-smooth(p,i===0?.25:.11,i===0?.31:.17);
-        const regrip=smooth(p,i===0?.44:.30,i===0?.48:.34);
-        const release=smooth(p,i===0?.60:.53,i===0?.69:.62);
+        const target=ladderHands[i],upper=i===0;
+        const transfer=smooth(p,upper?.22:.02,upper?.44:.16);
+        target.x=lerp(target.x,upper?ladder.rungX+face*.38:ladder.rungX-face*.024,transfer);
+        target.y=lerp(target.y,ladder.topY+(upper?.825:.45),transfer);
+        target.z=lerp(target.z,-face*arms[i].side*ladder.width*.5,transfer);
+        const unload=upper?1-smooth(p,.19,.22):0;
+        const regrip=smooth(p,upper?.44:.16,upper?.47:.20);
+        const release=smooth(p,upper?.885:.52,upper?.915:.545);
         const initialWeight=ladderContacts.hands[i];
-        ladderContacts.hands[i]=Math.max(lerp(initialWeight,1,smooth(p,0,.08))*unload,regrip)*(1-release);
+        ladderContacts.hands[i]=Math.max(initialWeight*unload,regrip)*(1-release);
       }
-      authoredWeight=1-smooth(p,.91,1);
-      animation.ladderStage=p<.18?'upper-grip':p<.36?'transfer-hand':p<.60?'knee-over':p<.74?'press-up':p<.91?'step-onto-roof':'balance';
+      if(phaseName==='top-in')authoredWeight=smooth(progress,0,.26);
+      animation.ladderStage=p<.20?'grip-handrail':p<.44?'pull-and-knee-over':p<.60?'load-leading-foot':p<.80?'weight-transfer':p<.94?'bring-trailing-foot':'stand-and-balance';
     } else {
       if(phaseName==='mount')authoredWeight=smooth(progress,.18,.88);
       if(phaseName==='bottom-out')authoredWeight=1-smooth(progress,.08,.94);
@@ -464,9 +482,19 @@ export function createBoy(THREE) {
     }
     for(let i=0;i<2;i++) {
       const target=group.worldToLocal(ladderHands[i]);
-      const release=top?smooth(p,i===0?.60:.53,i===0?.69:.62):0;
+      const release=top?smooth(p,i===0?.89:.545,i===0?1:.65):0;
       if(release>0)target.lerp(handTargets[i].set(arms[i].side*.227,hipHeight-.002,.07),release);
-      solveArm(arms[i],target,lerp(Math.PI/2,-.16,release));
+      if(top) {
+        const transfer=smooth(p,i===0?.22:.02,i===0?.44:.16);
+        const railPitch=i===0?lerp(0,Math.PI/2,smooth(p,.47,.67)):0;
+        solveSpatialArm(arms[i],target,lerp(lerp(Math.PI/2,railPitch,transfer),-.16,release));
+      } else solveArm(arms[i],target,Math.PI/2);
+    }
+    if(top) {
+      // Preserve the real roof foot anchors while the upper body relaxes into
+      // the live idle pose, ready for the first walking step after release.
+      const awake=smooth(p,.94,1);
+      if(awake>0)for(let i=0;i<4;i++){const object=wakeObjects[i],base=awakePose[i];object.position.lerp(base.position,awake);object.quaternion.slerp(base.quaternion,awake);object.scale.lerp(base.scale,awake);}
     }
     if(authoredWeight<1)blendPose(1-authoredWeight);
     for(let i=0;i<2;i++) {
@@ -524,14 +552,44 @@ export function createBoy(THREE) {
       [1,.64,0,0,0, 0,.025,0,.025, .65,.09,.65,.09,.04,0,0]
     ]
   };
-  function sampleSlipPose(keys,p) {
+  // Contact targets keep their flat support intervals. Body channels share a
+  // continuous-velocity curve across phase boundaries and only stop at real
+  // extrema or authored weight-bearing holds.
+  const slipBodyFields=[1,2,3,4,13,14,15];
+  const slipDurations={slip:.38,fall:.62,ragdoll:.85,recover:1.8,brush:1.15,look:.9,settle:.4};
+  const slipStarts={},slipBodyKeys=[];
+  let slipClock=0;
+  for(const name of Object.keys(slipPoseKeys)) {
+    slipStarts[name]=slipClock;
+    for(const row of slipPoseKeys[name]) {
+      const key=[slipClock+row[0]*slipDurations[name],...slipBodyFields.map(field=>row[field])];
+      if(slipBodyKeys.length&&Math.abs(slipBodyKeys.at(-1)[0]-key[0])<1e-9)slipBodyKeys[slipBodyKeys.length-1]=key;
+      else slipBodyKeys.push(key);
+    }
+    slipClock+=slipDurations[name];
+  }
+  const slipBodySlopes=slipBodyKeys.map(()=>new Float64Array(slipBodyFields.length+1));
+  for(let k=1;k<slipBodyKeys.length-1;k++)for(let c=1;c<=slipBodyFields.length;c++) {
+    const h0=slipBodyKeys[k][0]-slipBodyKeys[k-1][0],h1=slipBodyKeys[k+1][0]-slipBodyKeys[k][0];
+    const d0=(slipBodyKeys[k][c]-slipBodyKeys[k-1][c])/h0,d1=(slipBodyKeys[k+1][c]-slipBodyKeys[k][c])/h1;
+    if(d0*d1>0){const w0=2*h1+h0,w1=h1+2*h0;slipBodySlopes[k][c]=(w0+w1)/(w0/d0+w1/d1);}
+  }
+  function sampleSlipBody(seconds) {
+    seconds=clamp(seconds,0,slipClock);let k=slipBodyKeys.length-2;
+    for(let n=1;n<slipBodyKeys.length;n++)if(seconds<=slipBodyKeys[n][0]){k=n-1;break;}
+    const a=slipBodyKeys[k],b=slipBodyKeys[k+1],h=b[0]-a[0],u=(seconds-a[0])/h,u2=u*u,u3=u2*u;
+    for(let c=1;c<=slipBodyFields.length;c++)slipChannels[slipBodyFields[c-1]]=(2*u3-3*u2+1)*a[c]+(u3-2*u2+u)*h*slipBodySlopes[k][c]+(-2*u3+3*u2)*b[c]+(u3-u2)*h*slipBodySlopes[k+1][c];
+  }
+  const recoil=(w,name)=>w&&Number.isFinite(w[name])?w[name]:0;
+  function sampleSlipPose(keys,p,seconds) {
     let a=keys[0],b=keys[keys.length-1];
     for(let i=1;i<keys.length;i++)if(p<=keys[i][0]){a=keys[i-1];b=keys[i];break;}
     const u=smooth(p,a[0],b[0]);
     for(let i=1;i<16;i++)slipChannels[i]=lerp(a[i],b[i],u);
+    sampleSlipBody(seconds);
     return slipChannels;
   }
-  function solveSlipArm(arm,target,palmPitch) {
+  function solveSpatialArm(arm,target,palmPitch) {
     // Three-dimensional arm IK allows a real supporting palm during the side
     // roll, and an opposite hand to cross the chest while brushing the jacket.
     arm.shoulder.position.set(arm.side*.227,.405,0);
@@ -555,21 +613,20 @@ export function createBoy(THREE) {
   }
   function applySlip(slip) {
     capturePose();pose.position.set(0,0,0);pose.rotation.set(0,0,0);
-    const stage=slip.phase||'slip',p=clamp(slip.progress||0,0,1),v=sampleSlipPose(slipPoseKeys[stage]||slipPoseKeys.slip,p);
-    const loose=stage==='fall'||stage==='ragdoll',w=slip.wobble;
-    const wobble=(name)=>loose&&w&&Number.isFinite(w[name])?w[name]:0;
-    const hipWobble=wobble('hips'),chestWobble=wobble('torso');
+    const stage=slip.phase||'slip',p=clamp(slip.progress||0,0,1),v=sampleSlipPose(slipPoseKeys[stage]||slipPoseKeys.slip,p,(slipStarts[stage]||0)+p*(slipDurations[stage]||.38));
+    const loose=stage==='fall'||stage==='ragdoll',w=loose?slip.wobble:null;
+    const hipWobble=recoil(w,'hips'),chestWobble=recoil(w,'torso');
     const hipY=v[1]+Math.abs(hipWobble)*.06+(loose?(slip.impact||0)*.018:0),hipZ=v[2]+hipWobble*.035;
     torso.position.set(0,hipY,hipZ);torso.scale.set(1,1,1);
     // Applying the side roll after the sagittal lean lowers the supporting
     // shoulder, rather than rolling around an upright chest's vertical axis.
     torso.quaternion.setFromEuler(slipEuler.set(v[3]+chestWobble*.65,v[14],0));
     slipUpperQ.setFromEuler(slipEuler.set(0,0,v[4]+hipWobble*.45));torso.quaternion.premultiply(slipUpperQ);
-    head.position.set(0,.679,.026);head.rotation.set(v[13]+wobble('head')*.9,v[15],-hipWobble*.25);
+    head.position.set(0,.679,.026);head.rotation.set(v[13]+recoil(w,'head')*.9,v[15],-hipWobble*.25);
     bag.position.set(0,.263,-.195);bag.rotation.set(-chestWobble*.35,0,-hipWobble*.25);
     slipContacts.hands[0]=slipContacts.hands[1]=0;
     for(let i=0;i<2;i++) {
-      const legWobble=wobble(i===0?'leftLeg':'rightLeg');
+      const legWobble=recoil(w,i===0?'leftLeg':'rightLeg');
       const target=legTargets[i].set(legs[i].side*.108,v[5+i*2]+Math.abs(legWobble)*.20,v[6+i*2]+legWobble*.18);
       const recoverRoll=stage==='recover'&&i===1?lerp(.18,.35,smooth(p,.24,.46))*(1-smooth(p,.68,.88)):0;
       solveLeg(legs[i],target,recoverRoll+legWobble*.45,hipY,hipZ);
@@ -577,7 +634,7 @@ export function createBoy(THREE) {
       slipContacts.stances[i]=slipContacts.weights[i]>.5;
     }
     for(let i=0;i<2;i++) {
-      const armWobble=wobble(i===0?'leftArm':'rightArm');
+      const armWobble=recoil(w,i===0?'leftArm':'rightArm');
       const target=handTargets[i].set(arms[i].side*.255,v[9+i*2]+armWobble*.20,v[10+i*2]+armWobble*.14);
       let pitch=stage==='brush'||stage==='look'||stage==='settle'?0:Math.PI/2;
       if(stage==='recover') {
@@ -593,7 +650,7 @@ export function createBoy(THREE) {
         target.y=lerp(target.y,lerp(1.01,.81,stroke),weight);
         target.z=lerp(target.z,.19+.02*Math.sin(stroke*Math.PI),weight);
       }
-      solveSlipArm(arms[i],target,pitch);
+      solveSpatialArm(arms[i],target,pitch);
     }
     let weight=stage==='slip'?smooth(p,0,.25):stage==='settle'?1-smooth(p,0,1):1;
     if(weight<1)blendPose(1-weight);
