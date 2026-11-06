@@ -70,5 +70,6 @@ export function createSlip(config=LEVEL.slipPuddle) {
     if(elapsed>=TOTAL-1e-9)state=null;
     return events;
   }
-  return {get state(){return state},get active(){return !!state},get played(){return played},tryStart,update,reset};
+  function restore(wasPlayed=false){reset();played=wasPlayed===true;}
+  return {get state(){return state},get active(){return !!state},get played(){return played},tryStart,update,reset,restore};
 }

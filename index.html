@@ -3,54 +3,97 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#10191d">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%2310191d'/%3E%3Cpath d='M13 15h7v31h13v7H13zM35 15h19v7H42v9h10v7H42v15h-7z' fill='%23c5ed73'/%3E%3C/svg%3E">
-  <title>The Last Floor — Chapter I</title>
+  <meta name="theme-color" content="#0b1011">
+  <meta name="color-scheme" content="dark">
+  <title>RUNAWAY</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%230b1011'/%3E%3Cpath d='M15 10h18q15 0 15 14 0 10-9 13l12 18H38L27 38h-1v17H15zm11 10v9h6q5 0 5-5t-5-4z' fill='%2385a15e'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="style.css">
 </head>
-<body>
+<body class="menu-open">
 <main>
-  <canvas id="scene" aria-label="The Last Floor — a rooftop adventure" tabindex="0"></canvas>
-  <div class="vignette" aria-hidden="true"></div>
-  <div class="grain" aria-hidden="true"></div>
-  <header>
-    <a class="brand" href="#" aria-label="The Last Floor">LF<span>A STORY ABOVE THE CITY</span></a>
-    <div class="chapter">CHAPTER I <span>THE ROOFTOP</span></div>
-    <button id="sound" aria-label="Turn sound on or off">SOUND <span>OFF</span><b aria-hidden="true">≋</b></button>
-  </header>
-  <section id="intro" aria-labelledby="game-title">
-    <div class="eyebrow"><i></i> 06:14 / SECTOR 09</div>
-    <h1 id="game-title">THE LAST<br><em>FLOOR.</em></h1>
-    <p>A roof. A worn-out mattress.<br>Something below is waking too.</p>
-    <button id="play">WAKE UP <span aria-hidden="true"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3 13 13 3M3 3h10v10" stroke="currentColor" stroke-width="1.5"/></svg></span></button>
-    <div class="intro-note">A SHORT JOURNEY HOME</div>
-    <div class="climb-hint">Ledges: hold toward. Crate: press Space / ↑.</div>
-  </section>
-  <div id="objective" hidden><span>01 / THE ROOFTOP</span><p>Leave the shelter. Find a way across.</p></div>
-  <div id="opening-cue" hidden role="status" aria-live="polite" aria-atomic="true">A little shelter. No way home yet.</div>
-  <div id="message" role="status" aria-live="polite"></div>
-  <section id="ending" hidden aria-labelledby="ending-title">
-    <span>END OF THE PROTOTYPE</span>
-    <h2 id="ending-title">Someone is home.</h2>
-    <p>Beyond the door, the city doesn’t feel quite so empty.</p>
-    <button id="again">PLAY AGAIN <span aria-hidden="true"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3 13 13 3M3 3h10v10" stroke="currentColor" stroke-width="1.5"/></svg></span></button>
-  </section>
-  <section id="error" hidden role="alert"><span>THE GAME COULDN’T START</span><h2>We need a little light.</h2><p>Enable graphics acceleration and try again in a recent version of Chrome, Edge, or Firefox.</p></section>
-  <footer>
-    <div class="location"><i></i> SECTOR 09 <span>06:14 / 8°C</span></div>
-    <div class="controls" aria-label="Game controls">
-      <span><kbd>A</kbd><kbd>D</kbd> MOVE</span>
-      <span><kbd>SHIFT</kbd> RUN</span>
-      <span><kbd>SPACE</kbd> JUMP / CLIMB</span>
-      <span class="ladder-control"><kbd>W</kbd><kbd>S</kbd> LADDER</span>
-      <span><kbd>E</kbd> INTERACT</span>
-      <span><kbd>ESC</kbd> PAUSE</span>
+  <canvas id="scene" aria-label="RUNAWAY game scene" tabindex="0"></canvas>
+  <div class="scene-shade" aria-hidden="true"></div>
+
+  <section id="intro" class="screen" aria-labelledby="game-title">
+    <div class="main-menu-panel">
+      <h1 id="game-title"><span class="sr-only">RUNAWAY</span>
+        <svg class="wordmark" viewBox="0 0 780 180" fill="none" aria-hidden="true" focusable="false">
+          <defs>
+            <linearGradient id="title-ink" x1="110" y1="9" x2="650" y2="180" gradientUnits="userSpaceOnUse"><stop stop-color="#91a969"/><stop offset=".48" stop-color="#829b59"/><stop offset="1" stop-color="#6c854c"/></linearGradient>
+            <filter id="paint-edge" x="-2%" y="-3%" width="104%" height="106%"><feTurbulence type="fractalNoise" baseFrequency=".12 .28" numOctaves="2" seed="9" result="rough"/><feDisplacementMap in="SourceGraphic" in2="rough" scale="1.15" xChannelSelector="R" yChannelSelector="G"/></filter>
+            <mask id="paint-wear"><path fill="#fff" d="M0 0h780v180H0z"/><g stroke="#000" stroke-width=".8" opacity=".38"><path d="m15 42 31-3m-12 88 30-4m52-43 26-4m18 59 23-3m31-88 25-2m15 73 26-4m24 39 37-5m18-75 27-3m28 51 23-3m26-65 21-2m30 110 28-5m35-89 32-4m-12 72 22-3m35-71 18-2m-2 93 23-3"/><path d="m26 14 2 21m96 76 2 33m107-97 2 20m115 54 2 28m104-53 3 20m65-88 1 19m78 58 2 22m95-58 2 23"/></g><g fill="#000" opacity=".2"><path d="m10 86 22 2-3 3-18-1zm143 72 20-3 3 2-22 4zm64-131 14-2 2 3-15 1zm120 119 21-5 1 3-21 4zm122-118 13-1-1 2-11 2zm49 111 17-2 2 3-17 1zm101-112 15 1-1 2-13-1zm108 120 16-2 1 3-16 1z"/></g></mask>
+          </defs>
+          <g fill="url(#title-ink)" fill-rule="evenodd" filter="url(#paint-edge)" mask="url(#paint-wear)">
+            <path d="m8 13 27-3 1 3 28-2q25 4 24 38-1 21-20 29l28 84-31 4-22-75h-6l2 75-30-1 2-76-3-20Zm28 23 1 31 14-1q11-1 10-17-1-14-12-13Z"/>
+            <path d="m111 11 28-2 2 113q-1 17 11 17 12-1 10-17l-2-110 28-2 4 116q0 39-39 42-39 0-40-36Z"/>
+            <path d="m209 12 27-2 36 93-5-92 27-2 4 155-25 2-37-92 3 92-28-1Z"/>
+            <path d="m340 9 30 2 39 154-30 1-7-36-33 1-6 37-29-3Zm5 96 22-1-11-56Z"/>
+            <path d="m418 13 29-4 13 106 17-96 23-1 18 97 8-105 29-2-17 156-30 3-19-91-16 89-30 3Z"/>
+            <path d="m594 10 30 1 39 154-30 1-7-37-33 2-7 37-29-3Zm4 94h22l-11-56Z"/>
+            <path d="m671 12 31-2 19 61 20-59 30-4-34 97 4 60-30 3-2-63Z"/>
+          </g>
+        </svg>
+      </h1>
+      <nav class="menu-list" aria-label="Main menu">
+        <button id="play" class="menu-item" type="button">New Game</button>
+        <button id="continue" class="menu-item" type="button" disabled>Continue Game</button>
+        <button id="settings-open" class="menu-item" type="button">Settings</button>
+      </nav>
     </div>
-    <div class="edition">PROTOTYPE <b>v.0.12</b></div>
-  </footer>
+  </section>
+
+  <section id="settings" class="screen overlay-screen" role="dialog" aria-modal="true" aria-labelledby="settings-title" hidden>
+    <div class="settings-panel">
+      <h2 id="settings-title" class="screen-title">Settings</h2>
+      <div class="settings-list">
+        <label class="setting-row" for="setting-sound"><span>Sound</span><input id="setting-sound" type="checkbox" checked></label>
+        <label class="setting-row" for="setting-volume"><span>Volume</span><input id="setting-volume" type="range" min="0" max="100" value="65"></label>
+        <label class="setting-row" for="setting-brightness"><span>Brightness</span><input id="setting-brightness" type="range" min="70" max="130" value="100"></label>
+        <label class="setting-row" for="setting-hints"><span>Hints</span><input id="setting-hints" type="checkbox"></label>
+      </div>
+      <button id="settings-back" class="menu-item back-item" type="button">Back</button>
+    </div>
+  </section>
+
+  <section id="pause-menu" class="screen overlay-screen" role="dialog" aria-modal="true" aria-labelledby="pause-title" hidden>
+    <div class="quiet-panel">
+      <h2 id="pause-title" class="screen-title">Paused</h2>
+      <nav class="menu-list" aria-label="Pause menu">
+        <button id="resume" class="menu-item" type="button">Resume</button>
+        <button id="pause-settings" class="menu-item" type="button">Settings</button>
+        <button id="main-menu" class="menu-item" type="button">Main Menu</button>
+      </nav>
+    </div>
+  </section>
+
+  <button id="pause-button" type="button" aria-label="Pause" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5v14M16 5v14"/></svg></button>
+  <div id="message" role="status" aria-live="polite" hidden></div>
+
+  <section id="ending" class="screen overlay-screen" aria-labelledby="ending-title" hidden>
+    <div class="quiet-panel end-panel">
+      <h2 id="ending-title" class="ending-title">To be continued.</h2>
+      <nav class="menu-list" aria-label="End menu">
+        <button id="again" class="menu-item" type="button">New Game</button>
+        <button id="ending-menu" class="menu-item" type="button">Main Menu</button>
+      </nav>
+    </div>
+  </section>
+
+  <section id="error" class="screen overlay-screen" role="alert" hidden>
+    <div class="quiet-panel error-panel"><h2 class="screen-title">Unable to start.</h2><p>Enable graphics acceleration and try again in a recent version of Chrome, Edge, or Firefox.</p></div>
+  </section>
+
   <div id="mobile" aria-label="Touch controls">
-    <div class="touch-move"><button data-key="a" aria-label="Move left">←</button><button data-key="d" aria-label="Move right">→</button></div>
-    <div class="touch-actions"><button data-key="Shift" class="touch-run" aria-label="Toggle running" aria-pressed="false">RUN</button><button data-key="e" aria-label="Interact">E</button><button data-key="s" class="touch-down" aria-label="Climb down">↓</button><button data-key=" " aria-label="Jump or climb up">↑</button></div>
+    <div class="touch-move">
+      <button data-key="a" type="button" aria-label="Move left"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 5-7 7 7 7"/></svg></button>
+      <button data-key="d" type="button" aria-label="Move right"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m10 5 7 7-7 7"/></svg></button>
+    </div>
+    <div class="touch-actions">
+      <button data-key="Shift" class="touch-run" type="button" aria-label="Toggle running" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="15" cy="4" r="1.8"/><path d="m7 9 4-2 3 3 4 1M11 7l-2 7 5 2 1 5M9 14l-5 6M3 9h3M2 13h3"/></svg></button>
+      <button data-key="e" type="button" aria-label="Interact"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 12V6a1.5 1.5 0 0 1 3 0v5-7a1.5 1.5 0 0 1 3 0v7-6a1.5 1.5 0 0 1 3 0v7-4a1.5 1.5 0 0 1 3 0v7c0 4-2.5 6-6 6h-1c-2 0-3.5-1-4.5-2.5l-4-5a1.5 1.5 0 0 1 2.3-1.9L8 14"/></svg></button>
+      <button data-key="s" class="touch-down" type="button" aria-label="Climb down"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 10 7 7 7-7"/></svg></button>
+      <button data-key=" " type="button" aria-label="Jump or climb up"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 14 7-7 7 7"/></svg></button>
+    </div>
   </div>
 </main>
 <script src="game.js"></script>

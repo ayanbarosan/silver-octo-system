@@ -39,5 +39,6 @@ export function createBridge(layout = LEVEL.bridge, middle = LEVEL.roofs.middle)
       if (firstStep) return 'creak';
     }
   }
-  return { state, get supported() { return supported(); }, update, reset };
+  function restore(broken=false){reset();if(broken)Object.assign(state,{phase:'broken',breakTime:2.4,armed:true});}
+  return { state, get supported() { return supported(); }, update, reset, restore };
 }

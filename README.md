@@ -1,4 +1,4 @@
-# The Last Floor
+# RUNAWAY
 
 An original **2.5D adventure prototype** with a fully 3D character and city, played from a side view. A boy in a black tracksuit with white stripes and a lime backpack wakes on a torn mattress in a small rooftop shelter above a quiet city of apartment blocks. A fixed railing and concrete base guard the edge beside his bedding.
 
@@ -6,13 +6,19 @@ Cross three rooftops: climb past the vent, move the crate to clear the pipe, tak
 
 ## Opening
 
-**WAKE UP** begins a short cinematic sequence on the torn mattress, beside a pillow and a folded blanket. The railing protects the left edge while a searchlight sweeps the roof. A chapter cue and brief prompts guide the first steps out of the shelter. Movement controls remain visible throughout the sequence.
+**New Game** begins on the torn mattress, beside a pillow and a folded blanket. The railing protects the left edge while a searchlight sweeps the roof. Gameplay has no chapter banners, objective panels, control legend, branding or instructions. Hints are disabled by default.
 
 The menu and opening use the same restrained, darker palette as the city, with the lime backpack and warm doorway providing clear landmarks.
 
+## Menu and settings
+
+The main menu uses an original green RUNAWAY wordmark drawn as local vector lettering over the live city. **New Game** starts over; **Continue Game** restores the most recent safe grounded position, the crate, broken crossing and puddle progress. Continue is disabled until a valid save exists. Pausing and returning to the menu also save when the current position is safe. Jumps, ladders and other unfinished actions resume from the preceding stable position.
+
+**Settings** contains sound, volume, brightness and an optional **Hints** switch. Hints stay off unless enabled; enabling them adds one quiet contextual caption. Preferences and progress are kept in this browser. If an offline browser blocks storage, the current session still supports settings and Continue in memory.
+
 ## Play
 
-Open the generated `dist/The-last-floor.html` file in Chrome, Edge, or Firefox. No server or internet connection is needed. The game requires WebGL 2 and graphics acceleration; rendering quality is reduced automatically when software rendering is detected.
+Open the generated `dist/Runaway.html` file in Chrome, Edge, or Firefox. No server or internet connection is needed. The game requires WebGL 2 and graphics acceleration; rendering quality is reduced automatically when software rendering is detected.
 
 - **A / D** or **Left / Right**: move.
 - **Shift + a direction**: run. Use a running jump to cross the gap between buildings.
@@ -24,12 +30,12 @@ Open the generated `dist/The-last-floor.html` file in Chrome, Edge, or Firefox. 
 - **D / Right** or **A / Left** while on the ladder: climb up or down, respectively. Release the controls to hold still; reverse direction at any point.
 - **E + a direction**: push the crate.
 - **E**: open the lit door.
-- **Esc**: pause or resume. On a touchscreen, tap the scene to resume.
+- **Esc**: pause or resume; close Settings to return to its previous menu. On a touchscreen, the small pause icon opens the pause menu.
 - **R**: restart the level.
 
-Touch controls appear on touchscreen devices. **RUN** toggles running so you can jump without holding three buttons at once. Press **↑** beside the crate to climb onto it. Near the ladder, an extra **↓** button appears for climbing down; the **↑** button climbs up. The existing **← / →** buttons also move down or up while on the ladder. Release the buttons to hold your place. Use the **SOUND** button in the top right to turn the ambient audio on or off.
+Small touch icons appear on touchscreen devices. The running figure toggles running; the open hand interacts. Press **↑** beside the crate to climb onto it. Near the ladder, an extra **↓** button appears for climbing down; the **↑** button climbs up. The **← / →** buttons also move down or up while on the ladder. Release the buttons to hold your place. Sound and volume are controlled from **Settings**.
 
-After **WAKE UP**, the boy automatically braces his palms against the roof, brings a knee beneath him, and stands. Jumps preserve forward momentum, choose a leading leg from the current stride, and blend through anticipation, takeoff, airborne recovery, landing reach, and a step back into movement. A short input buffer and edge grace make repeated jumps more forgiving. At reachable vent and pipe ledges, he grabs the edge and pulls himself onto the roof automatically. Climbing onto the crate requires **Space**, **W**, **Up**, or the phone’s **↑** button.
+After **New Game**, the boy automatically braces his palms against the roof, brings a knee beneath him, and stands. Jumps preserve forward momentum, choose a leading leg from the current stride, and blend through anticipation, takeoff, airborne recovery, landing reach, and a step back into movement. A short input buffer and edge grace make repeated jumps more forgiving. At reachable vent and pipe ledges, he grabs the edge and pulls himself onto the roof automatically. Climbing onto the crate requires **Space**, **W**, **Up**, or the phone’s **↑** button.
 
 ## Rooftop route
 
@@ -46,7 +52,7 @@ After **WAKE UP**, the boy automatically braces his palms against the roof, brin
 1. On the GitHub repository page, choose **Code → Download ZIP**.
 2. Extract the ZIP with your phone’s file manager.
 3. Inside the extracted repository folder, open **`docs/index.html`** in Chrome or another browser with WebGL 2 support. Use this self-contained file, **not the `index.html` in the repository root**.
-4. Turn the phone sideways for more room, tap **WAKE UP**, and use the touch controls. No internet connection is needed after downloading the ZIP.
+4. Turn the phone sideways for more room, choose **New Game** or **Continue Game**, and use the touch controls. No internet connection is needed after downloading the ZIP.
 
 ## Development
 
@@ -65,7 +71,7 @@ npm start
 npm test
 ```
 
-`npm run build` bundles `src/main.js` into `game.js` and generates the standalone HTML file in `dist/` and the GitHub Pages site in `docs/`. `npm start` serves the existing build. `npm test` checks JavaScript syntax, character contact and animation continuity, bridge failure timing, ladder movement and transitions, and the puddle slip and recovery. Tests check the rendered hand and shoe markers against real surfaces, scan the body for floor and wall penetration, and verify the jacket brushing and backward glance. WebGL rendering and the complete level also need verification in a browser.
+`npm run build` bundles `src/main.js` into `game.js` and generates `dist/Runaway.html` and the GitHub Pages site in `docs/`. `npm start` serves the existing build. `npm test` checks animation contacts, collision, movement, bridge and slip behavior, safe save snapshots, settings validation and storage fallback. WebGL rendering, menus and the complete level also need verification in a browser.
 
 Character geometry, buildings, windows, materials, and audio are generated locally. Three.js and the build tools are pinned in the dependency manifest and lockfile. The compiled game uses no external fonts, CDNs, or other network resources.
 

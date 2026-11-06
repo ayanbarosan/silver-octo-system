@@ -1,12 +1,13 @@
 import {build} from 'esbuild';
-import {readFile,writeFile,mkdir} from 'node:fs/promises';
+import {readFile,writeFile,mkdir,rm} from 'node:fs/promises';
 await build({entryPoints:['src/main.js'],bundle:true,format:'iife',target:['es2020'],outfile:'game.js',minify:true,legalComments:'eof'});
 const html=await readFile('index.html','utf8');
 const css=await readFile('style.css','utf8');
 const js=await readFile('game.js','utf8');
 const standalone=html.replace('<link rel="stylesheet" href="style.css">',()=>`<style>${css}</style>`).replace('<script src="game.js"></script>',()=>`<script>${js.replaceAll('</script','<\\/script')}</script>`).replace('class="brand" href="/"','class="brand" href="#"');
 await mkdir('dist',{recursive:true});
-await writeFile('dist/The-last-floor.html',standalone);
+await writeFile('dist/Runaway.html',standalone);
+await rm('dist/The-last-floor.html',{force:true});
 await mkdir('docs',{recursive:true});
 await writeFile('docs/index.html',standalone);
 await writeFile('docs/.nojekyll','');
