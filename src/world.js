@@ -1,6 +1,9 @@
+import { LEVEL } from './level.js';
+
 // Original rooftop set, built entirely from local geometry and procedural textures.
 export function createWorld(THREE, scene) {
   const world = new THREE.Group();
+  const finalOffset = LEVEL.finalOffset;
   scene.add(world);
   const random = n => { const f = Math.sin(n * 127.1 + 311.7) * 43758.5453123; return f - Math.floor(f); };
   function texture(kind) {
@@ -119,7 +122,8 @@ export function createWorld(THREE, scene) {
     box(width, .19, .21, center, level + .095, -2.38, rimMat);
     for (let x = left + 1; x < right - .3; x += 2.8) {
       cylinder(.026, .87, x, level + .6, -2.35);
-      box(2.8, .035, .035, x + 1.4, level + 1.02, -2.35, darkMetal);
+      const railSpan = Math.min(2.8, right - .3 - x);
+      box(railSpan, .035, .035, x + railSpan / 2, level + 1.02, -2.35, darkMetal);
     }
     // Layered irregular patches read as rainwater, with a darker damp perimeter.
     for (let i = 0; i < 7; i++) {
@@ -134,7 +138,23 @@ export function createWorld(THREE, scene) {
       stone.rotation.y = random(i + 28) * 6;
     }
   }
-  rooftop(-1, 22, 0, 38); rooftop(24.2, 43, .45, 91);
+  for (const [key, seed] of [['first', 38], ['middle', 145], ['final', 91]]) {
+    const roof = LEVEL.roofs[key]; rooftop(roof.x, roof.x + roof.w, roof.y, seed);
+  }
+  // The intermediate roof is a quiet landing, with all equipment behind the path.
+  const middleRoof = LEVEL.roofs.middle;
+  box(1.55, .43, .76, middleRoof.x + 3.1, middleRoof.y + .215, -1.67, zinc);
+  box(1.67, .055, .86, middleRoof.x + 3.1, middleRoof.y + .455, -1.67, rimMat);
+  for (let slot = 0; slot < 4; slot++) box(1.22, .025, .03, middleRoof.x + 3.1, middleRoof.y + .12 + slot * .075, -1.272, darkMetal);
+  const drain = cylinder(.075, 15, middleRoof.x + 1.5, -7.55, 1.985, zinc); drain.castShadow = false;
+  cylinder(.10, .12, middleRoof.x + 1.5, -.11, 1.985, darkMetal).castShadow = false;
+  const blockSignCanvas = document.createElement('canvas'); blockSignCanvas.width = blockSignCanvas.height = 128;
+  const signCtx = blockSignCanvas.getContext('2d'); signCtx.fillStyle = 'rgba(192,194,177,.45)'; signCtx.font = 'bold 70px monospace'; signCtx.fillText('10', 18, 87);
+  for (let i = 0; i < 40; i++) signCtx.clearRect(random(i + 33) * 128, random(i + 77) * 128, 2 + random(i + 38) * 5, 1 + random(i + 99) * 3);
+  const blockSignMap = new THREE.CanvasTexture(blockSignCanvas); blockSignMap.colorSpace = THREE.SRGBColorSpace;
+  const blockSign = new THREE.Mesh(new THREE.PlaneGeometry(.76, .76), new THREE.MeshStandardMaterial({ map: blockSignMap, transparent: true, depthWrite: false, roughness: 1 }));
+  blockSign.position.set(middleRoof.x + 3.8, -.85, 1.941); world.add(blockSign);
+
   // A small improvised sleeping spot is protected by the fixed end guard.
   // These constants are also consumed by movement so art and collision agree.
   const restArea = {
@@ -247,10 +267,10 @@ export function createWorld(THREE, scene) {
   const label = new THREE.Mesh(new THREE.PlaneGeometry(.35, .18), new THREE.MeshStandardMaterial({ map: markMap, transparent: true, roughness: 1, depthWrite: false }));
   label.position.set(0, .45, .446); crate.add(label);
   // Rooftop access house, door facing the viewer behind the walking path.
-  box(4.0, 3.2, 2.0, 39, 2.05, -1.55, wallMat);
-  beveledBox(4.22, .18, 2.2, .025, 39, 3.74, -1.55, roofMat);
-  box(4.2, .09, .18, 39, 3.69, -.46, rimMat);
-  const door = new THREE.Group(); door.position.set(38.5, .45, -.505); world.add(door);
+  box(4.0, 3.2, 2.0, 39 + finalOffset, 2.05, -1.55, wallMat);
+  beveledBox(4.22, .18, 2.2, .025, 39 + finalOffset, 3.74, -1.55, roofMat);
+  box(4.2, .09, .18, 39 + finalOffset, 3.69, -.46, rimMat);
+  const door = new THREE.Group(); door.position.set(LEVEL.doorX, LEVEL.roofs.final.y, -.505); world.add(door);
   box(1.18, 2.28, .12, 0, 1.14, 0, black, door);
   box(1.02, 2.16, .06, 0, 1.08, .075, darkMetal, door);
   const warmGlass = mat('#e5c88c', .58, { emissive: '#c39345', emissiveIntensity: .65 });
@@ -262,17 +282,99 @@ export function createWorld(THREE, scene) {
   box(.3, .065, .16, 0, 2.51, .07, zinc, door);
   box(.24, .025, .12, 0, 2.47, .08, warmGlass, door);
   const doorLight = new THREE.PointLight('#f7c875', 14, 5, 2);
-  doorLight.position.set(38.5, 2.85, .1); world.add(doorLight);
+  doorLight.position.set(LEVEL.doorX, 2.85, .1); world.add(doorLight);
   // Cable, an old junction box, a small TV aerial and two background flues.
-  box(.48, .67, .15, 40.45, 1.2, -.47, darkMetal);
-  wire([[38.5, 3.0, -.35], [39.3, 2.8, -.36], [40.45, 2.93, -.37], [40.45, 1.6, -.37]]);
-  for (const [x, height, z] of [[3.0, .6, -1.5], [30.2, 1.0, -1.55]]) {
+  box(.48, .67, .15, 40.45 + finalOffset, 1.2, -.47, darkMetal);
+  wire([[LEVEL.doorX, 3.0, -.35], [39.3 + finalOffset, 2.8, -.36], [40.45 + finalOffset, 2.93, -.37], [40.45 + finalOffset, 1.6, -.37]]);
+  for (const [x, height, z] of [[3.0, .6, -1.5], [30.2 + finalOffset, 1.0, -1.55]]) {
     cylinder(.13, height, x, (x > 23 ? .45 : 0) + height / 2, z, zinc);
     cylinder(.2, .06, x, (x > 23 ? .45 : 0) + height, z, darkMetal);
   }
-  cylinder(.035, 3.2, 33, 2.05, -1.9, zinc);
-  for (let i = 0; i < 6; i++) box(.9 - Math.abs(i - 2) * .1, .025, .025, 33, 2.2 + i * .22, -1.9, zinc);
-  wire([[33, .5, -1.9], [33.25, .46, -1.8], [35, .46, -1.8], [37, .48, -1.8]]);
+  cylinder(.035, 3.2, 33 + finalOffset, 2.05, -1.9, zinc);
+  for (let i = 0; i < 6; i++) box(.9 - Math.abs(i - 2) * .1, .025, .025, 33 + finalOffset, 2.2 + i * .22, -1.9, zinc);
+  wire([[33 + finalOffset, .5, -1.9], [33.25 + finalOffset, .46, -1.8], [35 + finalOffset, .46, -1.8], [37 + finalOffset, .48, -1.8]]);
+  // A single weathered plank spans the second gap. Physics decides when it breaks;
+  // the art controller never triggers failure while the child is still crossing.
+  const plankConfig = LEVEL.bridge, plankWidth = .68, plankThickness = .07;
+  const plankCanvas = document.createElement('canvas'); plankCanvas.width = 1024; plankCanvas.height = 128;
+  const pc = plankCanvas.getContext('2d'); pc.fillStyle = '#9a937b'; pc.fillRect(0, 0, 1024, 128);
+  const plankNoise = pc.getImageData(0, 0, 1024, 128);
+  for (let i = 0; i < plankNoise.data.length; i += 4) { const shade = (random(i + 572) - .5) * 21; plankNoise.data[i] += shade; plankNoise.data[i + 1] += shade; plankNoise.data[i + 2] += shade; }
+  pc.putImageData(plankNoise, 0, 0);
+  for (let i = 0; i < 70; i++) {
+    const y = random(i + 651) * 128; pc.strokeStyle = `rgba(51,49,37,${.055 + random(i + 658) * .12})`; pc.lineWidth = .35 + random(i + 659) * 1.1;
+    pc.beginPath(); pc.moveTo(0, y); pc.bezierCurveTo(310, y + random(i + 660) * 8 - 4, 690, y + random(i + 661) * 8 - 4, 1024, y + 2); pc.stroke();
+  }
+  pc.fillStyle = 'rgba(36,44,39,.13)'; pc.fillRect(0, 0, 1024, 9); pc.fillRect(0, 119, 1024, 9);
+  pc.strokeStyle = 'rgba(37,41,33,.29)'; pc.lineWidth = 1.1;
+  for (const x of [182, 466, 716, 866]) { pc.beginPath(); pc.moveTo(x, 0); pc.lineTo(x + 2, 12); pc.lineTo(x - 2, 21); pc.lineTo(x + 1, 35); pc.stroke(); }
+  for (const x of [50, 974]) for (const y of [28, 100]) { pc.fillStyle = 'rgba(31,36,32,.65)'; pc.beginPath(); pc.arc(x, y, 3, 0, Math.PI * 2); pc.fill(); }
+  const plankMap = new THREE.CanvasTexture(plankCanvas); plankMap.colorSpace = THREE.SRGBColorSpace; plankMap.anisotropy = 4;
+  const plankRelief = plankMap.clone(); plankRelief.colorSpace = THREE.NoColorSpace;
+  const plankMaterial = mat('#aaa58f', .82, { map: plankMap, bumpMap: plankRelief, bumpScale: .008, roughnessMap: plankRelief });
+  const bridgeGroup = new THREE.Group(); bridgeGroup.name = 'wooden-crossing'; bridgeGroup.position.set(plankConfig.x, plankConfig.y, plankConfig.z); world.add(bridgeGroup);
+  function plankUV(geometry, origin = 0) {
+    const positions = geometry.attributes.position, uv = geometry.attributes.uv;
+    for (let i = 0; i < positions.count; i++) uv.setXY(i, (positions.getX(i) + origin) / plankConfig.w, .5 - positions.getZ(i) / plankWidth);
+  }
+  const intactGeometry = new THREE.BoxGeometry(plankConfig.w, plankThickness, plankWidth, 24, 1, 1);
+  intactGeometry.translate(plankConfig.w / 2, -plankThickness / 2, 0); plankUV(intactGeometry);
+  const originalPlankPositions = new Float32Array(intactGeometry.attributes.position.array);
+  const intactPlank = new THREE.Mesh(intactGeometry, plankMaterial); intactPlank.name = 'intact-plank'; intactPlank.castShadow = true; intactPlank.receiveShadow = true; bridgeGroup.add(intactPlank);
+  const brokenPieces = [], cuts = [0, plankConfig.w * .34, plankConfig.w * .67, plankConfig.w];
+  const fracture = (cut, z) => cut <= 0 || cut >= plankConfig.w ? 0 : Math.sin(z * 49 + cut) * .031 + Math.sin(z * 21 + cut * 4) * .022;
+  for (let pieceIndex = 0; pieceIndex < 3; pieceIndex++) {
+    const left = cuts[pieceIndex], right = cuts[pieceIndex + 1], center = (left + right) / 2, shape = new THREE.Shape();
+    for (let i = 0; i <= 10; i++) { const z = -plankWidth / 2 + plankWidth * i / 10, x = right + fracture(right, z) - center; if (!i) shape.moveTo(x, -z); else shape.lineTo(x, -z); }
+    for (let i = 10; i >= 0; i--) { const z = -plankWidth / 2 + plankWidth * i / 10; shape.lineTo(left + fracture(left, z) - center, -z); }
+    shape.closePath();
+    const geometry = new THREE.ExtrudeGeometry(shape, { depth: plankThickness, steps: 1, bevelEnabled: false, curveSegments: 1 });
+    geometry.rotateX(-Math.PI / 2); geometry.translate(0, -plankThickness, 0); plankUV(geometry, center);
+    const mesh = new THREE.Mesh(geometry, plankMaterial); mesh.position.x = center; mesh.castShadow = true; mesh.receiveShadow = true; mesh.visible = false;
+    mesh.name = `plank-fragment-${pieceIndex + 1}`; bridgeGroup.add(mesh); brokenPieces.push({ mesh, center });
+  }
+  const splinterCount = 14, splinters = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), plankMaterial, splinterCount), splinterDummy = new THREE.Object3D();
+  splinters.name = 'plank-splinters'; splinters.visible = false; splinters.frustumCulled = false; bridgeGroup.add(splinters);
+  let lastFlex = -1;
+  const bridge = {
+    reset() {
+      bridgeGroup.visible = true; intactPlank.visible = true; splinters.visible = false;
+      intactGeometry.attributes.position.array.set(originalPlankPositions); intactGeometry.attributes.position.needsUpdate = true; lastFlex = 0;
+      for (const piece of brokenPieces) { piece.mesh.visible = false; piece.mesh.position.set(piece.center, 0, 0); piece.mesh.rotation.set(0, 0, 0); }
+    },
+    update(time, state = {}) {
+      const phase = state.phase || 'intact', load = THREE.MathUtils.clamp(Number.isFinite(state.load) ? state.load : 0, 0, 1);
+      const breaking = phase === 'breaking', broken = phase === 'broken'; bridgeGroup.visible = !broken;
+      intactPlank.visible = !breaking && !broken;
+      if (intactPlank.visible) {
+        const flex = phase === 'creaking' || phase === 'loaded' ? load * (.009 + Math.sin((Number.isFinite(time) ? time : 0) * 11) * .002) : 0;
+        if (Math.abs(flex - lastFlex) > .00002) {
+          const attr = intactGeometry.attributes.position;
+          for (let i = 0; i < attr.count; i++) { const n = i * 3; attr.array[n + 1] = originalPlankPositions[n + 1] - Math.sin(originalPlankPositions[n] / plankConfig.w * Math.PI) * flex; }
+          attr.needsUpdate = true; lastFlex = flex;
+        }
+      }
+      const age = Math.max(0, Number.isFinite(state.breakTime) ? state.breakTime : 0);
+      for (let i = 0; i < brokenPieces.length; i++) {
+        const piece = brokenPieces[i], t = Math.max(0, age - i * .035); piece.mesh.visible = breaking && age < 2.3;
+        if (piece.mesh.visible) {
+          piece.mesh.position.set(piece.center + t * [.2, -.12, -.23][i], t * .12 - 4.9 * t * t, t * [.1, -.16, .11][i]);
+          piece.mesh.rotation.set(t * [.6, -1.1, .7][i], t * [.3, -.6, .4][i], t * [-1.8, 2.2, -1.5][i]);
+        }
+      }
+      splinters.visible = breaking && age < 1.65;
+      if (splinters.visible) {
+        for (let i = 0; i < splinterCount; i++) {
+          const x = cuts[i % 2 + 1] + (random(i + 167) - .5) * .12;
+          splinterDummy.position.set(x + age * (random(i + 178) - .5) * 1.4, age * (.2 + random(i + 181) * .7) - 5 * age * age, (random(i + 186) - .5) * .48 + age * (random(i + 187) - .5) * .7);
+          splinterDummy.rotation.set(age * (i % 3 + 1), age * (random(i + 193) - .5) * 6, age * (random(i + 195) - .5) * 8);
+          splinterDummy.scale.set(.07 + random(i + 197) * .1, .011 + random(i + 198) * .012, .014 + random(i + 199) * .015); splinterDummy.updateMatrix(); splinters.setMatrixAt(i, splinterDummy.matrix);
+        }
+        splinters.instanceMatrix.needsUpdate = true;
+      }
+    }
+  };
+  bridge.reset();
   // City layers: intact apartment slabs with staggered setbacks and muted facades.
   const colors = ['#687c80', '#63787e', '#738486', '#61757b', '#7c8a89'];
   const cityMaterials = colors.map(color => mat(color, .98, { map: concreteMap }));
@@ -403,7 +505,7 @@ export function createWorld(THREE, scene) {
   waterInstances(dampPatches, dampMat); waterInstances(wetPatches, wetMat);
   // Short frayed ties breathe in the wind behind the walking lane.
   const tieMaterial = mat('#898d7b', .96, { side: THREE.DoubleSide });
-  for (const [x, y] of [[4.2, 1], [10, 1], [28, 1.45]]) {
+  for (const [x, y] of [[4.2, 1], [10, 1], [28 + finalOffset, 1.45]]) {
     const pivot = new THREE.Group(); pivot.position.set(x, y, -2.34);
     const tieShape = new THREE.Shape(); tieShape.moveTo(0, 0); tieShape.lineTo(.07, -.02); tieShape.lineTo(.055, -.24); tieShape.lineTo(.015, -.31); tieShape.lineTo(.02, -.13); tieShape.closePath();
     const tie = new THREE.Mesh(new THREE.ShapeGeometry(tieShape), tieMaterial); pivot.add(tie); world.add(pivot); ribbons.push(pivot);
@@ -487,7 +589,7 @@ export function createWorld(THREE, scene) {
     mesh.castShadow = batch.castShadow; mesh.receiveShadow = batch.receiveShadow; world.add(mesh);
   }
   for (const geometry of disposedGeometry) geometry.dispose();
-  return { crate, door, doorLight, world, opening, restArea, update(time, playerX = 0, openingUpdate) {
+  return { crate, door, doorLight, world, opening, restArea, bridge, update(time, playerX = 0, openingUpdate) {
     lastWorldTime = Number.isFinite(time) ? time : lastWorldTime;
     if (openingUpdate) opening.update(openingUpdate);
     updateOpening(lastWorldTime);
