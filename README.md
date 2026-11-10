@@ -129,3 +129,9 @@ Jumping toward a reachable ladder now blends into a short reach, grip and settle
 The rooftop door opens into a sealed interior view with four concrete stair flights, worn two-tone plaster, numbered landings, capped railings, electrical boxes and caged wall lamps. The city and rain are hidden during this chapter. The camera follows the descent, and foot placement follows the individual treads.
 
 Use the usual left and right controls. Each completed flight retires from the route, so turning at its landing selects the next downward flight. Reversing before reaching a landing can still retrace the current flight. Jump inputs keep the boy supported on the stairs. Continue restores the current flight and position, including after reloading; New Game starts back on the roof. Reaching the ground-floor corridor door ends this prototype section.
+
+## Stair clearance and interior cleanup — v0.16
+
+Stair flights now alternate between two physical depths. After each descent, the boy walks out onto the connected landing and turns around the end before entering the next lane. The ground-floor return runs in front of the lowest staircase. Normal left/right controls remain the same; the brief landing turn happens automatically. Pausing freezes the turn, and Continue uses the last safe supported position until the turn finishes. Existing stairwell saves restore into the correct lane.
+
+Floor numbers, disconnected opposite-side platforms and repeated electrical boxes have been removed. Only the necessary turning landings and the electrical box beside the former third-floor marking remain. Regression checks measure the actual head, torso, knees and shoes against stair geometry, including the ground-floor return.

@@ -5,6 +5,9 @@ import {STAIRWELL} from './stairwell.js';
 export function createStairwellWorld(THREE,scene) {
   const group=new THREE.Group();group.name='stairwell-interior';group.visible=false;scene.add(group);
   const C=STAIRWELL,left=C.left,right=C.right,span=right-left;
+  const lanes=C.lanes??[-.65,.95],stairWidth=C.stairWidth??1;
+  const landingBack=-1.25,landingFront=1.65,groundBack=-1.75,groundFront=2.75;
+  const landingMetadata=[],devices=[];
   const roomLeft=.9,roomRight=15.1,roof=C.rise*C.flights+2.85,back=-1.72;
   const random=n=>{const f=Math.sin(n*117.37+63.81)*43758.5453;return f-Math.floor(f);};
   const mat=(color,roughness=.9,extra={})=>new THREE.MeshStandardMaterial({color,roughness,...extra});
@@ -33,7 +36,7 @@ export function createStairwellWorld(THREE,scene) {
   const concrete=mat('#666d66',.97,{map:upperMap,bumpMap:relief,bumpScale:.021});
   const tread=mat('#939486',.91,{map:upperMap,bumpMap:relief,bumpScale:.012});
   const shadowConcrete=mat('#333c38',.96),metal=mat('#293936',.7,{metalness:.48}),zinc=mat('#727d70',.66,{metalness:.45});
-  const rust=mat('#725b43',.98),black=mat('#171f1d'),wood=mat('#45483b',.95,{map:lowerMap});
+  const black=mat('#171f1d'),wood=mat('#45483b',.95,{map:lowerMap});
   const warmGlass=mat('#f1d29b',.5,{emissive:'#ffcd79',emissiveIntensity:2.4}),coldGlass=mat('#839b9b',.5,{emissive:'#536d70',emissiveIntensity:.22});
   const batches=new Map(),dummy=new THREE.Object3D(),unitBox=new THREE.BoxGeometry(1,1,1),unitCylinder=new THREE.CylinderGeometry(1,1,1,10);
   function instance(type,material,position,scale,quaternion=null,shadow=true){
@@ -57,10 +60,10 @@ export function createStairwellWorld(THREE,scene) {
   }
   // The outer wall and piers enclose the frame. No façade windows or sky holes.
   box(roomRight-roomLeft,roof+.5,.36,(roomLeft+roomRight)/2,(roof-.5)/2,back-.2,plaster);
-  box(.38,roof+.55,3.35,roomLeft-.16,(roof-.45)/2,-.35,shadowConcrete);
-  box(.38,roof+.55,3.35,roomRight+.16,(roof-.45)/2,-.35,shadowConcrete);
-  box(roomRight-roomLeft+.7,.28,3.35,(roomLeft+roomRight)/2,roof+.1,-.35,shadowConcrete);
-  box(roomRight-roomLeft+.7,.38,3.35,(roomLeft+roomRight)/2,-.22,-.35,shadowConcrete);
+  box(.38,roof+.55,4.9,roomLeft-.16,(roof-.45)/2,.55,shadowConcrete);
+  box(.38,roof+.55,4.9,roomRight+.16,(roof-.45)/2,.55,shadowConcrete);
+  box(roomRight-roomLeft+.7,.28,4.9,(roomLeft+roomRight)/2,roof+.1,.55,shadowConcrete);
+  box(roomRight-roomLeft+.7,.38,4.9,(roomLeft+roomRight)/2,-.22,.55,shadowConcrete);
   const lightList=[],glows=[],numbers=[];
   function lamp(x,y,index,warm=true){
     box(.2,.26,.08,x,y,back+.08,metal);rod([x,y+.05,back+.12],[x,y+.05,back+.38],.022,metal);
@@ -75,11 +78,6 @@ export function createStairwellWorld(THREE,scene) {
     const canvas=document.createElement('canvas');canvas.width=canvas.height=64;const ctx=canvas.getContext('2d'),g=ctx.createRadialGradient(32,32,0,32,32,32);g.addColorStop(0,warm?'rgba(255,205,123,.15)':'rgba(144,182,186,.09)');g.addColorStop(.4,warm?'rgba(255,205,123,.045)':'rgba(144,182,186,.03)');g.addColorStop(1,'rgba(255,205,123,0)');ctx.fillStyle=g;ctx.fillRect(0,0,64,64);
     const texture=new THREE.CanvasTexture(canvas),mesh=new THREE.Mesh(new THREE.PlaneGeometry(3.6,3.8),new THREE.MeshBasicMaterial({map:texture,transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,side:THREE.DoubleSide}));mesh.position.set(x,y-.2,back+.02);group.add(mesh);glows.push(mesh);
     return index;
-  }
-  function floorNumber(text,x,y){
-    const canvas=document.createElement('canvas');canvas.width=canvas.height=256;const ctx=canvas.getContext('2d');ctx.fillStyle='#bab8a0';ctx.font='bold 205px Georgia';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(text,128,133);
-    ctx.globalCompositeOperation='destination-out';for(let i=0;i<125;i++){ctx.fillStyle=`rgba(0,0,0,${.15+random(i+470)*.6})`;ctx.fillRect(random(i+370)*256,random(i+270)*256,random(i+110)*12+1,random(i+250)*3+1);}
-    const texture=new THREE.CanvasTexture(canvas);texture.colorSpace=THREE.SRGBColorSpace;const mesh=new THREE.Mesh(new THREE.PlaneGeometry(.92,.92),new THREE.MeshStandardMaterial({map:texture,transparent:true,roughness:1,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-1}));mesh.position.set(x,y,back+.013);group.add(mesh);numbers.push({text,x,y});
   }
   function electricBox(x,y,seed){
     box(.49,.64,.20,x,y,back+.16,metal);box(.44,.58,.022,x,y,back+.275,zinc);box(.014,.46,.015,x+.16,y,back+.293,black);box(.035,.06,.028,x+.12,y-.07,back+.305,metal);
@@ -101,44 +99,53 @@ export function createStairwellWorld(THREE,scene) {
     box(roomRight-roomLeft,.075,.05,(roomLeft+roomRight)/2,y+.04,back+.035,shadowConcrete,false);
     const onRight=floor%2===0,lampX=onRight?12.0:3.3;
     lamp(lampX,y+2.20,floor,floor!==2);
-    floorNumber(floor===0?'G':String(floor),onRight?13.85:1.96,y+1.69);
-    electricBox(onRight?14.1:1.77,y+1.15,floor);
+    if(floor===3){
+      electricBox(1.77,y+1.15,floor);
+      devices.push({floor,x:1.77,y:y+1.15,z:back+.16});
+    }
     if(floor>0){
-      box(left-roomLeft,.22,2.15,(roomLeft+left)/2,y-.11,-.1,concrete);
-      box(roomRight-right,.22,2.15,(roomRight+right)/2,y-.11,-.1,concrete);
-      box(left-roomLeft,.035,2.22,(roomLeft+left)/2,y-.012,-.1,tread);
-      box(roomRight-right,.035,2.22,(roomRight+right)/2,y-.012,-.1,tread);
-      // Short landing rails finish in return posts, never an open cut tube.
-      for(const z of [-.85,.73]){
-        railRun([roomLeft+.22,y],[left-.09,y],z,.82,3);
-        railRun([right+.09,y],[roomRight-.22,y],z,.82,3);
-      }
+      // A landing exists only where the route actually turns. The old,
+      // disconnected balcony on the opposite side has been removed.
+      const minX=onRight?right:C.minX-.5,maxX=onRight?C.maxX+.5:left;
+      const centerX=(minX+maxX)/2,centerZ=(landingBack+landingFront)/2;
+      box(maxX-minX,.22,landingFront-landingBack,centerX,y-.11,centerZ,concrete);
+      box(maxX-minX,.035,landingFront-landingBack+.02,centerX,y-.012,centerZ,tread);
+      for(const z of [landingBack+.025,landingFront-.025])railRun([minX+.06,y],[maxX-.06,y],z,.82,3);
+      const outerX=onRight?maxX-.06:minX+.06;
+      for(const z of [landingBack+.025,landingFront-.025])capPost(outerX,y,z,.82);
+      rod([outerX,y+.82,landingBack+.025],[outerX,y+.82,landingFront-.025],.03);
+      rod([outerX,y+.82*.47,landingBack+.025],[outerX,y+.82*.47,landingFront-.025],.018);
+      landingMetadata.push({floor,side:onRight?'right':'left',y,minX,maxX,minZ:landingBack,maxZ:landingFront});
     }
     // Slightly recessed vertical wall ribs and service labels break repetition.
     box(.12,C.rise-.09,.10,roomLeft+.47,y+1.52,back+.07,shadowConcrete);
     box(.12,C.rise-.09,.10,roomRight-.47,y+1.52,back+.07,shadowConcrete);
     for(let j=0;j<3;j++)box(.17+random(floor*5+j)*.18,.012,.008,6.2+j*.25,y+.73+random(floor*7+j)*.09,back+.025,plaster,false);
   }
-  box(roomRight-roomLeft,.15,2.3,(roomLeft+roomRight)/2,-.075,-.1,concrete);box(roomRight-roomLeft,.025,2.32,(roomLeft+roomRight)/2,-.005,-.1,tread);
+  const groundDepth=groundFront-groundBack,groundCenter=(groundFront+groundBack)/2;
+  box(roomRight-roomLeft,.15,groundDepth,(roomLeft+roomRight)/2,-.075,groundCenter,concrete);
+  box(roomRight-roomLeft,.025,groundDepth+.02,(roomLeft+roomRight)/2,-.005,groundCenter,tread);
   const flightMetadata=[];
   for(let f=0;f<C.flights;f++){
     const high=(C.flights-f)*C.rise,dir=f%2===0?-1:1,start=dir<0?right:left,end=dir<0?left:right,run=span/C.steps,rise=C.rise/C.steps;
+    const lane=lanes[f%lanes.length],treads=[];
     for(let i=0;i<C.steps;i++){
       const x=start+dir*(i+.5)*run,y=high-(i+1)*rise;
-      box(run+.009,.19,1.80,x,y-.095,-.05,concrete);
-      box(run+.012,.027,1.87,x,y-.009,-.045,tread);
+      box(run+.009,.19,stairWidth,x,y-.095,lane,concrete);
+      box(run+.012,.027,stairWidth+.025,x,y-.009,lane,tread);
       // Worn nosing highlights each tread without making a bright ladder.
-      box(.025,.024,1.9,x+dir*run*.46,y-.006,-.045,zinc);
-      if(i%6===2)box(run*.31,.006,.30,x-dir*.05,y+.009,.22,shadowConcrete,false);
+      box(.025,.024,stairWidth+.035,x+dir*run*.46,y-.006,lane,zinc);
+      if(i%6===2)box(run*.31,.006,.18,x-dir*.05,y+.009,lane+.14,shadowConcrete,false);
+      treads.push({minX:x-run/2-.006,maxX:x+run/2+.006,minY:y-.19,maxY:y+.0045,minZ:lane-(stairWidth+.035)/2,maxZ:lane+(stairWidth+.035)/2});
     }
     // Solid side stringers and a dark underside give the stairs real thickness.
     const q=new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,0,1),Math.atan2(-C.rise,end-start));
     const length=Math.hypot(span,C.rise);
-    for(const z of [-.94,.86])instance('box',shadowConcrete,[(start+end)/2,high-C.rise/2-.17,z],[length,.16,.10],q);
-    for(const z of [-.84,.74])railRun([start,high],[end,high-C.rise],z,.82,10);
+    for(const z of [lane-.55,lane+.55])instance('box',shadowConcrete,[(start+end)/2,high-C.rise/2-.17,z],[length,.16,.10],q);
+    for(const z of [lane-.58,lane+.58])railRun([start,high],[end,high-C.rise],z,.82,10);
     // Narrow end returns are welded to landing rails at both ends.
-    for(const [x,y]of[[start,high],[end,high-C.rise]])for(const z of [-.84,.74])rod([x,y+.82,z],[x+(x===left?-.10:.10),y+.82,z],.03,metal);
-    flightMetadata.push({index:f,direction:dir,start:{x:start,y:high},end:{x:end,y:high-C.rise},steps:C.steps,tread:run,riser:rise});
+    for(const [x,y]of[[start,high],[end,high-C.rise]])for(const z of [lane-.58,lane+.58])rod([x,y+.82,z],[x+(x===left?-.10:.10),y+.82,z],.03,metal);
+    flightMetadata.push({index:f,direction:dir,z:lane,width:stairWidth,start:{x:start,y:high,z:lane},end:{x:end,y:high-C.rise,z:lane},steps:C.steps,tread:run,riser:rise,treads,rails:{minZ:lane-.61,maxZ:lane+.61},bounds:{minX:left,maxX:right,minY:high-C.rise-.23,maxY:high+.85,minZ:lane-.61,maxZ:lane+.61}});
   }
   door(13,C.rise*C.flights,true);door(C.exit.x,0,false);
   // Continuous utility pipes, clamps, a drain and quiet corridor clutter.
@@ -148,17 +155,15 @@ export function createStairwellWorld(THREE,scene) {
   }
   rod([1.3,roof-.32,back+.12],[14.72,roof-.32,back+.12],.025,metal);
   box(.40,.018,.28,9.7,.012,.45,metal);for(let i=0;i<7;i++)box(.014,.005,.25,9.53+i*.055,.024,.45,black);
-  // A folded wooden pallet and a small, closed maintenance cabinet sit at the
-  // back, keeping the entire movement lane free.
+  // A folded pallet stays against the back wall, clear of the front corridor.
   for(let i=0;i<5;i++)box(.13,.80,.06,6.3+i*.16,.45,back+.16,wood);for(const y of [.17,.67])box(.85,.09,.08,6.62,y,back+.12,wood);
-  box(.78,1.05,.27,8.0,.53,back+.17,metal);box(.71,.97,.025,8.0,.54,back+.325,zinc);for(let i=0;i<4;i++)box(.43,.018,.01,8,.82-i*.045,back+.343,metal);box(.035,.12,.03,8.25,.43,back+.35,black);
   const dustCount=45,dustPositions=new Float32Array(dustCount*3);
   for(let i=0;i<dustCount;i++){dustPositions[i*3]=roomLeft+random(i+2)*(roomRight-roomLeft);dustPositions[i*3+1]=random(i+151)*roof;dustPositions[i*3+2]=-1.2+random(i+317)*1.5;}
   const dustGeometry=new THREE.BufferGeometry();dustGeometry.setAttribute('position',new THREE.BufferAttribute(dustPositions,3));const dust=new THREE.Points(dustGeometry,new THREE.PointsMaterial({color:'#bdb79b',size:.018,transparent:true,opacity:.17,depthWrite:false}));group.add(dust);
   for(const batch of batches.values()){
     const mesh=new THREE.InstancedMesh(batch.type==='box'?unitBox:unitCylinder,batch.material,batch.matrices.length);batch.matrices.forEach((m,i)=>mesh.setMatrixAt(i,m));mesh.instanceMatrix.needsUpdate=true;mesh.castShadow=batch.shadow;mesh.receiveShadow=true;group.add(mesh);
   }
-  const metadata={bounds:{min:[roomLeft-.36,-.4,-2.1],max:[roomRight+.36,roof+.3,1.33]},flights:flightMetadata,numbers,lights:lightList.length,drawBatches:batches.size};
+  const metadata={bounds:{min:[roomLeft-.36,-.4,-2.1],max:[roomRight+.36,roof+.3,3]},flights:flightMetadata,landings:landingMetadata,devices,numbers,ground:{minX:roomLeft,maxX:roomRight,minZ:groundBack,maxZ:groundFront,y:0},lights:lightList.length,drawBatches:batches.size};
   group.userData.stairwell=metadata;
   return {group,metadata,lights:lightList,update(time,state){
     if(!group.visible)return;

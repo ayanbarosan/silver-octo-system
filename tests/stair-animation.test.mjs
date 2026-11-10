@@ -15,13 +15,13 @@ function treadHeight(flight,x){
 }
 function rig(saved){
   const controller=createStairwell(),player={},boy=createBoy(THREE);controller.begin(player,saved);
-  boy.group.position.set(player.x,player.y,0);boy.group.rotation.y=player.face*Math.PI/2;boy.reset();
+  boy.group.position.set(player.x,player.y,player.z);boy.group.rotation.y=controller.state.heading;boy.reset();
   let time=0;
   function step(direction=0,delta=dt){
-    const before=player.x;controller.update(delta,{direction},player);time+=delta;
-    boy.group.position.set(player.x,player.y,0);
-    boy.group.rotation.y=THREE.MathUtils.damp(boy.group.rotation.y,player.face*Math.PI/2,8,delta);
-    boy.animate({time,dt:delta,speed:player.vx,travel:Math.abs(player.x-before),grounded:true,wake:1,stairs:controller.state});
+    const before={x:player.x,z:player.z};controller.update(delta,{direction},player);time+=delta;
+    boy.group.position.set(player.x,player.y,player.z);
+    boy.group.rotation.y=THREE.MathUtils.damp(boy.group.rotation.y,controller.state.heading,8,delta);
+    boy.animate({time,dt:delta,speed:Math.hypot(player.vx,player.vz),travel:Math.hypot(player.x-before.x,player.z-before.z),grounded:true,wake:1,stairs:controller.state});
     const animation=structuredClone(boy.group.userData.animation);
     const points=['leftSole','rightSole','pelvis','head'].map(name=>boy.group.getObjectByName(name).getWorldPosition(new THREE.Vector3()));
     return {animation,points};

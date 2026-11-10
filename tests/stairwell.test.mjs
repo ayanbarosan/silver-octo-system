@@ -1,16 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {STAIRWELL,createStairwell,stairDirection,stairHeight,normalizeStairSave} from '../src/stairwell.js';
+import {STAIRWELL,createStairwell,stairDirection,stairLane,stairHeight,normalizeStairSave} from '../src/stairwell.js';
 
 const setup=(saved=null)=>{const stairs=createStairwell(),p={};assert(stairs.begin(p,saved));return {stairs,p};};
 function move(stairs,p,direction,frames=120,fps=90){const events=[];for(let n=0;n<frames;n++){const event=stairs.update(1/fps,{direction},p);if(event)events.push(event);}return events;}
 function reachNext(stairs,p,fps=90){
   const flight=stairs.state.flight,heights=[];let event;
-  for(let n=0;n<fps*15&&stairs.state.flight===flight;n++){
+  for(let n=0;n<fps*17&&(stairs.state.flight===flight||stairs.state.phase==='turn');n++){
     event=stairs.update(1/fps,{direction:stairDirection(flight)},p);heights.push(p.y);
-    assert([p.x,p.y,p.vx,p.vy].every(Number.isFinite));assert(p.grounded);
+    assert([p.x,p.y,p.z,p.vx,p.vy,p.vz,stairs.state.heading].every(Number.isFinite));assert(p.grounded);
   }
   assert.equal(stairs.state.flight,flight+1);assert.equal(event,'floor');
+  assert.equal(stairs.state.phase,'walk');assert.equal(p.z,stairLane(flight+1));
   for(let n=1;n<heights.length;n++)assert(heights[n]<=heights[n-1]+1e-7,'Continuous descent may not step upward.');
 }
 
@@ -55,6 +56,7 @@ test('saved flight and position restore at derived support height without reopen
   const {stairs,p}=setup();reachNext(stairs,p);move(stairs,p,1,300);
   const snapshot=stairs.snapshot(),copy={...snapshot};assert.equal(snapshot.flight,1);
   const restored=setup(snapshot);assert.equal(restored.p.x,p.x);assert.equal(restored.p.y,p.y);assert.equal(restored.p.vx,0);
+  assert.equal(restored.p.z,stairLane(copy.flight));assert.equal(restored.p.vz,0);
   snapshot.flight=0;snapshot.x=14;
   assert.deepEqual(restored.stairs.snapshot(),copy);
   restored.stairs.reset();assert.equal(restored.stairs.active,false);assert.equal(restored.stairs.state,null);assert.equal(restored.stairs.snapshot(),null);
@@ -81,4 +83,38 @@ test('support samples clamp to landings and expose the downward slope sign',()=>
   assert.equal(stairHeight(4,9),0);
   const {stairs,p}=setup();move(stairs,p,-1,350);assert(stairs.state.onStairs);assert(stairs.state.slope>0);
   assert.equal(stairs.sample(p.x),p.y);reachNext(stairs,p);move(stairs,p,1,300);assert(stairs.state.onStairs);assert(stairs.state.slope<0);
+});
+
+test('landing turns change depth only beyond the stair ends and cannot publish an unfinished save',()=>{
+  const {stairs,p}=setup();let turns=0,previous={...p},maxStep=0;
+  for(let frame=0;frame<7000&&!stairs.state.completed;frame++){
+    const phase=stairs.state.phase,flight=stairs.state.flight;
+    const event=stairs.update(1/90,{direction:flight<4?stairDirection(flight):-1},p);
+    maxStep=Math.max(maxStep,Math.hypot(p.x-previous.x,p.z-previous.z));
+    if(stairs.state.phase==='turn'){
+      assert.equal(stairs.snapshot(),null,'Continue must retain the last supported route position until the turn completes.');
+      assert.equal(stairs.state.onStairs,false);
+      assert.equal(p.y,stairs.state.turn.floorY);
+      if(Math.abs(p.z-previous.z)>1e-8){
+        const outside=p.x<STAIRWELL.left?STAIRWELL.left-p.x:p.x-STAIRWELL.right;
+        assert(outside>=.6,'A lane change beside an end tread would cut through the staircase.');
+      }
+    }
+    if(event==='floor'){
+      turns++;assert.equal(phase,'turn');assert(stairs.snapshot());
+      assert.equal(p.z,stairLane(stairs.state.flight));
+    }
+    previous={...p};
+  }
+  assert.equal(turns,4);assert(stairs.state.completed);assert.equal(p.z,STAIRWELL.groundZ);
+  assert(maxStep<.035,`Landing motion jumps ${maxStep.toFixed(4)}m in one 90Hz frame.`);
+});
+
+test('pausing a lane change freezes position, heading and turn progress',()=>{
+  const {stairs,p}=setup();
+  for(let n=0;n<1500&&stairs.state.phase!=='turn';n++)stairs.update(1/90,{direction:-1},p);
+  move(stairs,p,1,65);assert.equal(stairs.state.phase,'turn');assert(p.vz!==0);
+  const before=structuredClone({state:stairs.state,player:p});
+  for(let n=0;n<200;n++)stairs.update(0,{direction:-1},p);
+  assert.deepEqual({state:stairs.state,player:p},before);
 });

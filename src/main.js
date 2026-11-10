@@ -33,10 +33,10 @@ let state='intro',time=0,wake=0,checkpoint=0,cameraX=-5.5,messageUntil=0,jumpHel
 let jumpBuffer=0,coyoteTime=0,acceleration=0,landImpact=0,cameraY=0,cameraLead=1.6;
 const jumpMotion={preparing:false,elapsed:0,duration:.12,airTime:0,launched:false,launchSpeed:0};
 function resetJumpMotion(){Object.assign(jumpMotion,{preparing:false,elapsed:0,duration:.12,airTime:0,launched:false,launchSpeed:0});}
-const previousSim={x:0,y:0,vx:0};
+const previousSim={x:0,y:0,z:0,vx:0,vz:0};
 const previousWobble={},drawWobble={},drawClimb={},drawLadder={},drawSlip={};
-let lastDrawX=0,mantle=null,ledgeIntent=0,climbsCompleted=0;
-const player={x:0,y:0,vx:0,vy:0,grounded:true,face:1};
+let lastDrawX=0,lastDrawZ=0,mantle=null,ledgeIntent=0,climbsCompleted=0;
+const player={x:0,y:0,z:0,vx:0,vy:0,vz:0,grounded:true,face:1};
 const opening=createOpening(),openingVisual={active:false,elapsed:0,wake:0,escaped:false};
 const bridge=createBridge();
 const ladder=createLadder();
@@ -127,16 +127,16 @@ function showOverlay(panel){
 function resetWorld(saved=null){
  clearInput();wake=saved?.awakened?1:0;checkpoint=saved?.checkpoint??0;fade=0;
  chapterTransition=null;stairwell.reset();setChapter(saved?.chapter==='stairwell'?'stairwell':'rooftop');
- Object.assign(player,{x:saved?.player.x??restArea.spawnX,y:saved?.player.y??restArea.surfaceY,vx:0,vy:0,grounded:true,face:saved?.player.face??1});
+ Object.assign(player,{x:saved?.player.x??restArea.spawnX,y:saved?.player.y??restArea.surfaceY,z:0,vx:0,vy:0,vz:0,grounded:true,face:saved?.player.face??1});
  if(chapter==='stairwell'){stairwell.begin(player,saved.stairwell);wake=1;}
  world.crate.position.x=saved?.crateX??13;
  jumpHeld=false;jumpBuffer=0;coyoteTime=0;resetJumpMotion();mantle=null;ledgeIntent=0;climbsCompleted=0;
  water.reset();dust.reset();bridge.restore(saved?.bridgeBroken??false);world.bridge?.reset();world.bridge?.update(time,bridge.state);
  ladder.reset();ladderCooldown=0;laddersCompleted=checkpoint===3?1:0;
- slip.restore(saved?.slipPlayed??false);slipsCompleted=slip.played?1:0;landImpact=0;acceleration=0;lastDrawX=player.x;
+ slip.restore(saved?.slipPlayed??false);slipsCompleted=slip.played?1:0;landImpact=0;acceleration=0;lastDrawX=player.x;lastDrawZ=player.z;
  tutorials.reset(saved?.learnedMechanics??[]);
- Object.assign(previousSim,{x:player.x,y:player.y,vx:0,climbId:null,ladderPhase:null,slipPhase:null});
- boy.group.position.set(player.x,player.y,0);boy.group.rotation.y=player.face*Math.PI/2;boy.reset?.();
+ Object.assign(previousSim,{x:player.x,y:player.y,z:player.z,vx:0,vz:0,climbId:null,ladderPhase:null,slipPhase:null});
+ boy.group.position.set(player.x,player.y,player.z);boy.group.rotation.y=player.face*Math.PI/2;boy.reset?.();
  opening.reset();world.opening?.reset();
  if(saved?.awakened)Object.assign(opening.state,{active:false,escaped:true,escapedAt:0,elapsed:10,phase:'complete',cue:'',edgeImpact:0});
  cameraX=chapter==='stairwell'?(STAIRWELL.left+STAIRWELL.right)/2:wake===1?player.x:-3.2;cameraLead=1.3;cameraY=player.y;accumulator=0;
@@ -147,6 +147,7 @@ function persistProgress(force=false){
  if(!force&&time-lastSaveAt<1)return;
  lastSaveAt=time;
  if(wake!==1||mantle||ladder.active||slip.active||jumpMotion.preparing||jumpMotion.launched)return;
+ if(chapter==='stairwell'&&stairwell.state?.phase==='turn')return;
  const snapshot=createSaveSnapshot({player,checkpoint,crateX:world.crate.position.x,bridgeBroken:!bridge.supported,slipPlayed:slip.played,awakened:true,learnedMechanics:tutorials.learned,
   ...(chapter==='stairwell'?{chapter,stairwell:stairwell.snapshot()}:{})});
  if(!snapshot)return;
@@ -334,9 +335,9 @@ function enterInterior(){
  mantle=null;ladder.reset();slip.restore(true);resetJumpMotion();jumpBuffer=0;coyoteTime=0;push=false;
  water.reset();dust.reset();wake=1;landImpact=0;acceleration=0;
  Object.assign(opening.state,{active:false,escaped:true,phase:'complete',cue:''});
- Object.assign(previousSim,{x:player.x,y:player.y,vx:0,climbId:null,ladderPhase:null,slipPhase:null});
- boy.group.position.set(player.x,player.y,0);boy.group.rotation.y=player.face*Math.PI/2;boy.reset?.();
- lastDrawX=player.x;cameraX=(STAIRWELL.left+STAIRWELL.right)/2;cameraY=player.y;
+ Object.assign(previousSim,{x:player.x,y:player.y,z:player.z,vx:0,vz:0,climbId:null,ladderPhase:null,slipPhase:null});
+ boy.group.position.set(player.x,player.y,player.z);boy.group.rotation.y=player.face*Math.PI/2;boy.reset?.();
+ lastDrawX=player.x;lastDrawZ=player.z;cameraX=(STAIRWELL.left+STAIRWELL.right)/2;cameraY=player.y;
  objectiveText='';hintText='';messageUntil=0;refreshHint();persistProgress(true);
 }
 let push=false;
@@ -513,7 +514,7 @@ function frame(now){
  if(state!=='pause'){
   time+=dt;accumulator+=dt;
   while(accumulator>=1/90){
-   Object.assign(previousSim,{x:player.x,y:player.y,vx:player.vx,
+   Object.assign(previousSim,{x:player.x,y:player.y,z:player.z,vx:player.vx,vz:player.vz,
     climbId:mantle?.targetId,climbProgress:mantle?.progress,
     ladderPhase:ladder.state?.phase,ladderProgress:ladder.state?.progress,
     slipPhase:slip.state?.phase,slipProgress:slip.state?.progress,slipElapsed:slip.state?.elapsed,slipImpact:slip.state?.impact});
@@ -526,7 +527,7 @@ function frame(now){
   if(fade===1){
    const respawn=LEVEL.checkpoints[checkpoint-1];
    player.x=respawn?respawn.x:restArea.spawnX;player.y=respawn?respawn.y:restArea.surfaceY;player.vy=0;player.vx=0;player.grounded=true;
-   Object.assign(previousSim,{x:player.x,y:player.y,vx:0});lastDrawX=player.x;boy.reset?.();
+   player.z=0;player.vz=0;Object.assign(previousSim,{x:player.x,y:player.y,z:0,vx:0,vz:0});lastDrawX=player.x;lastDrawZ=0;boy.reset?.();
    cameraX=player.x;cameraY=Math.max(0,player.y);state='play';jumpBuffer=0;coyoteTime=0;resetJumpMotion();mantle=null;ladder.reset();ladderCooldown=.3;ledgeIntent=0;water.reset();
    say('Steady yourself. Try again.',3);
   }
@@ -538,7 +539,10 @@ function frame(now){
  const alpha=accumulator/(1/90);
  const renderedX=THREE.MathUtils.lerp(previousSim.x,player.x,alpha);
  const renderedY=THREE.MathUtils.lerp(previousSim.y,player.y,alpha);
- const renderedSpeed=THREE.MathUtils.lerp(previousSim.vx,player.vx,alpha);
+ const renderedZ=THREE.MathUtils.lerp(previousSim.z,player.z,alpha);
+ const renderedVX=THREE.MathUtils.lerp(previousSim.vx,player.vx,alpha);
+ const renderedVZ=THREE.MathUtils.lerp(previousSim.vz,player.vz,alpha);
+ const renderedSpeed=chapter==='stairwell'?Math.hypot(renderedVX,renderedVZ):renderedVX;
  // Actions use the same render time as their root. Otherwise a 90 Hz action
  // advances by alternating one/two steps on a 60 Hz screen, speeding up and
  // slowing down a hand even though the underlying path is continuous.
@@ -556,14 +560,18 @@ function frame(now){
   renderedSlip.wobble=drawWobble;
  }
  if(state!=='pause'){
-  const travel=Math.min(.7,Math.abs(renderedX-lastDrawX));lastDrawX=renderedX;
-  boy.group.position.set(renderedX,renderedY,0);
+  const travel=Math.min(.7,Math.hypot(renderedX-lastDrawX,renderedZ-lastDrawZ));lastDrawX=renderedX;lastDrawZ=renderedZ;
+  boy.group.position.set(renderedX,renderedY,renderedZ);
   const attached=!!mantle||ladder.active||slip.active;
   if(slip.active){
    const motion=renderedSlip;boy.group.rotation.y=THREE.MathUtils.lerp(motion.turnStart??motion.face*Math.PI/2,motion.face*Math.PI/2,THREE.MathUtils.smoothstep(motion.elapsed,0,.18));
   }else if(ladder.active){
    const motion=renderedLadder,turn=motion.phase==='mount'||motion.phase==='top-in'?THREE.MathUtils.smoothstep(motion.progress,0,.22):1;
    boy.group.rotation.y=THREE.MathUtils.lerp(motion.turnStart??Math.PI/2,Math.PI/2,turn);
+  }else if(chapter==='stairwell'){
+   const heading=stairwell.state?.heading??player.face*Math.PI/2;
+   const turn=Math.atan2(Math.sin(heading-boy.group.rotation.y),Math.cos(heading-boy.group.rotation.y));
+   boy.group.rotation.y+=turn*(1-Math.exp(-8*dt));
   }else boy.group.rotation.y=mantle?mantle.face*Math.PI/2:THREE.MathUtils.damp(boy.group.rotation.y,player.face*Math.PI/2,8,dt);
   const contact=boy.animate({time:simTime,speed:attached?0:renderedSpeed,grounded:attached?true:player.grounded,wake:state==='intro'?0:wake,push,vy:player.vy,dt,travel:attached?0:travel,acceleration:acceleration*player.face,landImpact,
    jumpPrep:jumpMotion.preparing?Math.min(1,jumpMotion.elapsed/jumpMotion.duration):0,
@@ -615,4 +623,4 @@ boy.group.position.set(restArea.spawnX,restArea.surfaceY,0);boy.group.rotation.y
 applySettings();updateContinue();showOverlay(intro);requestAnimationFrame(frame);
 canvas.addEventListener('webglcontextlost',e=>{e.preventDefault();state='pause';$('#error').hidden=false;$('#error').textContent='3D graphics were interrupted. Reload the page to continue.'});
 // Non-enumerable observation hook for repeatable browser smoke tests.
-Object.defineProperty(window,'__game',{value:{get state(){return state},get chapter(){return chapter},get transition(){return chapterTransition?{...chapterTransition}:null},get stairwell(){return stairwell.state?{...stairwell.state,snapshot:stairwell.snapshot()}:null},get sceneVisibility(){return {outdoor:world.world.visible,interior:interior.group.visible,rain:rain.visible}},get wake(){return wake},get checkpoint(){return checkpoint},get tutorials(){return {current:tutorials.current,learned:tutorials.learned}},get roofRails(){return world.world.userData.roofRails??[]},get settings(){return {...preferences}},get saved(){return session.getSave()},get exposure(){return renderer.toneMappingExposure},get audio(){return {muted,volume:master?.gain.value??0,state:audio?.state??'uninitialized'}},get slip(){return slip.state?{...slip.state,wobble:{...slip.state.wobble}}:null},get slipPlayed(){return slip.played},get slipsCompleted(){return slipsCompleted},get dust(){return {active:dust.activeCount,emitted:dust.emittedCount}},get ladder(){return ladder.state?{...ladder.state}:null},get laddersCompleted(){return laddersCompleted},get bridge(){return {...bridge.state,supported:bridge.supported}},get opening(){return {...opening.state}},get jump(){return {...jumpMotion}},get animation(){return boy.group.userData.animation},get climb(){return mantle?{...mantle}:null},get climbsCompleted(){return climbsCompleted},get splashes(){return {active:water.activeCount,emitted:water.emittedCount}},get software(){return software},player,get crateX(){return world.crate.position.x},get drawCalls(){return renderer.info.render.calls},get triangles(){return renderer.info.render.triangles}}});
+Object.defineProperty(window,'__game',{value:{get state(){return state},get chapter(){return chapter},get transition(){return chapterTransition?{...chapterTransition}:null},get stairwell(){return stairwell.state?{...stairwell.state,turn:stairwell.state.turn?{...stairwell.state.turn}:undefined,snapshot:stairwell.snapshot()}:null},get interiorLayout(){return interior.metadata},get actor(){return {position:{x:boy.group.position.x,y:boy.group.position.y,z:boy.group.position.z},heading:boy.group.rotation.y,probes:Object.fromEntries(['head','pelvis','leftKnee','rightKnee'].map(name=>[name,boy.group.getObjectByName(name).getWorldPosition(new THREE.Vector3()).toArray()]))}},get sceneVisibility(){return {outdoor:world.world.visible,interior:interior.group.visible,rain:rain.visible}},get wake(){return wake},get checkpoint(){return checkpoint},get tutorials(){return {current:tutorials.current,learned:tutorials.learned}},get roofRails(){return world.world.userData.roofRails??[]},get settings(){return {...preferences}},get saved(){return session.getSave()},get exposure(){return renderer.toneMappingExposure},get audio(){return {muted,volume:master?.gain.value??0,state:audio?.state??'uninitialized'}},get slip(){return slip.state?{...slip.state,wobble:{...slip.state.wobble}}:null},get slipPlayed(){return slip.played},get slipsCompleted(){return slipsCompleted},get dust(){return {active:dust.activeCount,emitted:dust.emittedCount}},get ladder(){return ladder.state?{...ladder.state}:null},get laddersCompleted(){return laddersCompleted},get bridge(){return {...bridge.state,supported:bridge.supported}},get opening(){return {...opening.state}},get jump(){return {...jumpMotion}},get animation(){return boy.group.userData.animation},get climb(){return mantle?{...mantle}:null},get climbsCompleted(){return climbsCompleted},get splashes(){return {active:water.activeCount,emitted:water.emittedCount}},get software(){return software},player,get crateX(){return world.crate.position.x},get drawCalls(){return renderer.info.render.calls},get triangles(){return renderer.info.render.triangles}}});
