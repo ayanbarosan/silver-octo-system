@@ -168,3 +168,61 @@ test('the upper mantle approaches the roof progressively without a late sideways
   assert(peakLateralSpeed<MOVEMENT.walk*1.15,`The mantle rushes sideways at ${peakLateralSpeed.toFixed(2)}m/s, faster than a deliberate normal step.`);
   assert(elapsed>1.45&&elapsed<2.2,'The pull and step should remain a readable continuous action.');
 });
+
+test('an airborne ladder catch requires a nearby reachable ladder and motion toward its exposed face',()=>{
+  const airborne={x:config.x-.15,y:2,vx:1.9,vy:2,grounded:false,face:1};
+  assert(canMountLadder(airborne,config,'air'));
+  const invalid=[
+    {...airborne,grounded:true},{...airborne,x:config.x-.8},{...airborne,x:config.wallX+.1},
+    {...airborne,y:config.bottomY+.04},{...airborne,y:config.topY-.3},
+    {...airborne,face:-1},{...airborne,vx:-1.9},{...airborne,vy:-10},{...airborne,vy:8},
+    {...airborne,x:NaN},{...airborne,vy:Infinity}
+  ];
+  for(const p of invalid) {
+    const ladder=createLadder();assert.equal(canMountLadder(p,config,'air'),false);assert.equal(ladder.begin(p,'air'),false);assert.equal(ladder.active,false);
+  }
+  assert.equal(canMountLadder(airborne,config,'bottom'),false,'A jump catch must use its own height-preserving path instead of the ground mount.');
+});
+
+test('rising and falling jumps catch the ladder at their actual height and resume climbing there',()=>{
+  for(const [height,vy] of [[.56,3],[1.4,-3],[2.8,3],[4,-3]]) {
+    const ladder=createLadder(),p={x:config.x-.25,y:height,vx:1.9,vy,grounded:false,face:1};
+    const startX=p.x;assert(ladder.begin(p,'air'));assert.equal(ladder.state.phase,'catch');assert.equal(p.x,startX);assert.equal(p.y,height);
+    let previous={x:p.x,y:p.y},maxStep=0,frames=0;
+    while(ladder.state.phase==='catch'&&frames++<120) {
+      ladder.update(1/120,{up:true},p);
+      maxStep=Math.max(maxStep,Math.hypot(p.x-previous.x,p.y-previous.y));previous={x:p.x,y:p.y};
+      assert(p.y>=height-.001&&p.y<=height+.025,'Grabbing the ladder must preserve current jump height, with only a small upward inertial settle.');
+      assert.equal(p.grounded,false);assert.equal(p.vx,0);assert.equal(p.vy,0);
+    }
+    assert.equal(ladder.state.phase,'climb');assert(Math.abs(p.x-config.x)<1e-9);
+    assert(frames/120>.2&&frames/120<.4&&maxStep<.025,'The catch should align the body briefly and continuously rather than teleporting to a rung.');
+    const caughtY=p.y;
+    for(let frame=0;frame<30;frame++)ladder.update(1/120,{},p);
+    assert.equal(p.y,caughtY,'Releasing input after a catch must hold the height where the ladder was grabbed.');
+    if(height<3.8) {
+      for(let frame=0;frame<60;frame++)ladder.update(1/120,{up:true},p);
+      assert(p.y>caughtY+.2,'Climbing after the catch must advance from that height instead of restarting at the bottom.');
+    }
+  }
+});
+
+test('a low airborne catch pauses exactly and can release to the floor without first snapping up to the base mount',()=>{
+  const ladder=createLadder(),p={x:config.x-.2,y:config.bottomY+.11,vx:1.9,vy:-2,grounded:false,face:1};
+  assert(ladder.begin(p,'air'));ladder.update(.1,{},p);
+  const before={player:{...p},state:structuredClone(ladder.state)};
+  for(let frame=0;frame<20;frame++)ladder.update(0,{down:true},p);
+  assert.deepEqual(p,before.player);assert.deepEqual(ladder.state,before.state);
+  for(let frame=0;frame<120&&ladder.state.phase==='catch';frame++)ladder.update(1/120,{},p);
+  const caughtY=p.y;let previous=p.y,maxStep=0,sawRelease=false,complete=false;
+  for(let frame=0;frame<240&&ladder.active;frame++) {
+    const event=ladder.update(1/120,{down:true},p);if(ladder.state?.phase==='bottom-out')sawRelease=true;
+    maxStep=Math.max(maxStep,Math.abs(p.y-previous));previous=p.y;
+    assert(p.y<=caughtY+.001,'A low catch must descend directly instead of jumping up to the normal first-rung mount height.');
+    if(event==='complete-bottom')complete=true;
+  }
+  assert(sawRelease&&complete&&!ladder.active);assert.equal(p.y,config.bottomY);assert.equal(p.grounded,true);assert(maxStep<.015);
+  Object.assign(p,{x:config.x-.2,y:2,vx:1.9,vy:2,grounded:false,face:1});assert(ladder.begin(p,'air'));ladder.reset();
+  assert.equal(ladder.state,null);assert.equal(ladder.active,false);
+  Object.assign(p,player());assert(ladder.begin(p));assert.equal(ladder.state.phase,'mount','Reset must not carry an old airborne catch into the next ground entry.');
+});

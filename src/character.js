@@ -468,8 +468,13 @@ export function createBoy(THREE) {
       animation.ladderStage=p<.20?'grip-handrail':p<.44?'pull-and-knee-over':p<.60?'load-leading-foot':p<.80?'weight-transfer':p<.94?'bring-trailing-foot':'stand-and-balance';
     } else {
       if(phaseName==='mount')authoredWeight=smooth(progress,.18,.88);
+      if(phaseName==='catch') {
+        authoredWeight=smooth(progress,0,.88);
+        const absorb=Math.sin(Math.PI*progress);
+        hipHeight-=.025*absorb;tilt+=.12*absorb;
+      }
       if(phaseName==='bottom-out')authoredWeight=1-smooth(progress,.08,.94);
-      animation.ladderStage=phaseName==='mount'?'mount':phaseName==='bottom-out'?'step-off':ladder.direction<0?'descend':ladder.direction>0?'ascend':'hold';
+      animation.ladderStage=phaseName==='catch'?(progress<.50?'catch-reach':progress<.82?'catch-grip':'catch-settle'):phaseName==='mount'?'mount':phaseName==='bottom-out'?'step-off':ladder.direction<0?'descend':ladder.direction>0?'ascend':'hold';
     }
     torso.position.set(.009*Math.sin(coordinate*TAU)*(top?1-smooth(p,0,.4):1),hipHeight,hipZ);
     torso.rotation.set(tilt,0,.012*Math.sin(coordinate*TAU)*(top?1-smooth(p,0,.4):1));
@@ -498,8 +503,8 @@ export function createBoy(THREE) {
     }
     if(authoredWeight<1)blendPose(1-authoredWeight);
     for(let i=0;i<2;i++) {
-      ladderContacts.hands[i]*=authoredWeight;
-      ladderContacts.weights[i]*=authoredWeight;
+      ladderContacts.hands[i]*=authoredWeight*(phaseName==='catch'?smooth(progress,.62,.86):1);
+      ladderContacts.weights[i]*=authoredWeight*(phaseName==='catch'?smooth(progress,.72,.96):1);
       ladderContacts.stances[i]=ladderContacts.stances[i]&&authoredWeight>.5;
     }
     animation.mode='ladder';animation.jumpStage='grounded';

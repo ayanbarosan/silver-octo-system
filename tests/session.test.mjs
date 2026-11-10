@@ -87,7 +87,7 @@ test('safe snapshots use permanent floor geometry and strip live controller and 
     const result=createSaveSnapshot(input);assert(result,`A settled safe surface at x=${floor.x},y=${floor.y} must be resumable.`);
     assert.equal(result.version,1);assert.equal(result.player.y,floor.y,'Tiny render height error must normalize to the physical support surface.');
     assert.deepEqual(result.player,{x:floor.x,y:floor.y,face:-1},'Continue stores stable position and facing, not velocities or a half-finished controller.');
-    assert.deepEqual(Object.keys(result).sort(),['version','checkpoint','player','crateX','bridgeBroken','slipPlayed','awakened'].sort());
+    assert.deepEqual(Object.keys(result).sort(),['version','checkpoint','player','crateX','bridgeBroken','slipPlayed','awakened','learnedMechanics'].sort());
     assert.equal(input.player.y,floor.y+.01,'Canonicalizing a snapshot must not move the live player.');
   }
 });
@@ -154,11 +154,36 @@ test('starting a new game clears old continuation and world progress while prese
     const storage=memoryStorage();
     if(brokenRemove)storage.removeItem=()=>{throw new Error('blocked removal');};
     const session=createSession(storage);session.setSettings({hints:true,sound:false,volume:.3,brightness:1.2});
-    const preferences=session.getSettings();assert(session.save(snapshot({x:39.2,y:4.65,checkpoint:3,crateX:16,bridgeBroken:true})));
+    const preferences=session.getSettings();assert(session.save(snapshot({x:39.2,y:4.65,checkpoint:3,crateX:16,bridgeBroken:true,learnedMechanics:['push','crate-climb','ladder']})));
     session.clearSave();assert.equal(session.getSave(),null);
     assert.equal(createSession(storage).getSave(),null,'A cleared save cannot reappear on the next page session, even if removeItem is unavailable.');
     assert.deepEqual(createSession(storage).getSettings(),preferences,'Starting over must not reset accessibility and audio preferences.');
     const fresh=snapshot({x:0,y:.12,checkpoint:0,crateX:13,bridgeBroken:false,slipPlayed:false,awakened:false});
     assert(session.save(fresh));assert.deepEqual(createSession(storage).getSave(),fresh,'New game data must replace all old world progress rather than merge with it.');
+    assert.deepEqual(createSession(storage).getSave().learnedMechanics,[],'A new run cannot inherit the previous run’s learned introductions.');
   }
+});
+
+test('older version1 saves without tutorial history continue safely with an empty learned list',()=>{
+  const old=snapshot();delete old.learnedMechanics;
+  const storage=memoryStorage({[saveKey]:JSON.stringify(old)}),session=createSession(storage);
+  assert.deepEqual(session.getSave(),{...old,learnedMechanics:[]},'Adding first-encounter lessons must preserve existing version1 continuation data.');
+  assert(session.save(old));assert.deepEqual(JSON.parse(storage.getItem(saveKey)).learnedMechanics,[]);
+  for(const invalid of [null,'push',{},42]) {
+    const continued=createSession(memoryStorage({[saveKey]:JSON.stringify({...old,learnedMechanics:invalid})}));
+    assert.deepEqual(continued.getSave(),{...old,learnedMechanics:[]},'Corrupt optional tutorial history must not discard an otherwise safe run.');
+  }
+});
+
+test('learned mechanics persist as unique supported IDs without sharing the caller or UI arrays',()=>{
+  const source=['ladder','push','ladder','unknown',null,4,'door','Push'];
+  const input=liveGame({learnedMechanics:source}),canonical=createSaveSnapshot(input);
+  const expected=['door','ladder','push'];
+  assert.deepEqual([...canonical.learnedMechanics].sort(),expected);
+  source.push('running-jump');assert.deepEqual([...canonical.learnedMechanics].sort(),expected,'Snapshot creation must copy the live tutorial history.');
+  const storage=memoryStorage(),session=createSession(storage);assert(session.save(canonical));
+  canonical.learnedMechanics.push('crate-climb');assert.deepEqual([...session.getSave().learnedMechanics].sort(),expected,'Saving must copy the caller’s learned array.');
+  const ui=session.getSave();ui.learnedMechanics.length=0;
+  assert.deepEqual([...session.getSave().learnedMechanics].sort(),expected,'Reading a save cannot expose the internal learned list to mutation.');
+  assert.deepEqual([...createSession(storage).getSave().learnedMechanics].sort(),expected,'Continue must suppress exactly the lessons already shown in the saved run.');
 });

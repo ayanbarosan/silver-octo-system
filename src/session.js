@@ -1,4 +1,5 @@
 import {LEVEL} from './level.js';
+import {TUTORIAL_IDS} from './tutorial.js';
 
 export const DEFAULT_SETTINGS=Object.freeze({hints:false,sound:true,volume:.65,brightness:1});
 const SETTINGS_KEY='runaway.settings.v1',SAVE_KEY='runaway.save.v1';
@@ -9,7 +10,8 @@ const pipe=Object.freeze({x:16.725,w:.55,y:1.65});
 const guard=Object.freeze({x:-1.04,w:.18,y:1.32});
 const record=value=>value!==null&&typeof value==='object'&&!Array.isArray(value);
 const inRange=(value,min,max)=>typeof value==='number'&&Number.isFinite(value)&&value>=min&&value<=max;
-const copySave=value=>value?{...value,player:{...value.player}}:null;
+const copySave=value=>value?{...value,player:{...value.player},learnedMechanics:[...value.learnedMechanics]}:null;
+const learnedFrom=value=>Array.isArray(value)?[...new Set(value.filter(id=>typeof id==='string'&&TUTORIAL_IDS.includes(id)))]:[];
 
 function settingsFrom(value,base=DEFAULT_SETTINGS){
   const settings={...base};
@@ -40,7 +42,7 @@ function normalizeSave(value,requireGrounded=false){
     player.x+BODY_RADIUS>blocker.x+EPSILON&&player.x-BODY_RADIUS<blocker.x+blocker.w-EPSILON
   ));
   if(!support)return null;
-  return {version:1,checkpoint,player:{x:player.x,y:support.y,face:player.face},crateX,bridgeBroken,slipPlayed,awakened};
+  return {version:1,checkpoint,player:{x:player.x,y:support.y,face:player.face},crateX,bridgeBroken,slipPlayed,awakened,learnedMechanics:learnedFrom(value.learnedMechanics)};
 }
 
 // Save only settled feet on permanent geometry. Transient ladders, jumps,

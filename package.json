@@ -1,12 +1,12 @@
 {
   "name": "runaway",
-  "version": "0.13.0",
+  "version": "0.14.0",
   "private": true,
   "scripts": {
     "dev": "npm run build && node server.js",
     "start": "node server.js",
     "build": "node scripts/build.mjs",
-    "test": "node --check src/main.js && node --check src/world.js && node --check server.js && node tests/animation.test.mjs && node tests/climb-water.test.mjs && node tests/movement-opening.test.mjs && node tests/bridge.test.mjs && node tests/ladder.test.mjs && node tests/ladder-animation.test.mjs && node tests/slip.test.mjs && node tests/slip-animation.test.mjs && node tests/session.test.mjs"
+    "test": "node --check src/main.js && node --check src/world.js && node --check server.js && node tests/animation.test.mjs && node tests/climb-water.test.mjs && node tests/movement-opening.test.mjs && node tests/bridge.test.mjs && node tests/ladder.test.mjs && node tests/ladder-animation.test.mjs && node tests/slip.test.mjs && node tests/slip-animation.test.mjs && node tests/session.test.mjs && node tests/tutorial.test.mjs"
   },
   "dependencies": {
     "three": "0.180.0"

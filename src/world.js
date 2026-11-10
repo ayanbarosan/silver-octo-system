@@ -101,6 +101,39 @@ export function createWorld(THREE, scene) {
       }
     }
   }
+  world.userData.roofRails = [];
+  function finishedRoofRail(left, right, level) {
+    const z = -2.35, inset = .32, start = left + inset, end = right - inset;
+    const railY = level + 1.02, plinthY = level + .19, postTop = railY + .028;
+    const intervals = Math.max(1, Math.ceil((end - start) / 2.8));
+    const postXs = Array.from({ length: intervals + 1 }, (_, i) => start + (end - start) * i / intervals);
+    const terminalReturns = [], returnZ = -2.055;
+    function anchoredPost(x, postZ, footY, terminal) {
+      cylinder(.027, postTop - footY, x, (postTop + footY) / 2, postZ, darkMetal);
+      // Closed welded caps cover the pipe ends; none of the tubing is open.
+      box(.064, .014, .064, x, postTop + .004, postZ, darkMetal);
+      box(.14, .022, .14, x, footY + .011, postZ, zinc);
+      for (const dx of [-.046, .046]) box(.018, .012, .022, x + dx, footY + .028, postZ + .041, darkMetal);
+      if (terminal) {
+        cylinder(.036, .055, x, railY - .065, postZ, zinc);
+        box(.01, .11, .032, x - .028, footY + .24, postZ, rust);
+      }
+    }
+    postXs.forEach((x, i) => anchoredPost(x, z, plinthY, i === 0 || i === postXs.length - 1));
+    // One aligned top rail lands exactly on the terminal posts, not beyond them.
+    const topRail = cylinder(.022, end - start, (start + end) / 2, railY, z, darkMetal);
+    topRail.rotation.z = Math.PI / 2;
+    for (const x of [start, end]) {
+      const returnRail = cylinder(.022, returnZ - z, x, railY, (z + returnZ) / 2, darkMetal);
+      returnRail.rotation.x = Math.PI / 2;
+      anchoredPost(x, returnZ, level, true);
+      terminalReturns.push({ x, z: returnZ, footY: level });
+    }
+    world.userData.roofRails.push({
+      left, right, postXs, railY, z, terminals: true, terminalReturns,
+      bounds: { min: [start - .07, level, z - .07], max: [end + .07, postTop + .011, returnZ + .07] }
+    });
+  }
   function rooftop(left, right, level, seed) {
     const center = (left + right) / 2, width = right - left;
     box(width, 35, 4.3, center, level - 17.7, -.25, wallMat);
@@ -121,11 +154,7 @@ export function createWorld(THREE, scene) {
     for (let z = -1.8; z < 1.7; z += 1.2) box(width - .3, .007, .014, center, level + .006, z, darkMetal, world, false);
     // Rear parapet and old safety rail stay behind the playable lane.
     box(width, .19, .21, center, level + .095, -2.38, rimMat);
-    for (let x = left + 1; x < right - .3; x += 2.8) {
-      cylinder(.026, .87, x, level + .6, -2.35);
-      const railSpan = Math.min(2.8, right - .3 - x);
-      box(railSpan, .035, .035, x + railSpan / 2, level + 1.02, -2.35, darkMetal);
-    }
+    finishedRoofRail(left, right, level);
     // Layered irregular patches read as rainwater, with a darker damp perimeter.
     for (let i = 0; i < 7; i++) {
       const spec = { x: left + 1.1 + random(seed + i + 50) * (width - 2.2), y: level + .008,

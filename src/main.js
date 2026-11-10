@@ -16,11 +16,13 @@ import {createLadder,canMountLadder} from './ladder.js';
 import {createSlip} from './slip.js';
 import {createDustEffects} from './dust.js';
 import {createSession,createSaveSnapshot} from './session.js';
+import {createTutorials} from './tutorial.js';
 
 const $=s=>document.querySelector(s);
 const canvas=$('#scene'),intro=$('#intro'),message=$('#message'),ending=$('#ending');
 const settingsPanel=$('#settings'),pauseMenu=$('#pause-menu'),pauseButton=$('#pause-button');
 const session=createSession();
+const tutorials=createTutorials({touch:matchMedia('(pointer: coarse)').matches});
 let preferences=session.getSettings(),settingsReturn='intro',pausedState='play';
 let objectiveText='',hintText='',lastSaveAt=-10,lastSavedSignature='';
 const keys=new Set();
@@ -92,7 +94,8 @@ function resize(){const w=innerWidth,h=innerHeight;const ratio=Math.min(qualityR
 function say(text,duration=3){if(!preferences.hints)return;hintText=text;messageUntil=time+duration;}
 function setObjective(text){objectiveText=text;}
 function refreshHint(){
- const text=preferences.hints&&state==='play'?(time<messageUntil?hintText:opening.state.active?opening.state.cue:objectiveText):'';
+ const lesson=state==='play'&&!slip.active?tutorials.current:null;
+ const text=state==='play'?(lesson?.text??(preferences.hints?(time<messageUntil?hintText:opening.state.active?opening.state.cue:objectiveText):'')):'';
  message.hidden=!text;if(message.textContent!==text)message.textContent=text;
 }
 function updateContinue(){ $('#continue').disabled=!session.getSave(); }
@@ -112,6 +115,7 @@ function resetWorld(saved=null){
  water.reset();dust.reset();bridge.restore(saved?.bridgeBroken??false);world.bridge?.reset();world.bridge?.update(time,bridge.state);
  ladder.reset();ladderCooldown=0;laddersCompleted=checkpoint===3?1:0;
  slip.restore(saved?.slipPlayed??false);slipsCompleted=slip.played?1:0;landImpact=0;acceleration=0;lastDrawX=player.x;
+ tutorials.reset(saved?.learnedMechanics??[]);
  Object.assign(previousSim,{x:player.x,y:player.y,vx:0,climbId:null,ladderPhase:null,slipPhase:null});
  boy.group.position.set(player.x,player.y,0);boy.group.rotation.y=player.face*Math.PI/2;boy.reset?.();
  opening.reset();world.opening?.reset();
@@ -124,14 +128,19 @@ function persistProgress(force=false){
  if(!force&&time-lastSaveAt<1)return;
  lastSaveAt=time;
  if(wake!==1||mantle||ladder.active||slip.active||jumpMotion.preparing||jumpMotion.launched)return;
- const snapshot=createSaveSnapshot({player,checkpoint,crateX:world.crate.position.x,bridgeBroken:!bridge.supported,slipPlayed:slip.played,awakened:true});
+ const snapshot=createSaveSnapshot({player,checkpoint,crateX:world.crate.position.x,bridgeBroken:!bridge.supported,slipPlayed:slip.played,awakened:true,learnedMechanics:tutorials.learned});
  if(!snapshot)return;
  const signature=JSON.stringify(snapshot);
  if(signature!==lastSavedSignature&&session.save(snapshot)){lastSavedSignature=signature;updateContinue();}
 }
+function persistLearning(){
+ const saved=session.getSave();if(!saved)return;
+ const updated={...saved,learnedMechanics:tutorials.learned};
+ if(session.save(updated))lastSavedSignature=JSON.stringify(updated);
+}
 function start(){
  session.clearSave();resetWorld();state='play';showOverlay(null);
- const initial=createSaveSnapshot({player,checkpoint:0,crateX:13,bridgeBroken:false,slipPlayed:false,awakened:false});
+ const initial=createSaveSnapshot({player,checkpoint:0,crateX:13,bridgeBroken:false,slipPlayed:false,awakened:false,learnedMechanics:[]});
  if(initial){session.save(initial);lastSavedSignature=JSON.stringify(initial);}
  updateContinue();configureAudio(true);canvas.focus();
  say('You are awake. The city is still sleeping.',4);
@@ -245,6 +254,12 @@ function beginLadder(entry){
  say('Hold UP to climb. DOWN to descend. Release to hold on.',3);
  return true;
 }
+function tryAirCatch(direction){
+ if(player.grounded||ladderCooldown>0||keys.has('e')||direction<0)return false;
+ const upward=keys.has('w')||keys.has('ArrowUp')||keys.has(' ');
+ if(direction===0&&player.vx<=.15&&!upward)return false;
+ return canMountLadder(player,LEVEL.ladder,'air')&&beginLadder('air');
+}
 function advanceLadder(dt){
  const event=ladder.update(dt,ladderInput(),player);
  setObjective('Climb to the upper roof. Take your time.');
@@ -304,6 +319,7 @@ function physics(dt){
  if(ladder.active){advanceLadder(dt);return;}
  if(mantle){advanceClimb(dt);return;}
  let direction=Number(keys.has('d')||keys.has('ArrowRight'))-Number(keys.has('a')||keys.has('ArrowLeft'));
+ if(tryAirCatch(direction))return;
  if(ladderCooldown===0&&!keys.has('e')){
   const climbUp=keys.has('w')||keys.has('ArrowUp')||keys.has(' ');
   if(canMountLadder(player)&&((direction>0&&player.x>=LEVEL.ladder.x-.24)||climbUp)){if(beginLadder('bottom'))return;}
@@ -361,7 +377,9 @@ function physics(dt){
   const support=groundStepY(nextX,player.y,colliders());
   if(support!==undefined){player.y=support;previousY=support;player.vy=0;}
  }
- player.x=nextX;player.vy-=(jumpMotion.launched?MOVEMENT.gravity:MOVEMENT.fallGravity)*dt;player.y+=player.vy*dt;player.grounded=false;
+ player.x=nextX;
+ if(!wasGrounded&&tryAirCatch(direction))return;
+ player.vy-=(jumpMotion.launched?MOVEMENT.gravity:MOVEMENT.fallGravity)*dt;player.y+=player.vy*dt;player.grounded=false;
  const fallSpeed=-player.vy;
  for(const c of colliders())if(player.x>c.x-.02&&player.x<c.x+c.w+.02&&previousY>=c.y-.025&&player.y<=c.y&&player.vy<=0){player.y=c.y;player.vy=0;player.grounded=true;}
  if(!wasGrounded&&player.grounded&&fallSpeed>1){
@@ -469,6 +487,8 @@ function frame(now){
    say('Steady yourself. Try again.',3);
   }
  }else fade=Math.max(0,fade-dt*1.7);
+ const shown=tutorials.update(dt,{playing:state==='play',wake,player,crateX:world.crate.position.x,busy:!!mantle||slip.active,ladderActive:ladder.active});
+ if(shown)persistLearning();
  if(state==='play')persistProgress();
  refreshHint();
  const alpha=accumulator/(1/90);
@@ -544,4 +564,4 @@ boy.group.position.set(restArea.spawnX,restArea.surfaceY,0);boy.group.rotation.y
 applySettings();updateContinue();showOverlay(intro);requestAnimationFrame(frame);
 canvas.addEventListener('webglcontextlost',e=>{e.preventDefault();state='pause';$('#error').hidden=false;$('#error').textContent='3D graphics were interrupted. Reload the page to continue.'});
 // Non-enumerable observation hook for repeatable browser smoke tests.
-Object.defineProperty(window,'__game',{value:{get state(){return state},get wake(){return wake},get checkpoint(){return checkpoint},get settings(){return {...preferences}},get saved(){return session.getSave()},get exposure(){return renderer.toneMappingExposure},get audio(){return {muted,volume:master?.gain.value??0,state:audio?.state??'uninitialized'}},get slip(){return slip.state?{...slip.state,wobble:{...slip.state.wobble}}:null},get slipPlayed(){return slip.played},get slipsCompleted(){return slipsCompleted},get dust(){return {active:dust.activeCount,emitted:dust.emittedCount}},get ladder(){return ladder.state?{...ladder.state}:null},get laddersCompleted(){return laddersCompleted},get bridge(){return {...bridge.state,supported:bridge.supported}},get opening(){return {...opening.state}},get jump(){return {...jumpMotion}},get animation(){return boy.group.userData.animation},get climb(){return mantle?{...mantle}:null},get climbsCompleted(){return climbsCompleted},get splashes(){return {active:water.activeCount,emitted:water.emittedCount}},get software(){return software},player,get crateX(){return world.crate.position.x},get drawCalls(){return renderer.info.render.calls},get triangles(){return renderer.info.render.triangles}}});
+Object.defineProperty(window,'__game',{value:{get state(){return state},get wake(){return wake},get checkpoint(){return checkpoint},get tutorials(){return {current:tutorials.current,learned:tutorials.learned}},get roofRails(){return world.world.userData.roofRails??[]},get settings(){return {...preferences}},get saved(){return session.getSave()},get exposure(){return renderer.toneMappingExposure},get audio(){return {muted,volume:master?.gain.value??0,state:audio?.state??'uninitialized'}},get slip(){return slip.state?{...slip.state,wobble:{...slip.state.wobble}}:null},get slipPlayed(){return slip.played},get slipsCompleted(){return slipsCompleted},get dust(){return {active:dust.activeCount,emitted:dust.emittedCount}},get ladder(){return ladder.state?{...ladder.state}:null},get laddersCompleted(){return laddersCompleted},get bridge(){return {...bridge.state,supported:bridge.supported}},get opening(){return {...opening.state}},get jump(){return {...jumpMotion}},get animation(){return boy.group.userData.animation},get climb(){return mantle?{...mantle}:null},get climbsCompleted(){return climbsCompleted},get splashes(){return {active:water.activeCount,emitted:water.emittedCount}},get software(){return software},player,get crateX(){return world.crate.position.x},get drawCalls(){return renderer.info.render.calls},get triangles(){return renderer.info.render.triangles}}});

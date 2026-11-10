@@ -6,7 +6,7 @@ Cross three rooftops: climb past the vent, move the crate to clear the pipe, tak
 
 ## Opening
 
-**New Game** begins on the torn mattress, beside a pillow and a folded blanket. The railing protects the left edge while a searchlight sweeps the roof. Gameplay has no chapter banners, objective panels, control legend, branding or instructions. Hints are disabled by default.
+**New Game** begins on the torn mattress, beside a pillow and a folded blanket. The railing protects the left edge while a searchlight sweeps the roof. Gameplay has no chapter banners, objective panels, control legend or branding. Each new mechanic receives one brief caption on its first encounter; recurring hints are disabled by default.
 
 The menu and opening use the same restrained, darker palette as the city, with the lime backpack and warm doorway providing clear landmarks.
 
@@ -14,7 +14,7 @@ The menu and opening use the same restrained, darker palette as the city, with t
 
 The main menu uses an original green RUNAWAY wordmark drawn as local vector lettering over the live city. **New Game** starts over; **Continue Game** restores the most recent safe grounded position, the crate, broken crossing and puddle progress. Continue is disabled until a valid save exists. Pausing and returning to the menu also save when the current position is safe. Jumps, ladders and other unfinished actions resume from the preceding stable position.
 
-**Settings** contains sound, volume, brightness and an optional **Hints** switch. Hints stay off unless enabled; enabling them adds one quiet contextual caption. Preferences and progress are kept in this browser. If an offline browser blocks storage, the current session still supports settings and Continue in memory.
+**Settings** contains sound, volume, brightness and an optional **Hints** switch. Hints stay off unless enabled; enabling them adds one quiet contextual caption. First-encounter messages introduce moving objects, crate climbing, running jumps, ladders and the door once each, with touch-specific text on phones. Continue remembers messages already shown; New Game resets them. Preferences and progress are kept in this browser. If an offline browser blocks storage, the current session still supports settings and Continue in memory.
 
 ## Play
 
@@ -26,6 +26,7 @@ Open the generated `dist/Runaway.html` file in Chrome, Edge, or Firefox. No serv
 - **Hold a direction toward a reachable vent or pipe ledge**: automatically grab the edge and pull yourself up.
 - **Space**, **W**, or **Up** beside the crate: climb onto it. Walking into the crate or waiting beside it does not start a climb.
 - **W**, **Up**, or **Space** at the wall ladder: climb up.
+- **Jump toward the ladder**: catch a reachable rung at the height reached, then climb or hold still.
 - **S** or **Down** at the wall ladder: climb down, including entering the ladder from the upper roof.
 - **D / Right** or **A / Left** while on the ladder: climb up or down, respectively. Release the controls to hold still; reverse direction at any point.
 - **E + a direction**: push the crate.
@@ -44,7 +45,7 @@ After **New Game**, the boy automatically braces his palms against the roof, bri
 3. Push the crate toward the tall pipe, then stand beside it and press **Space**, **W**, or **Up** (**↑** on a phone) to climb onto it. Continue over the pipe. The crate does not trigger an automatic climb when you approach, wait beside it, or return after stepping off.
 4. Take a running jump over the first gap to the middle apartment block.
 5. Walk across the wooden plank spanning the second gap to the lower landing beside the final building. It breaks behind you only after you reach the landing safely.
-6. At the left wall, hold **W**, **Up**, or **Space** to climb the ladder. Stop to hold still, or use **S / Down** to reverse. You can also use **D / A** while climbing.
+6. At the left wall, hold **W**, **Up**, or **Space** to climb the ladder, or jump toward it to catch a rung without dropping to the base. Stop to hold still, or use **S / Down** to reverse. You can also use **D / A** while climbing.
 7. Step onto the upper roof to set the final checkpoint, then continue to the lit door and press **E**. To go back down, hold **S / Down** at the top of the ladder.
 
 ## Android: play the downloaded ZIP offline
@@ -115,3 +116,9 @@ The crate now requires a jump/climb press: **Space**, **W**, **Up**, or **↑** 
 At the top of the ladder, the boy gradually transfers support from the handrails to a planted leading foot, brings the trailing leg up, and stands on the roof. The body moves progressively instead of rushing sideways at the end.
 
 Slip and recovery body poses carry motion through their intermediate positions while hands and feet retain their supporting contacts. Climbing, ladder and slip poses use the same interpolated render time as the character's position, keeping their motion even between physics steps.
+
+## Finished railings and airborne ladder catch — v0.14
+
+All four rooftop railings have terminal posts, capped tubing, short end returns and anchored feet. The ends sit inside each roof's edge, behind the playable lane.
+
+Jumping toward a reachable ladder now blends into a short reach, grip and settle at the height already reached. The boy can hold there, climb up or reverse down. Brief first-encounter captions appear once per mechanic and are saved separately from the optional recurring hints.
