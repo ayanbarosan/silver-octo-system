@@ -187,3 +187,75 @@ test('learned mechanics persist as unique supported IDs without sharing the call
   assert.deepEqual([...session.getSave().learnedMechanics].sort(),expected,'Reading a save cannot expose the internal learned list to mutation.');
   assert.deepEqual([...createSession(storage).getSave().learnedMechanics].sort(),expected,'Continue must suppress exactly the lessons already shown in the saved run.');
 });
+
+function interiorGame({flight=0,x=13,y=12.8,face=-1,...other}={}) {
+  return liveGame({x,y,face,checkpoint:3,crateX:16,bridgeBroken:true,slipPlayed:true,awakened:true,
+    chapter:'stairwell',stairwell:{flight,x,face},learnedMechanics:['push','ladder','door'],...other});
+}
+
+test('Continue preserves the current stair flight and landing across all four descended floors',()=>{
+  const storage=memoryStorage(),session=createSession(storage);
+  const positions=[
+    {flight:0,x:13,y:12.8},
+    {flight:0,x:7.5,y:11.2},
+    {flight:1,x:2,y:9.6},
+    {flight:1,x:7.5,y:8,face:1},
+    {flight:2,x:7.5,y:4.8},
+    {flight:3,x:7.5,y:1.6,face:1},
+    {flight:4,x:10,y:0}
+  ];
+  for(const position of positions) {
+    const input=interiorGame(position),canonical=createSaveSnapshot(input);
+    assert(canonical,`Supported interior route ${JSON.stringify(position)} must be resumable.`);
+    assert.equal(canonical.chapter,'stairwell');assert.equal(canonical.stairwell.flight,position.flight);
+    assert.equal(canonical.player.x,position.x);assert(Math.abs(canonical.player.y-position.y)<1e-9);
+    assert.equal(canonical.player.face,position.face??-1);
+    assert(session.save(canonical));
+    assert.deepEqual(createSession(storage).getSave(),canonical,'A reload must retain the committed descending flight rather than select the previous stairs.');
+    assert.deepEqual(canonical.learnedMechanics,['push','ladder','door']);
+    assert.equal(canonical.crateX,16);assert.equal(canonical.bridgeBroken,true);
+  }
+});
+
+test('stair snapshots reject unsupported and mismatched positions without replacing the last safe save',()=>{
+  const storage=memoryStorage(),session=createSession(storage),good=createSaveSnapshot(interiorGame({flight:2,x:7.5,y:4.8}));
+  assert(good);assert(session.save(good));
+  const invalid=[
+    {...good,chapter:'unknown'},
+    {...good,awakened:false},
+    {...good,stairwell:null},
+    {...good,stairwell:[]},
+    {...good,stairwell:{...good.stairwell,flight:-1}},
+    {...good,stairwell:{...good.stairwell,flight:5}},
+    {...good,stairwell:{...good.stairwell,flight:1.5}},
+    {...good,stairwell:{...good.stairwell,x:Infinity}},
+    {...good,stairwell:{...good.stairwell,x:-1}},
+    {...good,stairwell:{...good.stairwell,face:0}},
+    {...good,stairwell:{...good.stairwell,x:7.6}},
+    {...good,stairwell:{...good.stairwell,face:1}},
+    {...good,player:{...good.player,y:good.player.y+.04}},
+    {...good,player:{...good.player,x:good.player.x+.04}}
+  ];
+  for(const value of invalid) {
+    assert.equal(session.save(value),false,JSON.stringify(value));
+    assert.deepEqual(session.getSave(),good,'An invalid interior autosave cannot lose the last reachable continuation.');
+    assert.equal(createSession(memoryStorage({[saveKey]:JSON.stringify(value)})).getSave(),null);
+  }
+  const airborne=interiorGame();airborne.player.grounded=false;
+  assert.equal(createSaveSnapshot(airborne),null,'Live snapshots need positive supported feet, including indoors.');
+});
+
+test('indoor continuation data and lesson history are copied independently from callers and menu reads',()=>{
+  const source=interiorGame({flight:1,x:7.5,y:8,face:1}),canonical=createSaveSnapshot(source);
+  assert(canonical);source.stairwell.flight=4;
+  assert.equal(canonical.stairwell.flight,1,'Snapshot creation must copy live route state.');
+  const storage=memoryStorage(),session=createSession(storage);assert(session.save(canonical));
+  const expected=structuredClone(canonical);canonical.stairwell.x=2;canonical.player.x=2;
+  assert.deepEqual(session.getSave(),expected,'Saving must copy the caller’s route object.');
+  const copy=session.getSave();copy.stairwell.flight=0;copy.player.y=12.8;copy.learnedMechanics.length=0;
+  assert.deepEqual(session.getSave(),expected,'A menu copy must not alter the floor restored by Continue.');
+  assert.deepEqual(createSession(storage).getSave(),expected);
+  const roof=createSaveSnapshot(liveGame({chapter:'rooftop'}));
+  assert(roof);assert.equal(Object.hasOwn(roof,'chapter'),false,'Older rooftop saves retain their canonical shape.');
+  assert.equal(Object.hasOwn(roof,'stairwell'),false);
+});

@@ -1,4 +1,5 @@
 import {MOVEMENT} from './movement.js';
+import {STAIRWELL,stairHeight,stairDirection} from './stairwell.js';
 
 /** A small, fully rigged child. Local forward is +Z and the soles rest on Y=0. */
 export function createBoy(THREE) {
@@ -163,7 +164,7 @@ export function createBoy(THREE) {
   const footWorld=new THREE.Vector3(),temporary=new THREE.Vector3();
   const animation={phase:0,mode:'idle',wakeStage:'awake',jumpStage:'grounded',climbStage:'none',ladderStage:'none',slipStage:'none',launchLead:0,launchSpeed:0,landingReach:0,feet:legs.map(()=>({stance:true,contactWeight:1,position:{x:0,y:0,z:0}})),hands:arms.map(()=>({contactWeight:0,position:{x:0,y:0,z:0}}))};
   group.userData.animation=animation;
-  let phase=0,moving=0,running=0,pushing=0,air=0,lean=0,headLean=0,bagLean=0,locomotionActive=false;
+  let phase=0,moving=0,running=0,pushing=0,air=0,lean=0,headLean=0,bagLean=0,locomotionActive=false,stairWeight=0;
   let landing=0,landingVelocity=0,previousGrounded=true,previousTime=0,initialized=false;
   let internalAirTime=0,previousPrep=0,launchCrouch=0;
   let launchLead=0,takeoffSpeed=0,takeoffRun=0,landingReach=0,landingAge=Infinity,landingFoot=0,bagVelocity=0;
@@ -185,7 +186,7 @@ export function createBoy(THREE) {
   const slipEuler=new THREE.Euler();
 
   function reset() {
-    phase=.04;moving=running=pushing=air=lean=headLean=bagLean=0;locomotionActive=false;
+    phase=.04;moving=running=pushing=air=lean=headLean=bagLean=stairWeight=0;locomotionActive=false;
     landing=landingVelocity=0;previousGrounded=true;previousTime=0;initialized=false;internalAirTime=previousPrep=launchCrouch=0;launchLead=takeoffSpeed=takeoffRun=landingReach=landingFoot=bagVelocity=0;landingAge=Infinity;
     pose.position.set(0,0,0);pose.rotation.set(0,0,0);
     torso.position.set(0,.64,0);torso.rotation.set(0,0,0);torso.scale.set(1,1,1);
@@ -670,13 +671,30 @@ export function createBoy(THREE) {
    * foot's world anchor survives changing speeds, which avoids skating while
    * accelerating or settling into a stop.
    */
-  function animate({time=0,speed=0,grounded=true,wake=1,push=false,vy=0,dt,travel,acceleration=0,landImpact=0,jumpPrep=0,airTime,takeoff,climb=null,ladder=null,slip=null,launchSpeed,landingDistance}={}) {
+  function animate({time=0,speed=0,grounded=true,wake=1,push=false,vy=0,dt,travel,acceleration=0,landImpact=0,jumpPrep=0,airTime,takeoff,climb=null,ladder=null,slip=null,stairs=null,launchSpeed,landingDistance}={}) {
     if(climb||ladder||slip){grounded=true;speed=0;travel=0;jumpPrep=0;airTime=0;takeoff=0;}
     const delta=clamp(Number.isFinite(dt)?dt:(initialized?time-previousTime:1/60),0,.1);
     previousTime=time;
     stepResult.footstep=false;stepResult.intensity=0;
     if(initialized&&delta===0)return stepResult;
     initialized=true;
+    const stairSupport=!!stairs&&grounded&&!climb&&!ladder&&!slip;
+    const stairStart=stairs&&stairDirection(stairs.flight)<0?STAIRWELL.right:STAIRWELL.left;
+    // Prepare the knees while approaching the first nosing, leaving enough
+    // reach for the lower shoe before it takes weight. This avoids a sudden
+    // pelvis correction at touchdown on a sixteen-centimetre step.
+    const approachStair=stairSupport&&stairs.flight<STAIRWELL.flights&&Math.abs(group.position.x-stairStart)<.65&&Math.abs(speed)>.05;
+    stairWeight=damp(stairWeight,stairSupport&&(stairs.onStairs||approachStair)?1:0,9,delta);
+    const supportHeight=x=>{
+      const floor=stairs?.flight??STAIRWELL.flights;
+      if(!stairSupport||floor>=STAIRWELL.flights)return stairSupport?0:group.position.y;
+      const direction=stairDirection(floor),start=direction<0?STAIRWELL.right:STAIRWELL.left;
+      const progress=(x-start)*direction/(STAIRWELL.right-STAIRWELL.left);
+      if(progress<=0||progress>=1)return stairHeight(floor,x);
+      // The body follows a continuous support ramp; a shoe lands on a real,
+      // horizontal concrete tread rather than on that invisible ramp.
+      return (STAIRWELL.flights-floor)*STAIRWELL.rise-(Math.floor(progress*STAIRWELL.steps)+1)*STAIRWELL.rise/STAIRWELL.steps;
+    };
     // Rung contacts belong to the ladder; the first floor step acquires a new
     // ground anchor at the exit instead of reusing one from the entry roof.
     if((!ladder&&animation.mode==='ladder')||(!slip&&animation.mode==='slip'))for(const foot of footState){foot.hasAnchor=false;foot.wasStance=false;foot.landingPlant=false;}
@@ -722,8 +740,8 @@ export function createBoy(THREE) {
     // The short walking stride has double support; sprinting has short contact
     // and a recovery flight. Feet retract before touch-down rather than tracing
     // a circular clockwork motion.
-    const stride=lerp(.66+Math.min(speedAbs,2.2)*.235,1.82,runTarget);
-    const duty=lerp(.57,.36,runTarget);
+    const stride=lerp(lerp(.66+Math.min(speedAbs,2.2)*.235,1.82,runTarget),2*(STAIRWELL.right-STAIRWELL.left)/STAIRWELL.steps,stairWeight);
+    const duty=lerp(lerp(.57,.36,runTarget),.64,stairWeight);
     const actualTravel=Number.isFinite(travel)?Math.max(0,travel):speedAbs*delta;
     if(beginsWalk&&!justLanded) {
       // A resting shoe begins under the pelvis, already halfway through its
@@ -733,7 +751,7 @@ export function createBoy(THREE) {
       phase=cycle(duty*.5-support*.5);
       for(let i=0;i<legs.length;i++) {
         const foot=footState[i],actual=animation.feet[i].position;
-        foot.anchor.set(actual.x,group.position.y,actual.z);
+        foot.anchor.set(actual.x,supportHeight(actual.x),actual.z);
         foot.hasAnchor=true;foot.wasStance=cycle(phase+i*.5)<duty;
       }
     }
@@ -741,13 +759,13 @@ export function createBoy(THREE) {
     if(grounded&&wakeProgress>.98&&speedAbs>.025)phase=cycle(phase+actualTravel/Math.max(.5,stride));
     const angle=phase*TAU,breathe=Math.sin(time*1.85),bodyMotion=moving*(1-air);
     const gaitHeight=lerp(.595,.607,running)-lerp(.017,.035,running)*Math.cos(angle*2);
-    const hipHeight=lerp(.64+.0015*breathe,gaitHeight,bodyMotion)-landing-.095*squat+air*flight[1];
+    let hipHeight=lerp(.64+.0015*breathe,gaitHeight,bodyMotion)-landing-.095*squat+air*flight[1]-.105*stairWeight;
     pose.rotation.x=(1-stand)*Math.PI*.5;
     pose.position.y=(1-stand)*.205;
     const accelerationLean=clamp(acceleration,-10,10)*.0065;
     lean=damp(lean,lerp(.065,.225,running)*moving+accelerationLean+ pushing*.19,9,delta);
     torso.position.set(Math.sin(angle)*.013*bodyMotion,hipHeight,0);
-    torso.rotation.x=lerp(lean+.17*squat+landing*.7,flight[2]+.025*takeoffRun,air);
+    torso.rotation.x=lerp(lean+.17*squat+landing*.7+.055*stairWeight,flight[2]+.025*takeoffRun,air);
     torso.rotation.y=Math.cos(angle)*lerp(.045,.07,running)*moving*(1-pushing);
     torso.rotation.z=Math.sin(angle)*.019*bodyMotion+air*Math.sin(flightProgress*TAU)*.012;
     torso.scale.set(1,1+.003*breathe*(1-moving),1+.008*breathe*(1-moving));
@@ -768,23 +786,37 @@ export function createBoy(THREE) {
       const leg=legs[i],f=footState[i],p=cycle(phase+i*.5);
       const isStance=p<duty;
       const span=stride*duty,front=.025+span*.5,rear=.025-span*.5;
-      let z,y=0,roll=0,weight=0;
+      let z,y=0,supportY=0,roll=0,weight=0;
       if(isStance) {
         z=front-p*stride;
-        weight=smooth(p,0,.07)*(1-smooth(p,duty-.085,duty));
+        weight=smooth(p,0,stairSupport ? .13 : .07)*(1-smooth(p,duty-.085,duty));
         // Flat support through most of stance; heel acceptance and toe-off only
         // occupy the ends, with enough lift to keep the full shoe above concrete.
         roll=-.19*(1-smooth(p,0,.095))+.43*smooth(p,duty-.10,duty);
         y=.12*Math.abs(Math.sin(roll));
         if(!f.hasAnchor||!f.wasStance||stand<.98) {
           if(locomotionActive&&moving<.985) {
-            const actual=animation.feet[i].position;f.anchor.set(actual.x,group.position.y,actual.z);
-          } else {temporary.set(leg.side*.108,0,z);group.localToWorld(temporary);f.anchor.copy(temporary);}
+            const actual=animation.feet[i].position;f.anchor.set(actual.x,supportHeight(actual.x),actual.z);
+          } else {
+            temporary.set(leg.side*.108,0,z);group.localToWorld(temporary);
+            if(stairSupport) {
+              // On a descent the next tread can be lower than a short child's
+              // relaxed leg can reach. Shorten that first contact naturally.
+              for(let attempt=0;attempt<7;attempt++) {
+                const y=supportHeight(temporary.x)-group.position.y;
+                if(Math.hypot(y+.06-hipHeight,z)<THIGH+SHIN-.012)break;
+                z*=.76;temporary.set(leg.side*.108,0,z);group.localToWorld(temporary);
+              }
+              temporary.y=supportHeight(temporary.x);
+            }
+            f.anchor.copy(temporary);
+          }
           f.hasAnchor=true;
           if(f.wasStance===false&&moving>.6&&grounded&&stand>.99&&air<.35){footstep=true;contactIntensity=Math.max(contactIntensity,lerp(.45,1,running));}
         }
         temporary.copy(f.anchor);group.worldToLocal(temporary);
         z=temporary.z;
+        if(stairSupport)supportY=temporary.y;
       }else{
         f.hasAnchor=false;
         const u=(p-duty)/(1-duty),u2=u*u,u3=u2*u;
@@ -793,11 +825,25 @@ export function createBoy(THREE) {
         const lift=Math.sin(Math.PI*u)**2;
         y=lerp(.14,.34,running)*lift*(1+.35*Math.cos(Math.PI*u));
         roll=lerp(.43,-.19,smooth(u))+.12*Math.sin(Math.PI*u);
+        if(stairSupport) {
+          temporary.set(leg.side*.108,0,z);group.localToWorld(temporary);
+          // A smooth swing baseline clears the risers without inheriting
+          // discontinuous changes from the next concrete tread.
+          supportY=stairHeight(stairs.flight,temporary.x)-group.position.y-.025;
+          y+=.06*lift*stairWeight;
+        }
       }
       f.wasStance=isStance;
       // Feet settle to a relaxed parallel stance when the actual root stops.
       if(!isStance||!locomotionActive)z=lerp(.025,z,moving);
       y*=moving;roll*=moving;
+      if(stairSupport) {
+        if(!locomotionActive) {
+          temporary.set(leg.side*.108,0,z);group.localToWorld(temporary);
+          supportY=supportHeight(temporary.x)-group.position.y;
+        }
+        y+=supportY;
+      }
       const role=i===launchLead?0:1;
       let airFront=flight[3+role*3]*lerp(.88,1.14,takeoffRun);
       let airHeight=flight[4+role*3]*lerp(.94,1.06,takeoffRun);
@@ -806,7 +852,7 @@ export function createBoy(THREE) {
       // Acquire the rendered shoe's last world contact, not a distant ideal
       // stride target. This avoids a visible catch-up slide after touchdown.
       if(grounded&&isStance&&landingAge<.65&&!f.landingPlant&&f.target.y<.025){
-        const actual=animation.feet[i].position;f.anchor.set(actual.x,group.position.y,actual.z);
+        const actual=animation.feet[i].position;f.anchor.set(actual.x,supportHeight(actual.x),actual.z);
         temporary.copy(f.anchor);group.worldToLocal(temporary);z=temporary.z;f.hasAnchor=true;f.landingPlant=true;
       }
       const contactBlend=grounded&&f.landingPlant?0:air;
@@ -817,31 +863,47 @@ export function createBoy(THREE) {
       // Smooth state transitions, not the planted ground constraint. Once fully
       // supporting the body the IK uses the anchor directly, with zero lag.
       const landingContact=grounded&&f.landingPlant;
-      const planted=isStance&&grounded&&(moving>.985||locomotionActive)&&(air<.015||landingContact)&&stand>.999;
-      if(planted)f.target.copy(target);else f.target.lerp(target,1-Math.exp(-25*delta));
+      const planted=isStance&&(!stairSupport||p>.13)&&grounded&&(moving>.985||locomotionActive)&&(air<.015||landingContact)&&stand>.999;
+      const reachDistance=f.target.distanceTo(target),acceptanceTravel=4*delta;
+      if(stairSupport&&reachDistance>acceptanceTravel) {
+        temporary.copy(target).sub(f.target);f.target.addScaledVector(temporary,acceptanceTravel/reachDistance);
+      }else if(planted)f.target.copy(target);else f.target.lerp(target,1-Math.exp(-25*delta));
       f.roll=damp(f.roll,roll,22,delta);
       solveLeg(leg,f.target,f.roll,hipHeight);
       stances[i]=grounded&&(moving<.05||isStance);
-      weights[i]=grounded?lerp(1,weight,moving)*(landingContact?1:1-air)*stand:0;
+      weights[i]=grounded?lerp(1,weight,moving)*(landingContact?1:1-air)*stand*(stairSupport?1-smooth(f.target.distanceTo(target),.005,.035):1):0;
       forward[i]=clamp((z-.025)/Math.max(.2,span*.5),-1,1);
+    }
+    if(stairSupport) {
+      // Lower the pelvis just enough for the loaded leg to reach its tread;
+      // knee flexion carries the descent rather than stretching the skeleton.
+      for(let i=0;i<legs.length;i++) {
+        const f=footState[i],ankleY=f.target.y+.06*Math.cos(f.roll)+.026*Math.sin(f.roll);
+        const ankleZ=f.target.z+.06*Math.sin(f.roll)-.026*Math.cos(f.roll);
+        const reach=THIGH+SHIN-.003;
+        hipHeight=Math.min(hipHeight,ankleY+Math.sqrt(Math.max(.01,reach*reach-ankleZ*ankleZ)));
+      }
+      torso.position.y=hipHeight;
+      head.position.y=.679-(hipHeight-.64)*.42-.003*Math.cos(angle*2)*moving;
+      for(let i=0;i<legs.length;i++)solveLeg(legs[i],footState[i].target,footState[i].roll,hipHeight);
     }
     for(let i=0;i<arms.length;i++) {
       const arm=arms[i];
       const swing=forward[i]*lerp(.44,.84,running)*moving;
-      const shoulderTarget=lerp(swing,-1.04,pushing)+.72*squat;
-      const elbowTarget=lerp(lerp(-.23,-1.14,running)-Math.max(0,-forward[i])*.12*moving,-.31,pushing);
+      const shoulderTarget=lerp(swing,-1.04,pushing)+.72*squat-.10*stairWeight;
+      const elbowTarget=lerp(lerp(-.23,-1.14,running)-Math.max(0,-forward[i])*.12*moving,-.31,pushing)-.08*stairWeight;
       const armRole=i===launchLead?0:1;
       const jumpArm=flight[9+armRole*2]-.09*takeoffRun;
       arm.shoulder.position.x=damp(arm.shoulder.position.x,arm.side*.227,14,delta);
       arm.shoulder.rotation.x=damp(arm.shoulder.rotation.x,lerp(shoulderTarget,jumpArm,air),15,delta);
-      arm.shoulder.rotation.z=damp(arm.shoulder.rotation.z,-arm.side*(lerp(.055,.023,running)+air*flight[13]),12,delta);
+      arm.shoulder.rotation.z=damp(arm.shoulder.rotation.z,-arm.side*(lerp(.055,.023,running)+air*flight[13]+.075*stairWeight),12,delta);
       arm.elbow.rotation.x=damp(arm.elbow.rotation.x,lerp(elbowTarget,flight[10+armRole*2]-.12*takeoffRun,air),12,delta);
       arm.wrist.rotation.x=damp(arm.wrist.rotation.x,air*(-.10+.12*tuck),12,delta);
       arm.shoulder.rotation.y=damp(arm.shoulder.rotation.y,0,14,delta);
       arm.elbow.rotation.y=damp(arm.elbow.rotation.y,0,14,delta);arm.elbow.rotation.z=damp(arm.elbow.rotation.z,0,14,delta);
       arm.wrist.rotation.y=damp(arm.wrist.rotation.y,0,14,delta);arm.wrist.rotation.z=damp(arm.wrist.rotation.z,0,14,delta);
     }
-    animation.mode=wakeProgress<1?'wake':!grounded?'air':pushing>.5?'push':moving<.05?'idle':running>.5?'run':'walk';
+    animation.mode=wakeProgress<1?'wake':!grounded?'air':pushing>.5?'push':moving<.05?'idle':stairWeight>.5?'stairs':running>.5?'run':'walk';
     animation.wakeStage='awake';
     animation.jumpStage=grounded?(jumpPrep>0?'anticipation':landing>.008?'landing':'grounded'):(launchProgress<1?'takeoff':vy>1.2?'rising':vy>-.9?'apex':'descent');
     let handWeights=wakeProgress<1?applyWake(wakeProgress,time):noHands;

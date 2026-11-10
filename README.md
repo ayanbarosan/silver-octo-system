@@ -2,7 +2,7 @@
 
 An original **2.5D adventure prototype** with a fully 3D character and city, played from a side view. A boy in a black tracksuit with white stripes and a lime backpack wakes on a torn mattress in a small rooftop shelter above a quiet city of apartment blocks. A fixed railing and concrete base guard the edge beside his bedding.
 
-Cross three rooftops: climb past the vent, move the crate to clear the pipe, take a running jump to the middle block, then cross a wooden plank to a lower landing beside the final building. The plank breaks behind you after you reach the landing safely. Climb the wall ladder to the upper roof, where the next checkpoint is set, and continue to the lit door. The scene uses concrete textures, layered city silhouettes, fog, shadows, and a subdued early morning palette. Walking, running, waking, jumping, landing, and climbing use animated character poses.
+Cross three rooftops: climb past the vent, move the crate to clear the pipe, take a running jump to the middle block, then cross a wooden plank to a lower landing beside the final building. The plank breaks behind you after you reach the landing safely. Climb the wall ladder to the upper roof and enter the lit door to reach the interior stairwell. Descend four flights, alternating direction at each landing, then follow the ground-floor corridor to its door. The scene uses concrete textures, layered city silhouettes, fog, shadows, and a subdued early morning palette. Walking, running, waking, jumping, landing, and climbing use animated character poses.
 
 ## Opening
 
@@ -46,7 +46,8 @@ After **New Game**, the boy automatically braces his palms against the roof, bri
 4. Take a running jump over the first gap to the middle apartment block.
 5. Walk across the wooden plank spanning the second gap to the lower landing beside the final building. It breaks behind you only after you reach the landing safely.
 6. At the left wall, hold **W**, **Up**, or **Space** to climb the ladder, or jump toward it to catch a rung without dropping to the base. Stop to hold still, or use **S / Down** to reverse. You can also use **D / A** while climbing.
-7. Step onto the upper roof to set the final checkpoint, then continue to the lit door and press **E**. To go back down, hold **S / Down** at the top of the ladder.
+7. Step onto the upper roof to set the final checkpoint, then continue to the lit door and press **E** (the hand icon on a phone). To go back down the outdoor ladder, hold **S / Down** at its top.
+8. Inside, walk left down the first flight. At each landing, turn around to descend the next flight: left, right, left, right. Completed flights cannot be selected again. On the ground floor, walk left to the corridor door.
 
 ## Android: play the downloaded ZIP offline
 
@@ -72,7 +73,7 @@ npm start
 npm test
 ```
 
-`npm run build` bundles `src/main.js` into `game.js` and generates `dist/Runaway.html` and the GitHub Pages site in `docs/`. `npm start` serves the existing build. `npm test` checks animation contacts, collision, movement, bridge and slip behavior, safe save snapshots, settings validation and storage fallback. WebGL rendering, menus and the complete level also need verification in a browser.
+`npm run build` bundles `src/main.js` into `game.js` and generates `dist/Runaway.html` and the GitHub Pages site in `docs/`. `npm start` serves the existing build. `npm test` checks animation contacts, collision, movement, bridge and slip behavior, stair descent and tread contacts, safe save snapshots, settings validation and storage fallback. WebGL rendering, menus and the complete level also need verification in a browser.
 
 Character geometry, buildings, windows, materials, and audio are generated locally. Three.js and the build tools are pinned in the dependency manifest and lockfile. The compiled game uses no external fonts, CDNs, or other network resources.
 
@@ -122,3 +123,9 @@ Slip and recovery body poses carry motion through their intermediate positions w
 All four rooftop railings have terminal posts, capped tubing, short end returns and anchored feet. The ends sit inside each roof's edge, behind the playable lane.
 
 Jumping toward a reachable ladder now blends into a short reach, grip and settle at the height already reached. The boy can hold there, climb up or reverse down. Brief first-encounter captions appear once per mechanic and are saved separately from the optional recurring hints.
+
+## Interior stairwell — v0.15
+
+The rooftop door opens into a sealed interior view with four concrete stair flights, worn two-tone plaster, numbered landings, capped railings, electrical boxes and caged wall lamps. The city and rain are hidden during this chapter. The camera follows the descent, and foot placement follows the individual treads.
+
+Use the usual left and right controls. Each completed flight retires from the route, so turning at its landing selects the next downward flight. Reversing before reaching a landing can still retrace the current flight. Jump inputs keep the boy supported on the stairs. Continue restores the current flight and position, including after reloading; New Game starts back on the roof. Reaching the ground-floor corridor door ends this prototype section.
