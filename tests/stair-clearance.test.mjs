@@ -80,7 +80,7 @@ test('the actual head, torso, knees and shoes clear other flights through every 
     }
     if(state.flight===C.flights&&state.phase!=='turn'){
       groundSamples++;assert.equal(r.player.z,C.groundZ);
-      for(const probe of probes)assert(probe.point.z-probe.radius>C.lanes[1]+C.stairWidth/2,'The ground return must pass in front of the final staircase with the whole body.');
+      for(const probe of probes)assert(probe.point.z+probe.radius<stairLane(C.flights-1)-C.stairWidth/2,'The ground return must pass behind the final staircase with the whole body.');
     }
   }
   assert(r.controller.state.completed,'The physical-clearance route must reach the actual ground exit.');
@@ -97,4 +97,26 @@ test('legacy ground-floor saves restore beside the stairs instead of inside the 
   // ground-height torso in that lane must reproduce the reported intersection.
   const oldRoute=new THREE.Vector3(9.6,.62,stairLane(3));
   assert(solids.some(solid=>solid.flight===3&&hits(solid,oldRoute,.15)),'The collision probe must detect the previous route through the lowest flight.');
+});
+
+test('the final descent reaches the rear-wall exit with the existing left and right controls',()=>{
+  const r=rig({flight:3,x:C.left,face:1});
+  // The existing exit handle is mounted on the back wall. The approach must
+  // reach it without asking the player to steer along an unavailable axis.
+  const doorFaceZ=-1.35,wallFaceZ=-1.69;
+  let reachedRear=false,groundSamples=0;
+  for(let frame=0;frame<4000&&!r.controller.state.completed;frame++){
+    const probes=r.step(r.controller.state.flight===3?1:-1);
+    if(r.controller.state.flight===C.flights&&r.controller.state.phase==='walk'){
+      reachedRear=true;groundSamples++;
+      for(const probe of probes){
+        assert(probe.point.z-probe.radius>wallFaceZ,`The rear route pushes ${probe.name} through the back wall.`);
+        for(const solid of solids)assert(!hits(solid,probe.point,probe.radius),`The rear exit approach intersects ${solid.name} with ${probe.name}.`);
+      }
+    }
+  }
+  assert(reachedRear&&groundSamples>100,'The route must include a supported rear-wall walk to the door.');
+  assert(r.controller.state.completed,'Left and right controls alone must reach the actual exit.');
+  assert.equal(r.player.x,C.exit.x);assert.equal(r.player.y,0);
+  assert(Math.hypot(r.player.x-C.exit.x,r.player.z-doorFaceZ)<.55,'The ground route must finish within reach of the back-wall door.');
 });

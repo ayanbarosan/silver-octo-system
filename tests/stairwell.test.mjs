@@ -118,3 +118,36 @@ test('pausing a lane change freezes position, heading and turn progress',()=>{
   for(let n=0;n<200;n++)stairs.update(0,{direction:-1},p);
   assert.deepEqual({state:stairs.state,player:p},before);
 });
+
+test('the final landing turns behind the lowest stairs and reaches the door with left/right controls',()=>{
+  const {stairs,p}=setup({flight:3,x:10.6,face:1});
+  assert.equal(p.z,stairLane(3));
+  let previousZ=p.z,rearwardSamples=0;
+  for(let frame=0;frame<900&&(stairs.state.flight<4||stairs.state.phase==='turn');frame++){
+    const previousPhase=stairs.state.phase;
+    stairs.update(1/90,{direction:1},p);
+    if(p.z<previousZ-1e-8){
+      rearwardSamples++;
+      assert(p.x>=STAIRWELL.right+.6,'The child must clear the stair end before moving behind it.');
+      assert.equal(previousPhase,'turn');
+      assert.equal(p.y,0);
+    }
+    previousZ=p.z;
+  }
+  assert(rearwardSamples>50,'The final turn must actually cross toward the door side.');
+  assert.equal(stairs.state.phase,'walk');assert.equal(p.z,STAIRWELL.groundZ);
+  assert(p.z+.33<stairLane(3)-STAIRWELL.stairWidth/2,'The entire body must walk behind the lowest stair flight.');
+  for(let frame=0;frame<1200&&!stairs.state.completed;frame++)stairs.update(1/90,{direction:-1},p);
+  assert(stairs.state.completed,'Ordinary left input must reach the ground-floor door.');
+  assert.equal(p.x,STAIRWELL.exit.x);assert.equal(p.y,0);assert.equal(p.z,STAIRWELL.groundZ);
+  assert.deepEqual([0,1,2,3].map(stairLane),[-.65,.95,-.65,.95],'Upper stair lanes remain unchanged.');
+});
+
+test('legacy ground-floor saves resume on the rear door approach without a new depth control',()=>{
+  const saved={flight:4,x:8.8,face:-1},r=setup(saved);
+  assert.equal(r.p.x,saved.x);assert.equal(r.p.z,STAIRWELL.groundZ);
+  assert.equal(r.p.vz,0);assert.deepEqual(r.stairs.snapshot(),saved);
+  move(r.stairs,r.p,-1,120);
+  assert(r.p.x<saved.x);assert.equal(r.p.z,STAIRWELL.groundZ);
+  assert.equal(r.stairs.state.phase,'walk');
+});

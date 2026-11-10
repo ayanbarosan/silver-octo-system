@@ -7,7 +7,7 @@ const OUTWARD_TIME=.62,CROSS_TIME=1.05;
 // The scenery, feet and controller share the same switchback dimensions.
 export const STAIRWELL=Object.freeze({
   left:3.4,right:11.6,rise:3.2,flights:4,steps:20,minX:1.8,maxX:14.2,
-  lanes:Object.freeze([-.65,.95]),stairWidth:1.0,groundZ:2.25,turnOutside:.72,
+  lanes:Object.freeze([-.65,.95]),stairWidth:1.0,groundZ:-.95,turnOutside:.72,
   entry:Object.freeze({x:13,y:12.8,face:-1}),
   exit:Object.freeze({x:2.2,y:0}),depth:3.5
 });

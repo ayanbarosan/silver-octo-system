@@ -135,3 +135,9 @@ Use the usual left and right controls. Each completed flight retires from the ro
 Stair flights now alternate between two physical depths. After each descent, the boy walks out onto the connected landing and turns around the end before entering the next lane. The ground-floor return runs in front of the lowest staircase. Normal left/right controls remain the same; the brief landing turn happens automatically. Pausing freezes the turn, and Continue uses the last safe supported position until the turn finishes. Existing stairwell saves restore into the correct lane.
 
 Floor numbers, disconnected opposite-side platforms and repeated electrical boxes have been removed. Only the necessary turning landings and the electrical box beside the former third-floor marking remain. Regression checks measure the actual head, torso, knees and shoes against stair geometry, including the ground-floor return.
+
+## Door-side ground route and hallway doors — v0.17
+
+After the final flight, the landing turn takes the boy behind the lowest staircase, on the same side as the ground-floor door. Walking left reaches that door with the existing controls; no manual depth movement is needed. Earlier flights and their controls stay the same, and older ground-floor saves restore onto this rear route.
+
+Floors 1, 2 and 3 have closed decorative doors suggesting corridors beyond the stairwell. These doors cannot open and do not lead to playable hallways. Floor 4 keeps only its roof-access door.
