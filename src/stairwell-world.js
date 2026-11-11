@@ -40,11 +40,12 @@ export function createStairwellWorld(THREE,scene) {
   const hallwaySteel=mat('#85907c',.84,{metalness:.18,bumpMap:relief,bumpScale:.008});
   const hallwayPanel=mat('#6f7d68',.87,{metalness:.14,bumpMap:relief,bumpScale:.008});
   const warmGlass=mat('#f1d29b',.5,{emissive:'#ffcd79',emissiveIntensity:2.4}),coldGlass=mat('#839b9b',.5,{emissive:'#536d70',emissiveIntensity:.22});
+  let placement=null;
   const batches=new Map(),dummy=new THREE.Object3D(),unitBox=new THREE.BoxGeometry(1,1,1),unitCylinder=new THREE.CylinderGeometry(1,1,1,10);
   function instance(type,material,position,scale,quaternion=null,shadow=true){
     const key=`${type}/${material.uuid}/${shadow}`;
     if(!batches.has(key))batches.set(key,{type,material,shadow,matrices:[]});
-    dummy.position.set(...position);dummy.scale.set(...scale);dummy.quaternion.identity();if(quaternion)dummy.quaternion.copy(quaternion);dummy.updateMatrix();batches.get(key).matrices.push(dummy.matrix.clone());
+    dummy.position.set(...position);dummy.scale.set(...scale);dummy.quaternion.identity();if(quaternion)dummy.quaternion.copy(quaternion);dummy.updateMatrix();const matrix=dummy.matrix.clone();if(placement)matrix.premultiply(placement);batches.get(key).matrices.push(matrix);
   }
   function box(w,h,d,x,y,z,material=concrete,shadow=true){instance('box',material,[x,y,z],[w,h,d],null,shadow);}
   function rod(a,b,r=.025,material=metal){
@@ -86,26 +87,55 @@ export function createStairwellWorld(THREE,scene) {
     box(.11,.035,.012,x-.08,y+.11,back+.296,black);for(let i=0;i<3;i++)box(.075,.012,.015,x-.08,y+.04-i*.035,back+.297,metal);
     rod([x,y+.34,back+.19],[x,y+.9+random(seed)*.3,back+.19],.018,metal);
   }
-  function door(x,y,kind='hallway',floor=Math.round(y/C.rise)){
-    const entry=kind==='entry';
-    const hallway=kind==='hallway';
-    box(1.22,2.4,.16,x,y+1.19,back+.15,shadowConcrete);box(1.04,2.21,.07,x,y+1.105,back+.27,hallway?hallwaySteel:wood);
-    for(const dx of [-.59,.59])box(.07,2.43,.12,x+dx,y+1.20,back+.27,zinc);box(1.25,.075,.12,x,y+2.40,back+.27,zinc);box(1.25,.04,.24,x,y+.025,back+.34,concrete);
-    if(hallway){
-      // A solid painted leaf and shallow framed panels read as closed even
-      // under the colder landing lamp, rather than resembling a black opening.
-      for(const [panelY,height]of[[.69,.78],[1.68,.73]]){
-        box(.75,height,.012,x,y+panelY,back+.313,hallwayPanel);
-        for(const dx of [-.39,.39])box(.018,height+.035,.020,x+dx,y+panelY,back+.324,zinc);
-        for(const dy of [-height/2-.008,height/2+.008])box(.80,.018,.020,x,y+panelY+dy,back+.324,zinc);
-      }
-      box(.88,.17,.018,x,y+.14,back+.318,zinc);
-      for(const hingeY of [.46,1.84])box(.055,.10,.035,x-.49,y+hingeY,back+.323,metal);
-    }else{
-      box(.36,.40,.02,x,y+1.56,back+.318,entry?coldGlass:black);for(const dx of [-.21,.21])box(.025,.47,.025,x+dx,y+1.56,back+.335,metal);box(.44,.025,.025,x,y+1.79,back+.335,metal);box(.44,.025,.025,x,y+1.33,back+.335,metal);
+  function sideDoor(onRight,y,floor){
+    // A doorway is set into the outside wall, perpendicular to the back wall.
+    // Its threshold joins the landing, rather than opening over the stair void.
+    const x=onRight?roomRight-.045:roomLeft+.045,z=.15;
+    const rotation=onRight?-Math.PI/2:Math.PI/2;
+    placement=new THREE.Matrix4().makeRotationY(rotation);placement.setPosition(x,y,z);
+    box(1.22,2.4,.12,0,1.19,-.025,black);
+    box(1.04,2.21,.07,0,1.105,.035,hallwaySteel);
+    for(const dx of [-.59,.59])box(.07,2.43,.12,dx,1.20,.05,zinc);
+    box(1.25,.075,.12,0,2.40,.05,zinc);box(1.25,.04,.26,0,.025,.07,concrete);
+    for(const [panelY,height]of[[.69,.78],[1.68,.73]]){
+      box(.75,height,.012,0,panelY,.078,hallwayPanel);
+      for(const dx of [-.39,.39])box(.018,height+.035,.020,dx,panelY,.089,zinc);
+      for(const dy of [-height/2-.008,height/2+.008])box(.80,.018,.020,0,panelY+dy,.089,zinc);
     }
-    box(.03,.17,.045,x+.33,y+.99,back+.34,black);box(.16,.023,.04,x+.27,y+1.02,back+.37,zinc);box(.025,.42,.03,x-.45,y+.32,back+.328,black);
-    doors.push({floor,kind,interactive:false,x,y,z:back+.27,width:1.04,height:2.21});
+    box(.88,.17,.018,0,.14,.083,zinc);
+    for(const hingeY of [.46,1.84])box(.055,.10,.035,-.49,hingeY,.088,metal);
+    box(.03,.17,.045,.33,.99,.105,black);box(.16,.023,.04,.27,1.02,.135,zinc);
+    placement=null;
+    doors.push({floor,kind:'hallway',interactive:false,wall:onRight?'right':'left',
+      normal:[onRight?-1:1,0,0],x,y,z,width:1.04,height:2.21,rotationY:rotation,
+      bounds:{min:[onRight?x-.20:x-.09,y,z-.625],max:[onRight?x+.09:x+.20,y+2.44,z+.625]}});
+  }
+  function createExitDoor(){
+    const x=C.exit.x,y=0,z=back+.27;
+    // The dark recess covers the sealed set wall once the leaf has opened.
+    box(1.22,2.4,.16,x,y+1.19,back+.15,shadowConcrete);
+    box(1.04,2.21,.025,x,y+1.105,z-.085,black);
+    for(const dx of [-.59,.59])box(.07,2.43,.12,x+dx,y+1.20,z,zinc);
+    box(1.25,.075,.12,x,y+2.40,z,zinc);box(1.25,.04,.24,x,y+.025,z+.07,concrete);
+    const hinge=new THREE.Group();hinge.name='ground-exit-leaf';hinge.position.set(x-.52,y,z);group.add(hinge);
+    function leafBox(w,h,d,xx,yy,zz,material){
+      const mesh=new THREE.Mesh(unitBox,material);mesh.position.set(xx,yy,zz);mesh.scale.set(w,h,d);
+      mesh.castShadow=true;mesh.receiveShadow=true;hinge.add(mesh);
+    }
+    leafBox(1.04,2.21,.07,.52,1.105,0,wood);
+    leafBox(.36,.40,.02,.52,1.56,.048,black);
+    for(const dx of [-.21,.21])leafBox(.025,.47,.025,.52+dx,1.56,.065,metal);
+    leafBox(.44,.025,.025,.52,1.79,.065,metal);leafBox(.44,.025,.025,.52,1.33,.065,metal);
+    leafBox(.03,.17,.045,.85,.99,.07,black);leafBox(.16,.023,.04,.79,1.02,.10,zinc);
+    leafBox(.025,.42,.03,.07,.32,.058,black);
+    let progress=0;
+    const api={
+      open(value){progress=Math.max(0,Math.min(1,Number.isFinite(value)?value:0));hinge.rotation.y=progress*progress*(3-2*progress)*Math.PI*.51;},
+      reset(){api.open(0);},get progress(){return progress;},get angle(){return hinge.rotation.y;}
+    };
+    doors.push({floor:0,kind:'exit',interactive:true,wall:'back',normal:[0,0,1],x,y,z,width:1.04,height:2.21,
+      bounds:{min:[x-.625,y,z-.16],max:[x+.625,y+2.44,z+.13]}});
+    return api;
   }
   // The two-tone paint is repeated per storey, with narrow chipped trim and
   // electrical conduits that continue down the stairwell rather than float.
@@ -120,21 +150,18 @@ export function createStairwellWorld(THREE,scene) {
       electricBox(1.55,y+1.15,floor);
       devices.push({floor,x:1.55,y:y+1.15,z:back+.16});
     }
-    // Closed corridor doors are scenery, with no interaction or route change.
-    // The top storey is roof access only, so it has no hallway door.
-    if(floor>0&&floor<C.flights)door(onRight?13.25:2.65,y,'hallway',floor);
+    // Hallway doors lead outward through the side walls. The fourth floor
+    // deliberately has no interior door of any kind.
+    if(floor>0&&floor<C.flights)sideDoor(onRight,y,floor);
     if(floor>0){
       // A landing exists only where the route actually turns. The old,
       // disconnected balcony on the opposite side has been removed.
-      const minX=onRight?right:C.minX-.5,maxX=onRight?C.maxX+.5:left;
+      const minX=onRight?right:roomLeft,maxX=onRight?roomRight:left;
       const centerX=(minX+maxX)/2,centerZ=(landingBack+landingFront)/2;
       box(maxX-minX,.22,landingFront-landingBack,centerX,y-.11,centerZ,concrete);
       box(maxX-minX,.035,landingFront-landingBack+.02,centerX,y-.012,centerZ,tread);
       for(const z of [landingBack+.025,landingFront-.025])railRun([minX+.06,y],[maxX-.06,y],z,.82,3);
-      const outerX=onRight?maxX-.06:minX+.06;
-      for(const z of [landingBack+.025,landingFront-.025])capPost(outerX,y,z,.82);
-      rod([outerX,y+.82,landingBack+.025],[outerX,y+.82,landingFront-.025],.03);
-      rod([outerX,y+.82*.47,landingBack+.025],[outerX,y+.82*.47,landingFront-.025],.018);
+      // The side wall bounds this edge. A cross-rail here would block its door.
       landingMetadata.push({floor,side:onRight?'right':'left',y,minX,maxX,minZ:landingBack,maxZ:landingFront});
     }
     // Slightly recessed vertical wall ribs and service labels break repetition.
@@ -167,7 +194,7 @@ export function createStairwellWorld(THREE,scene) {
     for(const [x,y]of[[start,high],[end,high-C.rise]])for(const z of [lane-.58,lane+.58])rod([x,y+.82,z],[x+(x===left?-.10:.10),y+.82,z],.03,metal);
     flightMetadata.push({index:f,direction:dir,z:lane,width:stairWidth,start:{x:start,y:high,z:lane},end:{x:end,y:high-C.rise,z:lane},steps:C.steps,tread:run,riser:rise,treads,rails:{minZ:lane-.61,maxZ:lane+.61},bounds:{minX:left,maxX:right,minY:high-C.rise-.23,maxY:high+.85,minZ:lane-.61,maxZ:lane+.61}});
   }
-  door(13,C.rise*C.flights,'entry',C.flights);door(C.exit.x,0,'exit',0);
+  const exitDoor=createExitDoor();
   // Continuous utility pipes, clamps, a drain and quiet corridor clutter.
   for(const x of [1.3,14.72]){
     rod([x,.12,back+.12],[x,roof-.18,back+.12],.038,metal);
@@ -185,8 +212,9 @@ export function createStairwellWorld(THREE,scene) {
   }
   const metadata={bounds:{min:[roomLeft-.36,-.4,-2.1],max:[roomRight+.36,roof+.3,3]},flights:flightMetadata,landings:landingMetadata,devices,doors,numbers,ground:{minX:roomLeft,maxX:roomRight,minZ:groundBack,maxZ:groundFront,y:0},lights:lightList.length,drawBatches:batches.size};
   group.userData.stairwell=metadata;
-  return {group,metadata,lights:lightList,update(time,state){
+  return {group,metadata,lights:lightList,exitDoor,update(time,state){
     if(!group.visible)return;
+    exitDoor.open(state?.exitProgress??0);
     for(let i=0;i<lightList.length;i++){
       const light=lightList[i],base=i===2?4.5:13;
       // Mostly steady tungsten; a single soft pulse never extinguishes a floor.

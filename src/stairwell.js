@@ -14,6 +14,11 @@ export const STAIRWELL=Object.freeze({
 
 export function stairDirection(flight){return flight%2===0?-1:1;}
 export function stairLane(flight){return flight>=STAIRWELL.flights?STAIRWELL.groundZ:STAIRWELL.lanes[flight%STAIRWELL.lanes.length];}
+export function canOpenStairExit(player,state){
+  return !!state&&state.flight===STAIRWELL.flights&&state.phase==='walk'&&!state.completed
+    &&player?.grounded===true&&Math.abs(player.x-STAIRWELL.exit.x)<=.8
+    &&Math.abs(player.y-STAIRWELL.exit.y)<.06&&Math.abs(player.z-STAIRWELL.groundZ)<.15;
+}
 
 // Root support is continuous so twenty shallow treads never shake the camera.
 // The character samples this same surface for its independent foot contacts.
@@ -50,11 +55,12 @@ export function createStairwell(){
     state.completedFlights=state.flight;
     state.velocity=Math.hypot(player.vx,player.vz);
     player.y=state.phase==='turn'?state.turn.floorY:stairHeight(state.flight,player.x);player.vy=0;player.grounded=true;
+    state.nearExit=canOpenStairExit(player,state);
   }
   function begin(player,saved=null){
     if(!player||state)return false;
     const restore=normalizeStairSave(saved)??{flight:0,x:STAIRWELL.entry.x,face:STAIRWELL.entry.face};
-    state={phase:'walk',flight:restore.flight,completedFlights:restore.flight,onStairs:false,slope:0,direction:stairDirection(restore.flight),velocity:0,heading:restore.face*Math.PI/2,completed:false};
+    state={phase:'walk',flight:restore.flight,completedFlights:restore.flight,onStairs:false,slope:0,direction:stairDirection(restore.flight),velocity:0,heading:restore.face*Math.PI/2,completed:false,exitProgress:0,interactHeld:false};
     Object.assign(player,{x:restore.x,y:stairHeight(restore.flight,restore.x),z:stairLane(restore.flight),face:restore.face,vx:0,vy:0,vz:0,grounded:true});
     lastPlayer=player;sync(player);return true;
   }
@@ -95,7 +101,22 @@ export function createStairwell(){
   function update(dt,input,player){
     if(!state||!player||state.completed||!Number.isFinite(dt)||dt<=0)return;
     dt=Math.min(dt,.1);
+    const interact=!!input?.interact,pressed=interact&&!state.interactHeld;state.interactHeld=interact;
+    if(state.phase==='opening'){
+      state.exitElapsed=Math.min(state.exitDuration,state.exitElapsed+dt);
+      const p=clamp(state.exitElapsed/state.exitAlignTime,0,1);
+      player.x=state.exitFromX+(STAIRWELL.exit.x-state.exitFromX)*smooth(p);
+      player.vx=p<1?(STAIRWELL.exit.x-state.exitFromX)*6*p*(1-p)/state.exitAlignTime:0;
+      player.vz=0;state.exitProgress=smooth((state.exitElapsed-state.exitAlignTime)/.66);sync(player);lastPlayer=player;
+      if(state.exitElapsed>=state.exitDuration){state.exitProgress=1;state.completed=true;player.vx=0;sync(player);return 'complete';}
+      return;
+    }
     if(state.phase==='turn')return updateTurn(dt,player);
+    if(pressed&&canOpenStairExit(player,state)){
+      state.phase='opening';state.exitElapsed=0;state.exitFromX=player.x;state.exitProgress=0;
+      state.exitAlignTime=Math.max(.24,Math.abs(player.x-STAIRWELL.exit.x)*.75);state.exitDuration=state.exitAlignTime+.71;
+      state.heading=nearAngle(Math.PI,state.heading);player.vx=player.vz=0;sync(player);lastPlayer=player;return 'open-exit';
+    }
     const direction=Number.isFinite(input?.direction)?Math.sign(input.direction):0;
     const target=direction*(input?.running?2:1.45),response=direction?5.3:8.5;
     const oldVelocity=player.vx,decay=Math.exp(-response*dt);
@@ -115,9 +136,6 @@ export function createStairwell(){
     player.x=clamp(nextX,min,max);
     if(player.x!==nextX)player.vx=0;
     sync(player);lastPlayer=player;
-    if(state.flight===STAIRWELL.flights&&player.x<=STAIRWELL.exit.x){
-      player.x=STAIRWELL.exit.x;player.vx=0;sync(player);state.completed=true;return 'complete';
-    }
     return event;
   }
   return {

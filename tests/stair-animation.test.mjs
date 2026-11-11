@@ -17,8 +17,8 @@ function rig(saved){
   const controller=createStairwell(),player={},boy=createBoy(THREE);controller.begin(player,saved);
   boy.group.position.set(player.x,player.y,player.z);boy.group.rotation.y=controller.state.heading;boy.reset();
   let time=0;
-  function step(direction=0,delta=dt){
-    const before={x:player.x,z:player.z};controller.update(delta,{direction},player);time+=delta;
+  function step(direction=0,delta=dt,interact=false){
+    const before={x:player.x,z:player.z};controller.update(delta,{direction,interact},player);time+=delta;
     boy.group.position.set(player.x,player.y,player.z);
     boy.group.rotation.y=THREE.MathUtils.damp(boy.group.rotation.y,controller.state.heading,8,delta);
     boy.animate({time,dt:delta,speed:Math.hypot(player.vx,player.vz),travel:Math.hypot(player.x-before.x,player.z-before.z),grounded:true,wake:1,stairs:controller.state});
@@ -33,7 +33,8 @@ test('the rendered shoes plant on concrete treads throughout all four downward f
   const r=rig();let previous=null,maxMotion=0,maxContactError=0,maxContactDrift=0,loadedSamples=0,stairFrames=0;
   for(let frame=0;frame<6000&&!r.controller.state.completed;frame++){
     const f=r.controller.state.flight,direction=f<4?r.controller.state.direction:-1;
-    const current=r.step(direction),state=r.controller.state;
+    const ready=r.controller.state.flight===4&&r.controller.state.phase==='walk'&&r.player.x<=STAIRWELL.exit.x;
+    const current=r.step(ready?0:direction,dt,ready),state=r.controller.state;
     assert(current.points.every(p=>[p.x,p.y,p.z].every(Number.isFinite)));
     if(previous)current.points.forEach((p,i)=>maxMotion=Math.max(maxMotion,distance(p,previous.points[i])));
     if(state.onStairs&&r.player.x>STAIRWELL.left+.6&&r.player.x<STAIRWELL.right-.6){

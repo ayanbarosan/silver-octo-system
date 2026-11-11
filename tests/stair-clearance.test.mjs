@@ -50,8 +50,8 @@ function rig(saved=null){
   const controller=createStairwell(),player={},boy=createBoy(THREE);controller.begin(player,saved);
   boy.group.position.set(player.x,player.y,player.z);boy.group.rotation.y=controller.state.heading;boy.reset();
   let time=0;
-  return {controller,player,boy,step(direction,dt=1/120){
-    const before={x:player.x,z:player.z};controller.update(dt,{direction},player);time+=dt;
+  return {controller,player,boy,step(direction,dt=1/120,interact=false){
+    const before={x:player.x,z:player.z};controller.update(dt,{direction,interact},player);time+=dt;
     boy.group.position.set(player.x,player.y,player.z);
     boy.group.rotation.y=THREE.MathUtils.damp(boy.group.rotation.y,controller.state.heading,8,dt);
     boy.animate({time,dt,speed:Math.hypot(player.vx,player.vz),travel:Math.hypot(player.x-before.x,player.z-before.z),grounded:true,wake:1,stairs:controller.state});
@@ -62,7 +62,7 @@ function rig(saved=null){
 test('the actual head, torso, knees and shoes clear other flights through every landing turn',()=>{
   const r=rig(),visited=new Set(),turns=new Set();let groundSamples=0;
   for(let frame=0;frame<8000&&!r.controller.state.completed;frame++){
-    const state=r.controller.state,probes=r.step(state.flight<C.flights?state.direction:-1);
+    const state=r.controller.state,ready=state.flight===4&&state.phase==='walk'&&r.player.x<=C.exit.x,probes=r.step(ready?0:state.flight<C.flights?state.direction:-1,1/120,ready);
     visited.add(state.flight);if(state.phase==='turn')turns.add(state.flight);
     for(const probe of probes){
       assert([probe.point.x,probe.point.y,probe.point.z].every(Number.isFinite));
@@ -106,7 +106,8 @@ test('the final descent reaches the rear-wall exit with the existing left and ri
   const doorFaceZ=-1.35,wallFaceZ=-1.69;
   let reachedRear=false,groundSamples=0;
   for(let frame=0;frame<4000&&!r.controller.state.completed;frame++){
-    const probes=r.step(r.controller.state.flight===3?1:-1);
+    const ready=r.controller.state.flight===4&&r.controller.state.phase==='walk'&&r.player.x<=C.exit.x;
+    const probes=r.step(ready?0:r.controller.state.flight===3?1:-1,1/120,ready);
     if(r.controller.state.flight===C.flights&&r.controller.state.phase==='walk'){
       reachedRear=true;groundSamples++;
       for(const probe of probes){
@@ -116,7 +117,7 @@ test('the final descent reaches the rear-wall exit with the existing left and ri
     }
   }
   assert(reachedRear&&groundSamples>100,'The route must include a supported rear-wall walk to the door.');
-  assert(r.controller.state.completed,'Left and right controls alone must reach the actual exit.');
+  assert(r.controller.state.completed,'Left and right controls plus an explicit interaction must finish at the actual exit.');
   assert.equal(r.player.x,C.exit.x);assert.equal(r.player.y,0);
   assert(Math.hypot(r.player.x-C.exit.x,r.player.z-doorFaceZ)<.55,'The ground route must finish within reach of the back-wall door.');
 });

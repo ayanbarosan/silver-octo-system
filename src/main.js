@@ -115,6 +115,7 @@ function setChapter(next){
  if(audio&&ambienceFilter){ambienceFilter.frequency.setTargetAtTime(indoors?160:420,audio.currentTime,.25);ambienceLevel.gain.setTargetAtTime(indoors?.045:.18,audio.currentTime,.25);}
  renderer.shadowMap.needsUpdate=true;
  document.body.classList.toggle('indoors',indoors);
+ document.body.classList.remove('near-exit');
 }
 function showOverlay(panel){
  for(const screen of [intro,settingsPanel,pauseMenu,ending])screen.hidden=screen!==panel;
@@ -127,6 +128,7 @@ function showOverlay(panel){
 function resetWorld(saved=null){
  clearInput();wake=saved?.awakened?1:0;checkpoint=saved?.checkpoint??0;fade=0;
  chapterTransition=null;stairwell.reset();setChapter(saved?.chapter==='stairwell'?'stairwell':'rooftop');
+ interior.exitDoor?.reset();
  Object.assign(player,{x:saved?.player.x??restArea.spawnX,y:saved?.player.y??restArea.surfaceY,z:0,vx:0,vy:0,vz:0,grounded:true,face:saved?.player.face??1});
  if(chapter==='stairwell'){stairwell.begin(player,saved.stairwell);wake=1;}
  world.crate.position.x=saved?.crateX??13;
@@ -147,7 +149,7 @@ function persistProgress(force=false){
  if(!force&&time-lastSaveAt<1)return;
  lastSaveAt=time;
  if(wake!==1||mantle||ladder.active||slip.active||jumpMotion.preparing||jumpMotion.launched)return;
- if(chapter==='stairwell'&&stairwell.state?.phase==='turn')return;
+ if(chapter==='stairwell'&&stairwell.state?.phase!=='walk')return;
  const snapshot=createSaveSnapshot({player,checkpoint,crateX:world.crate.position.x,bridgeBroken:!bridge.supported,slipPlayed:slip.played,awakened:true,learnedMechanics:tutorials.learned,
   ...(chapter==='stairwell'?{chapter,stairwell:stairwell.snapshot()}:{})});
  if(!snapshot)return;
@@ -331,7 +333,7 @@ function advanceClimb(dt){
  }
 }
 function enterInterior(){
- setChapter('stairwell');stairwell.begin(player);clearInput();
+ setChapter('stairwell');stairwell.begin(player);interior.exitDoor?.reset();clearInput();
  mantle=null;ladder.reset();slip.restore(true);resetJumpMotion();jumpBuffer=0;coyoteTime=0;push=false;
  water.reset();dust.reset();wake=1;landImpact=0;acceleration=0;
  Object.assign(opening.state,{active:false,escaped:true,phase:'complete',cue:''});
@@ -352,9 +354,10 @@ function physics(dt){
  }
  if(chapter==='stairwell'){
   const direction=Number(keys.has('d')||keys.has('ArrowRight'))-Number(keys.has('a')||keys.has('ArrowLeft'));
-  const previousVX=player.vx,event=stairwell.update(dt,{direction,running:keys.has('Shift')},player);
+  const previousVX=player.vx,event=stairwell.update(dt,{direction,running:keys.has('Shift'),interact:keys.has('e')},player);
   acceleration=THREE.MathUtils.clamp((player.vx-previousVX)/dt,-12,12);
   if(event==='floor')persistProgress(true);
+  if(event==='open-exit'){clearInput();ladderSound();}
   if(event==='complete'){persistProgress(true);state='end';clearInput();player.vx=0;showOverlay(ending);$('#ending-menu').focus();}
   return;
  }
@@ -584,6 +587,7 @@ function frame(now){
   const openingEvents=state==='play'&&chapter==='rooftop'?opening.update(dt,{wake,x:renderedX}):[];
   for(const event of openingEvents)if(event==='warning'||event==='edge-break')openingSound(event);
   document.body.classList.toggle('on-ladder',ladder.active);
+  document.body.classList.toggle('near-exit',chapter==='stairwell'&&state==='play'&&!!stairwell.state?.nearExit);
   document.body.classList.toggle('near-ladder',chapter==='rooftop'&&wake===1&&(canMountLadder(player)||canMountLadder(player,LEVEL.ladder,'top')));
   Object.assign(openingVisual,{active:opening.state.active,elapsed:opening.state.elapsed,wake,escaped:opening.state.escaped});
   if(chapter==='rooftop'){world.update(time,renderedX,openingVisual);world.bridge?.update(time,bridge.state);}
@@ -623,4 +627,4 @@ boy.group.position.set(restArea.spawnX,restArea.surfaceY,0);boy.group.rotation.y
 applySettings();updateContinue();showOverlay(intro);requestAnimationFrame(frame);
 canvas.addEventListener('webglcontextlost',e=>{e.preventDefault();state='pause';$('#error').hidden=false;$('#error').textContent='3D graphics were interrupted. Reload the page to continue.'});
 // Non-enumerable observation hook for repeatable browser smoke tests.
-Object.defineProperty(window,'__game',{value:{get state(){return state},get chapter(){return chapter},get transition(){return chapterTransition?{...chapterTransition}:null},get stairwell(){return stairwell.state?{...stairwell.state,turn:stairwell.state.turn?{...stairwell.state.turn}:undefined,snapshot:stairwell.snapshot()}:null},get interiorLayout(){return interior.metadata},get actor(){return {position:{x:boy.group.position.x,y:boy.group.position.y,z:boy.group.position.z},heading:boy.group.rotation.y,probes:Object.fromEntries(['head','pelvis','leftKnee','rightKnee'].map(name=>[name,boy.group.getObjectByName(name).getWorldPosition(new THREE.Vector3()).toArray()]))}},get sceneVisibility(){return {outdoor:world.world.visible,interior:interior.group.visible,rain:rain.visible}},get wake(){return wake},get checkpoint(){return checkpoint},get tutorials(){return {current:tutorials.current,learned:tutorials.learned}},get roofRails(){return world.world.userData.roofRails??[]},get settings(){return {...preferences}},get saved(){return session.getSave()},get exposure(){return renderer.toneMappingExposure},get audio(){return {muted,volume:master?.gain.value??0,state:audio?.state??'uninitialized'}},get slip(){return slip.state?{...slip.state,wobble:{...slip.state.wobble}}:null},get slipPlayed(){return slip.played},get slipsCompleted(){return slipsCompleted},get dust(){return {active:dust.activeCount,emitted:dust.emittedCount}},get ladder(){return ladder.state?{...ladder.state}:null},get laddersCompleted(){return laddersCompleted},get bridge(){return {...bridge.state,supported:bridge.supported}},get opening(){return {...opening.state}},get jump(){return {...jumpMotion}},get animation(){return boy.group.userData.animation},get climb(){return mantle?{...mantle}:null},get climbsCompleted(){return climbsCompleted},get splashes(){return {active:water.activeCount,emitted:water.emittedCount}},get software(){return software},player,get crateX(){return world.crate.position.x},get drawCalls(){return renderer.info.render.calls},get triangles(){return renderer.info.render.triangles}}});
+Object.defineProperty(window,'__game',{value:{get state(){return state},get chapter(){return chapter},get transition(){return chapterTransition?{...chapterTransition}:null},get stairwell(){return stairwell.state?{...stairwell.state,turn:stairwell.state.turn?{...stairwell.state.turn}:undefined,snapshot:stairwell.snapshot()}:null},get interiorLayout(){return interior.metadata},get exitDoor(){return {progress:interior.exitDoor.progress,angle:interior.exitDoor.angle}},get actor(){return {position:{x:boy.group.position.x,y:boy.group.position.y,z:boy.group.position.z},heading:boy.group.rotation.y,probes:Object.fromEntries(['head','pelvis','leftKnee','rightKnee'].map(name=>[name,boy.group.getObjectByName(name).getWorldPosition(new THREE.Vector3()).toArray()]))}},get sceneVisibility(){return {outdoor:world.world.visible,interior:interior.group.visible,rain:rain.visible}},get wake(){return wake},get checkpoint(){return checkpoint},get tutorials(){return {current:tutorials.current,learned:tutorials.learned}},get roofRails(){return world.world.userData.roofRails??[]},get settings(){return {...preferences}},get saved(){return session.getSave()},get exposure(){return renderer.toneMappingExposure},get audio(){return {muted,volume:master?.gain.value??0,state:audio?.state??'uninitialized'}},get slip(){return slip.state?{...slip.state,wobble:{...slip.state.wobble}}:null},get slipPlayed(){return slip.played},get slipsCompleted(){return slipsCompleted},get dust(){return {active:dust.activeCount,emitted:dust.emittedCount}},get ladder(){return ladder.state?{...ladder.state}:null},get laddersCompleted(){return laddersCompleted},get bridge(){return {...bridge.state,supported:bridge.supported}},get opening(){return {...opening.state}},get jump(){return {...jumpMotion}},get animation(){return boy.group.userData.animation},get climb(){return mantle?{...mantle}:null},get climbsCompleted(){return climbsCompleted},get splashes(){return {active:water.activeCount,emitted:water.emittedCount}},get software(){return software},player,get crateX(){return world.crate.position.x},get drawCalls(){return renderer.info.render.calls},get triangles(){return renderer.info.render.triangles}}});

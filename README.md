@@ -47,7 +47,7 @@ After **New Game**, the boy automatically braces his palms against the roof, bri
 5. Walk across the wooden plank spanning the second gap to the lower landing beside the final building. It breaks behind you only after you reach the landing safely.
 6. At the left wall, hold **W**, **Up**, or **Space** to climb the ladder, or jump toward it to catch a rung without dropping to the base. Stop to hold still, or use **S / Down** to reverse. You can also use **D / A** while climbing.
 7. Step onto the upper roof to set the final checkpoint, then continue to the lit door and press **E** (the hand icon on a phone). To go back down the outdoor ladder, hold **S / Down** at its top.
-8. Inside, walk left down the first flight. At each landing, turn around to descend the next flight: left, right, left, right. Completed flights cannot be selected again. On the ground floor, walk left to the corridor door.
+8. Inside, walk left down the first flight. At each landing, turn around to descend the next flight: left, right, left, right. Completed flights cannot be selected again. On the ground floor, walk left to the corridor door and press **E** (the hand icon on a phone) to open it and finish.
 
 ## Android: play the downloaded ZIP offline
 
@@ -141,3 +141,9 @@ Floor numbers, disconnected opposite-side platforms and repeated electrical boxe
 After the final flight, the landing turn takes the boy behind the lowest staircase, on the same side as the ground-floor door. Walking left reaches that door with the existing controls; no manual depth movement is needed. Earlier flights and their controls stay the same, and older ground-floor saves restore onto this rear route.
 
 Floors 1, 2 and 3 have closed decorative doors suggesting corridors beyond the stairwell. These doors cannot open and do not lead to playable hallways. Floor 4 keeps only its roof-access door.
+
+## Side-wall doors and deliberate exit — v0.18
+
+The closed hallway doors on floors 1–3 sit in the left/right side walls, with supported thresholds and landings connected to those walls. The fourth floor has no interior door, including the former roof-access door.
+
+Walking to the ground-floor exit no longer ends the section. Press **E** near the door, or tap the hand icon that appears there on a phone, to open the hinged leaf and finish. Holding E before reaching the door does not activate it later. Pause freezes the opening; Continue restores the previous safe position with the exit closed.

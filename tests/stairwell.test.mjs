@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {STAIRWELL,createStairwell,stairDirection,stairLane,stairHeight,normalizeStairSave} from '../src/stairwell.js';
 
 const setup=(saved=null)=>{const stairs=createStairwell(),p={};assert(stairs.begin(p,saved));return {stairs,p};};
+const routeInput=(stairs,p)=>{const ready=stairs.state.flight===4&&stairs.state.phase==='walk'&&p.x<=STAIRWELL.exit.x;return {direction:ready?0:stairs.state.flight<4?stairDirection(stairs.state.flight):-1,interact:ready};};
 function move(stairs,p,direction,frames=120,fps=90){const events=[];for(let n=0;n<frames;n++){const event=stairs.update(1/fps,{direction},p);if(event)events.push(event);}return events;}
 function reachNext(stairs,p,fps=90){
   const flight=stairs.state.flight,heights=[];let event;
@@ -25,7 +26,7 @@ test('four flights descend in alternating directions and each turn selects a new
     assert.equal(stairs.state.completedFlights,flight+1);
   }
   let complete=0;
-  for(let n=0;n<1800;n++)if(stairs.update(1/90,{direction:-1},p)==='complete')complete++;
+  for(let n=0;n<1800;n++)if(stairs.update(1/90,routeInput(stairs,p),p)==='complete')complete++;
   assert.equal(complete,1);assert.equal(p.x,STAIRWELL.exit.x);assert.equal(p.y,0);
   assert(stairs.state.completed);assert.equal(p.vx,0);
 });
@@ -89,7 +90,7 @@ test('landing turns change depth only beyond the stair ends and cannot publish a
   const {stairs,p}=setup();let turns=0,previous={...p},maxStep=0;
   for(let frame=0;frame<7000&&!stairs.state.completed;frame++){
     const phase=stairs.state.phase,flight=stairs.state.flight;
-    const event=stairs.update(1/90,{direction:flight<4?stairDirection(flight):-1},p);
+    const event=stairs.update(1/90,routeInput(stairs,p),p);
     maxStep=Math.max(maxStep,Math.hypot(p.x-previous.x,p.z-previous.z));
     if(stairs.state.phase==='turn'){
       assert.equal(stairs.snapshot(),null,'Continue must retain the last supported route position until the turn completes.');
@@ -137,8 +138,8 @@ test('the final landing turns behind the lowest stairs and reaches the door with
   assert(rearwardSamples>50,'The final turn must actually cross toward the door side.');
   assert.equal(stairs.state.phase,'walk');assert.equal(p.z,STAIRWELL.groundZ);
   assert(p.z+.33<stairLane(3)-STAIRWELL.stairWidth/2,'The entire body must walk behind the lowest stair flight.');
-  for(let frame=0;frame<1200&&!stairs.state.completed;frame++)stairs.update(1/90,{direction:-1},p);
-  assert(stairs.state.completed,'Ordinary left input must reach the ground-floor door.');
+  for(let frame=0;frame<1200&&!stairs.state.completed;frame++)stairs.update(1/90,routeInput(stairs,p),p);
+  assert(stairs.state.completed,'Ordinary left input and an explicit interaction must finish at the ground-floor door.');
   assert.equal(p.x,STAIRWELL.exit.x);assert.equal(p.y,0);assert.equal(p.z,STAIRWELL.groundZ);
   assert.deepEqual([0,1,2,3].map(stairLane),[-.65,.95,-.65,.95],'Upper stair lanes remain unchanged.');
 });
@@ -150,4 +151,55 @@ test('legacy ground-floor saves resume on the rear door approach without a new d
   move(r.stairs,r.p,-1,120);
   assert(r.p.x<saved.x);assert.equal(r.p.z,STAIRWELL.groundZ);
   assert.equal(r.stairs.state.phase,'walk');
+});
+
+test('arriving at the exit waits indefinitely and only a fresh nearby E press opens it',()=>{
+  const {stairs,p}=setup({flight:4,x:3.1,face:-1});
+  move(stairs,p,-1,300);move(stairs,p,0,900);
+  assert.equal(stairs.state.completed,false);assert.equal(stairs.state.phase,'walk');
+  assert.equal(stairs.state.exitProgress,0);assert(stairs.state.nearExit);assert(stairs.snapshot());
+  assert.equal(stairs.update(1/90,{interact:true},p),'open-exit');assert.equal(stairs.snapshot(),null);
+  let completions=0;
+  for(let n=0;n<300;n++)if(stairs.update(1/90,{interact:true},p)==='complete')completions++;
+  assert.equal(completions,1);assert(stairs.state.completed);assert.equal(stairs.state.exitProgress,1);
+  assert.equal(p.x,STAIRWELL.exit.x);assert.equal(p.z,STAIRWELL.groundZ);
+});
+
+test('holding E before reaching the door cannot arm a later automatic exit',()=>{
+  const {stairs,p}=setup({flight:4,x:6,face:-1});
+  for(let n=0;n<450;n++)stairs.update(1/90,{direction:-1,interact:true},p);
+  assert(stairs.state.nearExit);assert.equal(stairs.state.phase,'walk');assert.equal(stairs.state.completed,false);
+  stairs.update(1/90,{interact:false},p);
+  assert.equal(stairs.update(1/90,{interact:true},p),'open-exit');
+});
+
+test('E cannot open a hallway door or skip a landing turn',()=>{
+  for(const saved of [{flight:1,x:2.65,face:1},{flight:2,x:13.25,face:-1},{flight:3,x:2.65,face:1}]){
+    const {stairs,p}=setup(saved);stairs.update(1/90,{interact:true},p);
+    assert.equal(stairs.state.phase,'walk');assert.equal(stairs.state.exitProgress,0);assert.equal(stairs.state.completed,false);
+  }
+  const {stairs,p}=setup({flight:3,x:11.59,face:1});
+  for(let n=0;n<30&&stairs.state.phase!=='turn';n++)stairs.update(1/90,{direction:1},p);assert.equal(stairs.state.phase,'turn');
+  stairs.update(1/90,{interact:true},p);assert.equal(stairs.state.phase,'turn');
+});
+
+test('pausing an opening freezes the door and Continue restores a closed exit requiring E',()=>{
+  const saved={flight:4,x:2.4,face:-1},r=setup(saved);
+  r.stairs.update(1/90,{interact:true},r.p);
+  for(let n=0;n<40;n++)r.stairs.update(1/90,{},r.p);
+  assert(r.stairs.state.exitProgress>0&&r.stairs.state.exitProgress<1);
+  const before=structuredClone({state:r.stairs.state,player:r.p});
+  for(let n=0;n<100;n++)r.stairs.update(0,{interact:true},r.p);
+  assert.deepEqual({state:r.stairs.state,player:r.p},before);
+  r.stairs.reset();r.stairs.begin(r.p,saved);
+  assert.equal(r.stairs.state.exitProgress,0);assert.equal(r.stairs.state.phase,'walk');
+  move(r.stairs,r.p,0,300);assert.equal(r.stairs.state.completed,false);
+  assert.equal(r.stairs.update(1/90,{interact:true},r.p),'open-exit');
+});
+
+test('opening from the edge of reach aligns the child with a walking step instead of a snap',()=>{
+  const {stairs,p}=setup({flight:4,x:2.99,face:-1});
+  assert.equal(stairs.update(1/120,{interact:true},p),'open-exit');let maxSpeed=0;
+  for(let n=0;n<300&&!stairs.state.completed;n++){stairs.update(1/120,{},p);maxSpeed=Math.max(maxSpeed,Math.abs(p.vx));}
+  assert(stairs.state.completed);assert(maxSpeed<=2.01);assert.equal(p.x,STAIRWELL.exit.x);
 });
