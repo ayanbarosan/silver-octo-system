@@ -147,3 +147,7 @@ Floors 1, 2 and 3 have closed decorative doors suggesting corridors beyond the s
 The closed hallway doors on floors 1–3 sit in the left/right side walls, with supported thresholds and landings connected to those walls. The fourth floor has no interior door, including the former roof-access door.
 
 Walking to the ground-floor exit no longer ends the section. Press **E** near the door, or tap the hand icon that appears there on a phone, to open the hinged leaf and finish. Holding E before reaching the door does not activate it later. Pause freezes the opening; Continue restores the previous safe position with the exit closed.
+
+## Roof entrance and first landing — v0.19
+
+The roof-access entrance is restored on the upper-right wall where the boy enters the stairwell. The hallway door on the first landing below it has been removed. The two lower side-wall hallway doors remain closed scenery, and the ground exit still requires E or the phone hand button.

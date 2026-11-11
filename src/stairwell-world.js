@@ -137,6 +137,19 @@ export function createStairwellWorld(THREE,scene) {
       bounds:{min:[x-.625,y,z-.16],max:[x+.625,y+2.44,z+.13]}});
     return api;
   }
+  function roofEntryDoor(){
+    const x=C.entry.x,y=C.entry.y,z=back+.27;
+    box(1.22,2.4,.16,x,y+1.19,back+.15,shadowConcrete);
+    box(1.04,2.21,.07,x,y+1.105,z,wood);
+    for(const dx of [-.59,.59])box(.07,2.43,.12,x+dx,y+1.20,z,zinc);
+    box(1.25,.075,.12,x,y+2.40,z,zinc);box(1.25,.04,.24,x,y+.025,z+.07,concrete);
+    box(.36,.40,.02,x,y+1.56,z+.048,coldGlass);
+    for(const dx of [-.21,.21])box(.025,.47,.025,x+dx,y+1.56,z+.065,metal);
+    box(.44,.025,.025,x,y+1.79,z+.065,metal);box(.44,.025,.025,x,y+1.33,z+.065,metal);
+    box(.03,.17,.045,x+.33,y+.99,z+.07,black);box(.16,.023,.04,x+.27,y+1.02,z+.10,zinc);
+    doors.push({floor:C.flights,kind:'entry',interactive:false,wall:'back',normal:[0,0,1],x,y,z,width:1.04,height:2.21,
+      bounds:{min:[x-.625,y,z-.16],max:[x+.625,y+2.44,z+.13]}});
+  }
   // The two-tone paint is repeated per storey, with narrow chipped trim and
   // electrical conduits that continue down the stairwell rather than float.
   for(let floor=0;floor<=C.flights;floor++){
@@ -150,9 +163,9 @@ export function createStairwellWorld(THREE,scene) {
       electricBox(1.55,y+1.15,floor);
       devices.push({floor,x:1.55,y:y+1.15,z:back+.16});
     }
-    // Hallway doors lead outward through the side walls. The fourth floor
-    // deliberately has no interior door of any kind.
-    if(floor>0&&floor<C.flights)sideDoor(onRight,y,floor);
+    // The first landing below roof access has no hallway door.
+    // Lower hallway doors remain in their side walls.
+    if(floor>0&&floor<C.flights-1)sideDoor(onRight,y,floor);
     if(floor>0){
       // A landing exists only where the route actually turns. The old,
       // disconnected balcony on the opposite side has been removed.
@@ -194,6 +207,7 @@ export function createStairwellWorld(THREE,scene) {
     for(const [x,y]of[[start,high],[end,high-C.rise]])for(const z of [lane-.58,lane+.58])rod([x,y+.82,z],[x+(x===left?-.10:.10),y+.82,z],.03,metal);
     flightMetadata.push({index:f,direction:dir,z:lane,width:stairWidth,start:{x:start,y:high,z:lane},end:{x:end,y:high-C.rise,z:lane},steps:C.steps,tread:run,riser:rise,treads,rails:{minZ:lane-.61,maxZ:lane+.61},bounds:{minX:left,maxX:right,minY:high-C.rise-.23,maxY:high+.85,minZ:lane-.61,maxZ:lane+.61}});
   }
+  roofEntryDoor();
   const exitDoor=createExitDoor();
   // Continuous utility pipes, clamps, a drain and quiet corridor clutter.
   for(const x of [1.3,14.72]){
