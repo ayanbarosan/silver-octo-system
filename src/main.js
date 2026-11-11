@@ -19,6 +19,8 @@ import {createSession,createSaveSnapshot} from './session.js';
 import {createTutorials} from './tutorial.js';
 import {createStairwell,STAIRWELL} from './stairwell.js';
 import {createStairwellWorld} from './stairwell-world.js';
+import {createStreet,STREET} from './street.js';
+import {createStreetWorld} from './street-world.js';
 
 const $=s=>document.querySelector(s);
 const canvas=$('#scene'),intro=$('#intro'),message=$('#message'),ending=$('#ending');
@@ -45,6 +47,7 @@ let ladderCooldown=0,laddersCompleted=0;
 let slipsCompleted=0;
 let chapter='rooftop',chapterTransition=null;
 const stairwell=createStairwell();
+const street=createStreet();
 const reducedMotion=matchMedia('(prefers-reduced-motion: reduce)').matches;
 let renderer;
 try{renderer=new THREE.WebGLRenderer({canvas,antialias:true,powerPreference:'high-performance'});}catch(error){$('#error').hidden=false;$('#error').textContent='Could not start 3D graphics. Open the game in Chrome or Edge with hardware acceleration enabled.';throw error;}
@@ -70,6 +73,7 @@ const fill=new THREE.DirectionalLight('#8fa8b7',.8);fill.position.set(-8,5,12);s
 const rim=new THREE.DirectionalLight('#dae8e8',1.25);rim.position.set(-3,8,-5);scene.add(rim);
 const world=createWorld(THREE,scene),boy=createBoy(THREE);scene.add(boy.group);
 const interior=createStairwellWorld(THREE,scene);
+const streetWorld=createStreetWorld(THREE,scene);
 const outdoorBackground=scene.background,outdoorFog=scene.fog;
 const restArea=world.restArea;
 Object.assign(player,{x:restArea.spawnX,y:restArea.surfaceY});
@@ -106,15 +110,16 @@ function refreshHint(){
 }
 function updateContinue(){ $('#continue').disabled=!session.getSave(); }
 function setChapter(next){
- chapter=next;const indoors=next==='stairwell';
- world.world.visible=!indoors;interior.group.visible=indoors;rain.visible=!indoors;shafts.visible=!indoors;
- scene.background=indoors?new THREE.Color('#080b0c'):outdoorBackground;
- scene.fog=indoors?new THREE.FogExp2('#0b0e0e',.014):outdoorFog;
- hemi.intensity=indoors?.65:1.75;sun.intensity=indoors?.32:1.95;
- fill.intensity=indoors?.65:.8;rim.intensity=indoors?.65:1.25;
+ chapter=next;const indoors=next==='stairwell',onStreet=next==='street';
+ world.world.visible=next==='rooftop';interior.group.visible=indoors;streetWorld.group.visible=onStreet;rain.visible=!indoors;shafts.visible=next==='rooftop';
+ scene.background=indoors?new THREE.Color('#080b0c'):onStreet?new THREE.Color('#26343d'):outdoorBackground;
+ scene.fog=indoors?new THREE.FogExp2('#0b0e0e',.014):onStreet?new THREE.FogExp2('#263740',.025):outdoorFog;
+ hemi.intensity=indoors?.65:onStreet?.9:1.75;sun.intensity=indoors?.32:onStreet?.55:1.95;
+ fill.intensity=indoors?.65:onStreet?.6:.8;rim.intensity=indoors?.65:onStreet?.85:1.25;
  if(audio&&ambienceFilter){ambienceFilter.frequency.setTargetAtTime(indoors?160:420,audio.currentTime,.25);ambienceLevel.gain.setTargetAtTime(indoors?.045:.18,audio.currentTime,.25);}
  renderer.shadowMap.needsUpdate=true;
  document.body.classList.toggle('indoors',indoors);
+ document.body.classList.toggle('on-street',onStreet);
  document.body.classList.remove('near-exit');
 }
 function showOverlay(panel){
@@ -127,10 +132,12 @@ function showOverlay(panel){
 }
 function resetWorld(saved=null){
  clearInput();wake=saved?.awakened?1:0;checkpoint=saved?.checkpoint??0;fade=0;
- chapterTransition=null;stairwell.reset();setChapter(saved?.chapter==='stairwell'?'stairwell':'rooftop');
+ chapterTransition=null;stairwell.reset();street.reset();setChapter(saved?.chapter==='street'?'street':saved?.chapter==='stairwell'?'stairwell':'rooftop');
  interior.exitDoor?.reset();
+ streetWorld.entryDoor?.reset();
  Object.assign(player,{x:saved?.player.x??restArea.spawnX,y:saved?.player.y??restArea.surfaceY,z:0,vx:0,vy:0,vz:0,grounded:true,face:saved?.player.face??1});
  if(chapter==='stairwell'){stairwell.begin(player,saved.stairwell);wake=1;}
+ if(chapter==='street'){street.begin(player,saved.street);wake=1;}
  world.crate.position.x=saved?.crateX??13;
  jumpHeld=false;jumpBuffer=0;coyoteTime=0;resetJumpMotion();mantle=null;ledgeIntent=0;climbsCompleted=0;
  water.reset();dust.reset();bridge.restore(saved?.bridgeBroken??false);world.bridge?.reset();world.bridge?.update(time,bridge.state);
@@ -150,8 +157,9 @@ function persistProgress(force=false){
  lastSaveAt=time;
  if(wake!==1||mantle||ladder.active||slip.active||jumpMotion.preparing||jumpMotion.launched)return;
  if(chapter==='stairwell'&&stairwell.state?.phase!=='walk')return;
+ const streetSave=chapter==='street'?street.snapshot():null;if(chapter==='street'&&!streetSave)return;
  const snapshot=createSaveSnapshot({player,checkpoint,crateX:world.crate.position.x,bridgeBroken:!bridge.supported,slipPlayed:slip.played,awakened:true,learnedMechanics:tutorials.learned,
-  ...(chapter==='stairwell'?{chapter,stairwell:stairwell.snapshot()}:{})});
+  ...(chapter==='stairwell'?{chapter,stairwell:stairwell.snapshot()}:chapter==='street'?{chapter,street:streetSave}:{})});
  if(!snapshot)return;
  const signature=JSON.stringify(snapshot);
  if(signature!==lastSavedSignature&&session.save(snapshot)){lastSavedSignature=signature;updateContinue();}
@@ -342,13 +350,22 @@ function enterInterior(){
  lastDrawX=player.x;lastDrawZ=player.z;cameraX=(STAIRWELL.left+STAIRWELL.right)/2;cameraY=player.y;
  objectiveText='';hintText='';messageUntil=0;refreshHint();persistProgress(true);
 }
+function enterStreet(){
+ setChapter('street');street.begin(player);streetWorld.entryDoor?.reset();stairwell.reset();clearInput();
+ mantle=null;ladder.reset();resetJumpMotion();jumpBuffer=0;coyoteTime=0;push=false;
+ water.reset();dust.reset();wake=1;landImpact=0;acceleration=0;
+ Object.assign(previousSim,{x:player.x,y:player.y,z:player.z,vx:0,vz:0,climbId:null,ladderPhase:null,slipPhase:null});
+ boy.group.position.set(player.x,player.y,player.z);boy.group.rotation.y=player.face*Math.PI/2;boy.reset?.();
+ lastDrawX=player.x;lastDrawZ=player.z;cameraX=player.x;cameraY=0;cameraLead=1.3;
+ objectiveText='';hintText='';messageUntil=0;refreshHint();persistProgress(true);
+}
 let push=false;
 function physics(dt){
  if(chapter==='rooftop'&&!bridge.supported)bridge.update(dt,player);
  if(state!=='play')return;
  if(chapterTransition){
   chapterTransition.elapsed+=dt;
-  if(!chapterTransition.switched&&chapterTransition.elapsed>=.42){chapterTransition.switched=true;enterInterior();}
+  if(!chapterTransition.switched&&chapterTransition.elapsed>=.42){chapterTransition.switched=true;if(chapterTransition.target==='street')enterStreet();else enterInterior();}
   if(chapterTransition.elapsed>=.9){chapterTransition=null;clearInput();}
   return;
  }
@@ -358,7 +375,15 @@ function physics(dt){
   acceleration=THREE.MathUtils.clamp((player.vx-previousVX)/dt,-12,12);
   if(event==='floor')persistProgress(true);
   if(event==='open-exit'){clearInput();ladderSound();}
-  if(event==='complete'){persistProgress(true);state='end';clearInput();player.vx=0;showOverlay(ending);$('#ending-menu').focus();}
+  if(event==='complete'){chapterTransition={elapsed:0,switched:false,target:'street'};clearInput();player.vx=0;}
+  return;
+ }
+ if(chapter==='street'){
+  const direction=Number(keys.has('d')||keys.has('ArrowRight'))-Number(keys.has('a')||keys.has('ArrowLeft'));
+  const event=street.update(dt,{direction,running:keys.has('Shift'),jump:keys.has(' ')||keys.has('w')||keys.has('ArrowUp')},player);
+  acceleration=street.state.acceleration;landImpact=Math.max(landImpact,street.state.landImpact);
+  if(event==='takeoff')water.splash({x:player.x,y:STREET.groundY,strength:.55});
+  if(event==='land')water.splash({x:player.x,y:STREET.groundY,strength:.65+landImpact*.45});
   return;
  }
  ladderCooldown=Math.max(0,ladderCooldown-dt);
@@ -576,11 +601,13 @@ function frame(now){
    const turn=Math.atan2(Math.sin(heading-boy.group.rotation.y),Math.cos(heading-boy.group.rotation.y));
    boy.group.rotation.y+=turn*(1-Math.exp(-8*dt));
   }else boy.group.rotation.y=mantle?mantle.face*Math.PI/2:THREE.MathUtils.damp(boy.group.rotation.y,player.face*Math.PI/2,8,dt);
+  const motion=chapter==='street'?street.state.jump:jumpMotion;
   const contact=boy.animate({time:simTime,speed:attached?0:renderedSpeed,grounded:attached?true:player.grounded,wake:state==='intro'?0:wake,push,vy:player.vy,dt,travel:attached?0:travel,acceleration:acceleration*player.face,landImpact,
-   jumpPrep:jumpMotion.preparing?Math.min(1,jumpMotion.elapsed/jumpMotion.duration):0,
-   airTime:attached?0:jumpMotion.airTime,launchSpeed:jumpMotion.launchSpeed,landingDistance:chapter==='rooftop'?landingDistance(renderedX,renderedY,colliders()):0,takeoff:attached?0:jumpMotion.launched?Math.min(1,jumpMotion.airTime/.12):1,climb:renderedClimb,ladder:renderedLadder,slip:renderedSlip,stairs:chapter==='stairwell'?stairwell.state:null});
+   jumpPrep:motion.preparing?Math.min(1,motion.elapsed/motion.duration):0,
+   airTime:attached?0:motion.airTime,launchSpeed:motion.launchSpeed,landingDistance:chapter==='street'?Math.max(0,renderedY-STREET.groundY):chapter==='rooftop'?landingDistance(renderedX,renderedY,colliders()):0,takeoff:attached?0:motion.launched?Math.min(1,motion.airTime/.12):1,climb:renderedClimb,ladder:renderedLadder,slip:renderedSlip,stairs:chapter==='stairwell'?stairwell.state:null});
   if(contact?.footstep||landImpact>.35)stepSound(contact?.footstep?contact.intensity:landImpact);
   if(chapter==='rooftop'&&contact?.footstep&&player.grounded&&!mantle&&!onPlank(renderedX))water.splash({x:renderedX,y:renderedY,strength:.15});
+  if(chapter==='street'&&contact?.footstep&&player.grounded)water.splash({x:renderedX,y:STREET.groundY,strength:.12});
   water.update(dt);
   dust.update(dt);
   landImpact=0;
@@ -591,7 +618,8 @@ function frame(now){
   document.body.classList.toggle('near-ladder',chapter==='rooftop'&&wake===1&&(canMountLadder(player)||canMountLadder(player,LEVEL.ladder,'top')));
   Object.assign(openingVisual,{active:opening.state.active,elapsed:opening.state.elapsed,wake,escaped:opening.state.escaped});
   if(chapter==='rooftop'){world.update(time,renderedX,openingVisual);world.bridge?.update(time,bridge.state);}
-  else interior.update(time,stairwell.state);
+  else if(chapter==='stairwell')interior.update(time,stairwell.state);
+  else streetWorld.update(time,renderedX);
   for(let i=0;i<rainCount;i++){
    const o=i*6;rainPositions[o]-=dt*.8;rainPositions[o+1]-=dt*9;
    if(rainPositions[o+1]<-6){rainPositions[o+1]=18;rainPositions[o]=cameraX+random(i+time)*62-28}
@@ -604,6 +632,11 @@ function frame(now){
   cameraY=THREE.MathUtils.damp(cameraY,THREE.MathUtils.clamp(renderedY+.9,3.4,11.4),3,dt);
   const zoom=Math.max(18.2,15.2/(2*Math.tan(THREE.MathUtils.degToRad(camera.fov/2))*camera.aspect));
   camera.position.set(cameraX,cameraY+1.2,zoom);camera.lookAt(cameraX,cameraY,-.2);
+ }else if(chapter==='street'){
+  cameraLead=THREE.MathUtils.damp(cameraLead,1.3+player.face*Math.min(.7,Math.abs(renderedSpeed)/4),2.3,dt);
+  cameraX=THREE.MathUtils.damp(cameraX,renderedX,3.2,dt);
+  const centerX=cameraX+cameraLead;
+  camera.position.set(centerX,3.1,16.8);camera.lookAt(centerX,1.8,-1.4);
  }else{
  cameraLead=THREE.MathUtils.damp(cameraLead,1.3+player.face*Math.min(1,Math.abs(renderedSpeed)/3.35),2.3,dt);
  const wakingFocus=opening.state.active&&!opening.state.escaped?1-THREE.MathUtils.smoothstep(wake,.65,1):0;
@@ -627,4 +660,4 @@ boy.group.position.set(restArea.spawnX,restArea.surfaceY,0);boy.group.rotation.y
 applySettings();updateContinue();showOverlay(intro);requestAnimationFrame(frame);
 canvas.addEventListener('webglcontextlost',e=>{e.preventDefault();state='pause';$('#error').hidden=false;$('#error').textContent='3D graphics were interrupted. Reload the page to continue.'});
 // Non-enumerable observation hook for repeatable browser smoke tests.
-Object.defineProperty(window,'__game',{value:{get state(){return state},get chapter(){return chapter},get transition(){return chapterTransition?{...chapterTransition}:null},get stairwell(){return stairwell.state?{...stairwell.state,turn:stairwell.state.turn?{...stairwell.state.turn}:undefined,snapshot:stairwell.snapshot()}:null},get interiorLayout(){return interior.metadata},get exitDoor(){return {progress:interior.exitDoor.progress,angle:interior.exitDoor.angle}},get actor(){return {position:{x:boy.group.position.x,y:boy.group.position.y,z:boy.group.position.z},heading:boy.group.rotation.y,probes:Object.fromEntries(['head','pelvis','leftKnee','rightKnee'].map(name=>[name,boy.group.getObjectByName(name).getWorldPosition(new THREE.Vector3()).toArray()]))}},get sceneVisibility(){return {outdoor:world.world.visible,interior:interior.group.visible,rain:rain.visible}},get wake(){return wake},get checkpoint(){return checkpoint},get tutorials(){return {current:tutorials.current,learned:tutorials.learned}},get roofRails(){return world.world.userData.roofRails??[]},get settings(){return {...preferences}},get saved(){return session.getSave()},get exposure(){return renderer.toneMappingExposure},get audio(){return {muted,volume:master?.gain.value??0,state:audio?.state??'uninitialized'}},get slip(){return slip.state?{...slip.state,wobble:{...slip.state.wobble}}:null},get slipPlayed(){return slip.played},get slipsCompleted(){return slipsCompleted},get dust(){return {active:dust.activeCount,emitted:dust.emittedCount}},get ladder(){return ladder.state?{...ladder.state}:null},get laddersCompleted(){return laddersCompleted},get bridge(){return {...bridge.state,supported:bridge.supported}},get opening(){return {...opening.state}},get jump(){return {...jumpMotion}},get animation(){return boy.group.userData.animation},get climb(){return mantle?{...mantle}:null},get climbsCompleted(){return climbsCompleted},get splashes(){return {active:water.activeCount,emitted:water.emittedCount}},get software(){return software},player,get crateX(){return world.crate.position.x},get drawCalls(){return renderer.info.render.calls},get triangles(){return renderer.info.render.triangles}}});
+Object.defineProperty(window,'__game',{value:{get state(){return state},get chapter(){return chapter},get transition(){return chapterTransition?{...chapterTransition}:null},get stairwell(){return stairwell.state?{...stairwell.state,turn:stairwell.state.turn?{...stairwell.state.turn}:undefined,snapshot:stairwell.snapshot()}:null},get interiorLayout(){return interior.metadata},get street(){return street.state?{...street.state,jump:{...street.state.jump},snapshot:street.snapshot()}:null},get streetLayout(){return streetWorld.metadata},get exitDoor(){return {progress:interior.exitDoor.progress,angle:interior.exitDoor.angle}},get actor(){return {position:{x:boy.group.position.x,y:boy.group.position.y,z:boy.group.position.z},heading:boy.group.rotation.y,probes:Object.fromEntries(['head','pelvis','leftKnee','rightKnee'].map(name=>[name,boy.group.getObjectByName(name).getWorldPosition(new THREE.Vector3()).toArray()]))}},get sceneVisibility(){return {outdoor:world.world.visible,interior:interior.group.visible,street:streetWorld.group.visible,rain:rain.visible}},get wake(){return wake},get checkpoint(){return checkpoint},get tutorials(){return {current:tutorials.current,learned:tutorials.learned}},get roofRails(){return world.world.userData.roofRails??[]},get settings(){return {...preferences}},get saved(){return session.getSave()},get exposure(){return renderer.toneMappingExposure},get audio(){return {muted,volume:master?.gain.value??0,state:audio?.state??'uninitialized'}},get slip(){return slip.state?{...slip.state,wobble:{...slip.state.wobble}}:null},get slipPlayed(){return slip.played},get slipsCompleted(){return slipsCompleted},get dust(){return {active:dust.activeCount,emitted:dust.emittedCount}},get ladder(){return ladder.state?{...ladder.state}:null},get laddersCompleted(){return laddersCompleted},get bridge(){return {...bridge.state,supported:bridge.supported}},get opening(){return {...opening.state}},get jump(){return {...(chapter==='street'?street.state.jump:jumpMotion)}},get animation(){return boy.group.userData.animation},get climb(){return mantle?{...mantle}:null},get climbsCompleted(){return climbsCompleted},get splashes(){return {active:water.activeCount,emitted:water.emittedCount}},get software(){return software},player,get crateX(){return world.crate.position.x},get drawCalls(){return renderer.info.render.calls},get triangles(){return renderer.info.render.triangles}}});

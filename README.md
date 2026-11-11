@@ -151,3 +151,9 @@ Walking to the ground-floor exit no longer ends the section. Press **E** near th
 ## Roof entrance and first landing — v0.19
 
 The roof-access entrance is restored on the upper-right wall where the boy enters the stairwell. The hallway door on the first landing below it has been removed. The two lower side-wall hallway doors remain closed scenery, and the ground exit still requires E or the phone hand button.
+
+## Empty street — v0.20
+
+Opening the ground-floor exit with **E** (the hand icon on a phone) now leads outside into a rain-soaked street. The boy emerges beside the apartment entrance and can explore the sidewalk with the usual walking, running and jump controls. Continue saves the street position and restores it after reloading.
+
+The street has five parked old sedans and hatchbacks, worn apartment façades, a fenced courtyard, trees, bins, overhead wires and muted street lamps reflected in wet paving. Cars and street furniture stay behind the walking lane. The camera follows the boy along the street, and rainwater splashes accompany steps and landings.

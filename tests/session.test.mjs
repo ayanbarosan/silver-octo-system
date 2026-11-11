@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {DEFAULT_SETTINGS,createSession,createSaveSnapshot} from '../src/session.js';
 import {LEVEL} from '../src/level.js';
+import {STREET} from '../src/street.js';
 
 const settingsKey='runaway.settings.v1',saveKey='runaway.save.v1';
 const defaults={hints:false,sound:true,volume:.65,brightness:1};
@@ -258,4 +259,72 @@ test('indoor continuation data and lesson history are copied independently from 
   const roof=createSaveSnapshot(liveGame({chapter:'rooftop'}));
   assert(roof);assert.equal(Object.hasOwn(roof,'chapter'),false,'Older rooftop saves retain their canonical shape.');
   assert.equal(Object.hasOwn(roof,'stairwell'),false);
+});
+
+function streetGame({x=STREET.entry.x,y=STREET.groundY,face=1,...other}={}) {
+  return liveGame({x,y,face,chapter:'street',street:{x,face},checkpoint:3,crateX:16,
+    bridgeBroken:true,slipPlayed:true,awakened:true,learnedMechanics:['push','ladder','door'],...other});
+}
+
+test('street continuation survives reload at the entrance, both route bounds and positions between old cars',()=>{
+  const storage=memoryStorage(),session=createSession(storage);
+  for(const [x,face] of [[STREET.minX,-1],[STREET.entry.x,1],[18.4,-1],[37,1],[STREET.maxX,1]]) {
+    const source=streetGame({x,face,y:STREET.groundY+.01}),canonical=createSaveSnapshot(source);
+    assert(canonical,`Supported street position ${x} must be resumable.`);
+    assert.equal(canonical.chapter,'street');assert.deepEqual(canonical.street,{x,face});
+    assert.deepEqual(canonical.player,{x,y:STREET.groundY,face});
+    assert.equal(Object.hasOwn(canonical,'stairwell'),false,'Street saves must not carry a stale stair flight.');
+    assert.equal(canonical.crateX,16);assert.equal(canonical.bridgeBroken,true);
+    assert.deepEqual(canonical.learnedMechanics,['push','ladder','door']);
+    assert(session.save(canonical));assert.deepEqual(createSession(storage).getSave(),canonical);
+  }
+});
+
+test('unsafe or malformed street snapshots cannot replace the last safe continue point',()=>{
+  const storage=memoryStorage(),session=createSession(storage),good=createSaveSnapshot(streetGame({x:18}));
+  assert(good);assert(session.save(good));
+  const invalid=[
+    {...good,chapter:'unbuilt-street'},{...good,awakened:false},
+    {...good,street:undefined},{...good,street:null},{...good,street:[]},
+    {...good,street:{x:NaN,face:1}},{...good,street:{x:Infinity,face:1}},
+    {...good,street:{x:STREET.minX-.01,face:1}},
+    {...good,street:{x:STREET.maxX+.01,face:1}},
+    {...good,street:{x:18,face:0}},{...good,street:{x:18,face:-1}},
+    {...good,street:{x:18.01,face:1}},
+    {...good,player:{...good.player,y:STREET.groundY+.04}},
+    {...good,player:{...good.player,x:18.01}},
+    {...good,player:{...good.player,face:-1}}
+  ];
+  for(const value of invalid) {
+    assert.equal(session.save(value),false,JSON.stringify(value));
+    assert.deepEqual(session.getSave(),good,'A bad street autosave must preserve the preceding reachable position.');
+    assert.equal(createSession(memoryStorage({[saveKey]:JSON.stringify(value)})).getSave(),null);
+  }
+  for(const grounded of [false,undefined]) {
+    const airborne=streetGame();airborne.player.grounded=grounded;
+    assert.equal(createSaveSnapshot(airborne),null,'A live street snapshot needs supported feet.');
+  }
+});
+
+test('street route, player and learned history never share mutable state with saved progress',()=>{
+  const source=streetGame({x:22,face:-1}),canonical=createSaveSnapshot(source);assert(canonical);
+  source.street.x=1;source.learnedMechanics.length=0;
+  assert.deepEqual(canonical.street,{x:22,face:-1});assert.deepEqual(canonical.learnedMechanics,['push','ladder','door']);
+  const storage=memoryStorage(),session=createSession(storage);assert(session.save(canonical));
+  const expected=structuredClone(canonical);canonical.street.face=1;canonical.player.x=2;
+  assert.deepEqual(session.getSave(),expected);
+  const copy=session.getSave();copy.street.x=51;copy.player.face=1;copy.learnedMechanics.push('crate-climb');
+  assert.deepEqual(session.getSave(),expected);assert.deepEqual(createSession(storage).getSave(),expected);
+});
+
+test('blocked storage still supports street Continue in memory and clearing starts a fresh rooftop run',()=>{
+  const unavailable={getItem(){throw new Error('blocked');},setItem(){throw new Error('blocked');},removeItem(){throw new Error('blocked');}};
+  for(const storage of [null,unavailable]) {
+    const session=createSession(storage),street=createSaveSnapshot(streetGame({x:31}));assert(street);
+    assert(session.save(street));assert.deepEqual(session.getSave(),street);
+    session.clearSave();assert.equal(session.getSave(),null);
+    const roof=snapshot({x:0,y:.12,awakened:false,slipPlayed:false});assert(session.save(roof));
+    assert.equal(Object.hasOwn(session.getSave(),'chapter'),false);
+    assert.equal(Object.hasOwn(session.getSave(),'street'),false);
+  }
 });

@@ -10,4 +10,5 @@
 @media(max-height:550px) and (min-width:600px){.main-menu-panel{top:19%;left:max(11vw,calc(28px + var(--safe-left)));width:52vw;max-width:540px}#game-title{margin-bottom:15px}.menu-list{gap:1px}.menu-item{min-height:34px;padding:5px 0;font-size:13px}.screen-title{margin-bottom:22px;font-size:24px}.settings-list{gap:13px}.setting-row{min-height:25px;font-size:13px}.back-item{margin-top:20px}.quiet-panel .menu-list{gap:5px}.ending-title{font-size:31px;margin-bottom:22px}#mobile{bottom:calc(10px + var(--safe-bottom))}#mobile button{width:46px;height:46px;padding:11px}#message{bottom:calc(72px + var(--safe-bottom));font-size:11px}.overlay-screen{padding-top:calc(20px + var(--safe-top));padding-bottom:calc(20px + var(--safe-bottom))}}
 body.indoors #mobile .touch-actions [data-key="e"],body.indoors #mobile .touch-actions [data-key=" "]{display:none}
 body.indoors.near-exit #mobile .touch-actions [data-key="e"]{display:flex}
+body.on-street #mobile .touch-actions [data-key="e"]{display:none}
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}

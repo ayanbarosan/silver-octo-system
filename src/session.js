@@ -1,6 +1,7 @@
 import {LEVEL} from './level.js';
 import {TUTORIAL_IDS} from './tutorial.js';
 import {normalizeStairSave,stairHeight} from './stairwell.js';
+import {STREET,normalizeStreetSave} from './street.js';
 
 export const DEFAULT_SETTINGS=Object.freeze({hints:false,sound:true,volume:.65,brightness:1});
 const SETTINGS_KEY='runaway.settings.v1',SAVE_KEY='runaway.save.v1';
@@ -11,7 +12,7 @@ const pipe=Object.freeze({x:16.725,w:.55,y:1.65});
 const guard=Object.freeze({x:-1.04,w:.18,y:1.32});
 const record=value=>value!==null&&typeof value==='object'&&!Array.isArray(value);
 const inRange=(value,min,max)=>typeof value==='number'&&Number.isFinite(value)&&value>=min&&value<=max;
-const copySave=value=>value?{...value,player:{...value.player},learnedMechanics:[...value.learnedMechanics],...(value.stairwell?{stairwell:{...value.stairwell}}:{})}:null;
+const copySave=value=>value?{...value,player:{...value.player},learnedMechanics:[...value.learnedMechanics],...(value.stairwell?{stairwell:{...value.stairwell}}:{}),...(value.street?{street:{...value.street}}:{})}:null;
 const learnedFrom=value=>Array.isArray(value)?[...new Set(value.filter(id=>typeof id==='string'&&TUTORIAL_IDS.includes(id)))]:[];
 
 function settingsFrom(value,base=DEFAULT_SETTINGS){
@@ -30,7 +31,14 @@ function normalizeSave(value,requireGrounded=false){
   if(!inRange(crateX,10.5,16)||typeof bridgeBroken!=='boolean'||typeof slipPlayed!=='boolean'||typeof awakened!=='boolean')return null;
   if(!Number.isFinite(player.x)||!Number.isFinite(player.y)||(player.face!==1&&player.face!==-1))return null;
   if(requireGrounded&&player.grounded!==true)return null;
-  if(value.chapter!==undefined&&value.chapter!=='rooftop'&&value.chapter!=='stairwell')return null;
+  if(value.chapter!==undefined&&value.chapter!=='rooftop'&&value.chapter!=='stairwell'&&value.chapter!=='street')return null;
+
+  if(value.chapter==='street') {
+    const street=normalizeStreetSave(value.street);
+    if(!street||!awakened)return null;
+    if(Math.abs(player.x-street.x)>EPSILON||Math.abs(player.y-STREET.groundY)>SURFACE_TOLERANCE+EPSILON||player.face!==street.face)return null;
+    return {version:1,chapter:'street',street,checkpoint,player:{x:street.x,y:STREET.groundY,face:street.face},crateX,bridgeBroken,slipPlayed,awakened,learnedMechanics:learnedFrom(value.learnedMechanics)};
+  }
 
   if(value.chapter==='stairwell') {
     const stairwell=normalizeStairSave(value.stairwell);
@@ -55,7 +63,7 @@ function normalizeSave(value,requireGrounded=false){
   return {version:1,checkpoint,player:{x:player.x,y:support.y,face:player.face},crateX,bridgeBroken,slipPlayed,awakened,learnedMechanics:learnedFrom(value.learnedMechanics)};
 }
 
-// Save settled feet on permanent geometry or the supported stair route.
+// Save settled feet on permanent geometry, the supported stair route or street.
 // Transient ladders, jumps, mantles and broken planks resume from the most
 // recent stable floor instead.
 export function createSaveSnapshot(value){
