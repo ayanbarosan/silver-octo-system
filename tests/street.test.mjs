@@ -181,3 +181,62 @@ test('paused manipulation and climbing preserve every controller and root value'
   before=structuredClone({p:r.player,s:r.street.state});r.street.update(0,{},r.player);
   assert.deepEqual({p:r.player,s:r.street.state},before);assert.equal(r.street.snapshot(),null);
 });
+
+
+const G=STREET.crawl;
+test('raised panel blocks standing and jumping from either direction',()=>{
+  for(const side of [-1,1]) {
+    const edge=side<0?G.x:G.x+G.w,r=setup({x:edge+side*1.6,face:-side});
+    advance(r,{direction:-side,running:true,jump:true},480);
+    assert((r.player.x-edge)*side>=.719,'A standing body must stop before the raised panel, including during a jump.');
+    assert.equal(r.street.state.climb,null);assert.equal(r.street.state.crouch,0);
+    assert(r.player.grounded);
+  }
+});
+test('ducking crosses the opening in both directions and releasing cannot stand inside it',()=>{
+  for(const side of [-1,1]) {
+    const r=setup({x:side<0?G.x-1.5:G.x+G.w+1.5,face:-side});
+    for(let n=0;n<600&&(r.player.x-(G.x+G.w/2))*side>0;n++)r.street.update(1/120,{direction:-side,crouch:true},r.player);
+    assert(Math.abs(r.player.x-(G.x+G.w/2))<.5);
+    assert.equal(r.street.state.crouch,1);assert(r.street.state.underLowGate);
+    advance(r,{},180);assert.equal(r.street.state.crouch,1,'The head and backpack must stay low after releasing the button under a beam.');
+    const under=r.street.snapshot();assert.equal(under.crouched,true);
+    const restored=setup(under);assert.equal(restored.street.state.crouch,1);assert.deepEqual(restored.street.snapshot(),under);
+    advance(r,{direction:-side},360);advance(r,{},100);
+    assert.equal(r.street.state.crouch,0);assert(!r.street.state.underLowGate);
+    assert(!('crouched' in r.street.snapshot()));
+  }
+});
+test('crouch slows movement, suppresses running/jumps and does not queue a jump on standing',()=>{
+  const r=setup({x:64,face:1});
+  advance(r,{direction:1,crouch:true,running:true,jump:true},240);
+  assert(Math.abs(r.player.vx-.8)<.005);assert.equal(r.player.y,0);assert(r.player.grounded);
+  assert(!r.street.state.jump.preparing&&!r.street.state.jump.launched);assert(!r.street.state.running);
+  advance(r,{jump:true},140);assert.equal(r.player.y,0);assert.equal(r.street.state.crouch,0);
+  advance(r,{},2);const events=advance(r,{jump:true},180);assert.deepEqual(events,['takeoff','land']);
+});
+test('crouch transition is gradual, paused poses freeze and Continue never saves half a crouch',()=>{
+  const r=setup({x:58,face:1});
+  r.street.update(1/120,{crouch:true},r.player);
+  assert(r.street.state.crouch>0&&r.street.state.crouch<.1);assert.equal(r.street.snapshot(),null);
+  const before=structuredClone({player:r.player,state:r.street.state});
+  for(const dt of [0,-1,NaN,Infinity])r.street.update(dt,{direction:1,crouch:false},r.player);
+  assert.deepEqual({player:r.player,state:r.street.state},before);
+  advance(r,{crouch:true},60);assert.equal(r.street.state.crouch,1);assert.equal(r.street.snapshot().crouched,true);
+  advance(r,{},1);assert.equal(r.street.snapshot(),null);
+  advance(r,{},60);assert.equal(r.street.state.crouch,0);assert(r.street.snapshot());
+});
+test('crouch does not shrink an airborne body or bypass low gate collisions',()=>{
+  const r=setup({x:G.x-1.0,face:1});
+  Object.assign(r.player,{grounded:false,y:.5,vy:1,vx:3});r.street.state.jump.launched=true;
+  advance(r,{direction:1,crouch:true},35);
+  assert.equal(r.street.state.crouch,0);assert(r.player.x<=G.x-.719);
+});
+test('crouch opening and low movement remain consistent across update rates',()=>{
+  const samples=[];
+  for(const fps of [30,60,120]) {
+    const r=setup({x:G.x-1.5,face:1});advance(r,{direction:1,crouch:true},fps*6,fps);
+    assert(r.player.x>G.x+G.w+.72);assert.equal(r.player.y,0);samples.push(r.player.x);
+  }
+  assert(Math.max(...samples)-Math.min(...samples)<.04);
+});

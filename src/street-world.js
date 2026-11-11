@@ -74,11 +74,11 @@ export function createStreetWorld(THREE,scene){
   // A broad, rain-soaked courtyard roadway and a supported near walking strip.
   box(150,.30,90,40,-.30,-32,darkConcrete);
   box(110,.28,20,35,-.22,-.7,darkConcrete);box(110,.035,20,35,-.095,-.7,asphalt);
-  box(80,.08,1.7,30,-.04,0,pavement);
-  for(let x=-8;x<71;x+=1.14){box(.018,.004,1.68,x,.003,0,darkConcrete,false);box(1.10,.13,.22,x,-.025,.93,pavement);}
-  for(let x=-2;x<57;x+=6.9){box(.64,.015,.32,x,-.035,1.27,metal);for(let n=0;n<9;n++)box(.027,.008,.29,x-.28+n*.07,-.023,1.27,black,false);}
-  for(let i=0;i<54;i++){const x=-2+random(i+11)*61,z=-6.5+random(i+53)*12;flatPatch(x,z,.6+random(i+98)*3.5,.25+random(i+221)*1.4,i%4===0?damp:wet,z>-.8&&z<.8?.004:-.073,i*31);}
-  for(let i=0;i<80;i++){const x=-2+random(i+242)*58,z=-.7+random(i+322)*1.4;box(.018+random(i+400)*.05,.009,.015+random(i+500)*.04,x,.007,z,darkConcrete,false);}
+  box(90,.08,1.7,35,-.04,0,pavement);
+  for(let x=-8;x<81;x+=1.14){box(.018,.004,1.68,x,.003,0,darkConcrete,false);box(1.10,.13,.22,x,-.025,.93,pavement);}
+  for(let x=-2;x<79;x+=6.9){box(.64,.015,.32,x,-.035,1.27,metal);for(let n=0;n<9;n++)box(.027,.008,.29,x-.28+n*.07,-.023,1.27,black,false);}
+  for(let i=0;i<70;i++){const x=-2+random(i+11)*81,z=-6.5+random(i+53)*12;flatPatch(x,z,.6+random(i+98)*3.5,.25+random(i+221)*1.4,i%4===0?damp:wet,z>-.8&&z<.8?.004:-.073,i*31);}
+  for(let i=0;i<105;i++){const x=-2+random(i+242)*79,z=-.7+random(i+322)*1.4;box(.018+random(i+400)*.05,.009,.015+random(i+500)*.04,x,.007,z,darkConcrete,false);}
   function facade(center,width,bottom,top,z,material,seed,near=false){
     box(width,top-bottom,3.7,center,(top+bottom)/2,z-1.9,material);
     const left=center-width/2,columns=Math.max(1,Math.floor((width-1)/2.1)),firstWindowY=bottom+(near&&z>-3?4.1:2.0);
@@ -155,6 +155,65 @@ export function createStreetWorld(THREE,scene){
     for(let i=0;i<6;i++)rod([x-.22,4.13+i*.09,-1.59],[x+.22,4.13+i*.09,-1.59],.007,black);
     wire([[x+.4,4.19,-1.75],[x+.6,3.9,-1.77],[x+.65,2.8,-1.79]],.012,metal);
   }
+  // Beyond the low fence is the boy's home: a small, poorly maintained block.
+  // Recessed mortar, individual bricks and chipped plaster give the wall depth.
+  const homeConfig=STREET.home??{x:71.8,doorX:70.5},homeZ=-2.35,homeWidth=14;
+  const homeWall=mat('#777563',.99,{map:plasterMap,bumpMap:plasterBump,bumpScale:.047});
+  const mortar=mat('#6e6a58',1,{map:plasterMap,bumpMap:plasterBump,bumpScale:.018});
+  const brickMats=['#85644c','#6e5445','#98775a','#735e4e','#8c6d55'].map(color=>mat(color,.99,{map:plasterMap,bumpMap:plasterBump,bumpScale:.012}));
+  facade(homeConfig.x,homeWidth,0,13.4,homeZ,homeWall,7311,true);
+  box(homeWidth,.68,.13,homeConfig.x,.32,homeZ+.035,darkConcrete);
+  const brickPatches=[];
+  function brickPatch(x,y,w,h,seed){
+    const edge=[[-.49,-.43],[-.30,-.50],[-.11,-.44],[.12,-.50],[.40,-.41],[.48,-.21],[.43,.02],[.50,.21],[.32,.47],[.10,.44],[-.14,.50],[-.37,.36],[-.50,.13],[-.43,-.09]];
+    const points=edge.map(([px,py],i)=>[px*w+(random(seed+i)-.5)*w*.055,py*h+(random(seed+31+i)-.5)*h*.055]);
+    const shape=new THREE.Shape();points.forEach((p,i)=>i?shape.lineTo(...p):shape.moveTo(...p));shape.closePath();
+    const recess=mesh(new THREE.ShapeGeometry(shape),mortar,group,false);recess.position.set(x,y,homeZ+.07);
+    const inside=(px,py)=>{let found=false;for(let i=0,j=points.length-1;i<points.length;j=i++){const a=points[i],b=points[j];if((a[1]>py)!==(b[1]>py)&&px<(b[0]-a[0])*(py-a[1])/(b[1]-a[1])+a[0])found=!found;}return found;};
+    const bw=.32,bh=.145;let brickCount=0;
+    for(let row=0;row<Math.ceil(h/bh)+1;row++)for(let col=0;col<Math.ceil(w/bw)+1;col++){
+      const px=-w/2+col*bw+(row%2)*bw*.5,py=-h/2+row*bh;
+      if(![[-.14,-.06],[.14,-.06],[.14,.06],[-.14,.06]].every(([dx,dy])=>inside(px+dx,py+dy)))continue;
+      const m=brickMats[Math.floor(random(seed+row*51+col*13)*brickMats.length)];
+      box(.294,.121,.032+random(seed+row*15+col)*.012,x+px,y+py,homeZ+.088,m,false);brickCount++;
+      if(random(seed+row*7+col*19)>.78)box(.12,.014,.005,x+px-.035,y+py+.012,homeZ+.114,mortar,false);
+    }
+    for(let i=0;i<points.length;i++){
+      const a=points[i],b=points[(i+1)%points.length],dx=b[0]-a[0],dy=b[1]-a[1],length=Math.hypot(dx,dy);
+      const q=new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,0,1),Math.atan2(dy,dx));
+      instance('box',i%3===0?darkConcrete:homeWall,[x+(a[0]+b[0])/2,y+(a[1]+b[1])/2,homeZ+.111],[length,.026,.015],q,false);
+    }
+    brickPatches.push({x,y,width:w,height:h,z:homeZ+.115,brickCount});
+  }
+  brickPatch(67.0,1.46,3.0,2.24,8101);brickPatch(75.1,1.90,3.05,2.70,8301);
+  brickPatch(71.94,6.52,1.25,2.04,8501);brickPatch(76.65,9.64,1.15,2.05,8701);
+  // Weathered planks and an old repair brace make a distinct, humble entrance.
+  const doorCanvas=document.createElement('canvas');doorCanvas.width=256;doorCanvas.height=512;
+  const dc=doorCanvas.getContext('2d');dc.fillStyle='#766047';dc.fillRect(0,0,256,512);
+  for(let i=0;i<160;i++){dc.strokeStyle=`rgba(${i%3?37:184},${i%3?31:154},${i%3?25:112},${.05+random(i+440)*.19})`;dc.lineWidth=.5+random(i+970)*2.5;const x=random(i+320)*256;dc.beginPath();dc.moveTo(x,0);dc.bezierCurveTo(x+random(i+690)*14,180,x-random(i+1200)*16,350,x+random(i+1370)*11,512);dc.stroke();}
+  for(let i=0;i<40;i++){dc.fillStyle='rgba(38,36,29,.18)';dc.fillRect(random(i+491)*256,random(i+792)*512,2+random(i+997)*9,5+random(i+1142)*38);}
+  const doorMap=new THREE.CanvasTexture(doorCanvas);doorMap.colorSpace=THREE.SRGBColorSpace;
+  const oldWood=mat('#9d8767',.98,{map:doorMap,bumpMap:doorMap,bumpScale:.008}),doorFrame=mat('#575244',.98,{map:plasterMap});
+  const homeDoorX=homeConfig.doorX,homeDoorZ=homeZ+.15;
+  box(1.40,2.58,.15,homeDoorX,1.27,homeZ+.055,darkConcrete);
+  box(1.17,2.31,.04,homeDoorX,1.16,homeDoorZ,black);
+  for(let i=0;i<6;i++){
+    const q=new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,0,1),(random(i+4481)-.5)*.012);
+    instance('box',oldWood,[homeDoorX-.49+i*.195,1.17+(random(i+7341)-.5)*.018,homeDoorZ+.035],[.184,2.28,.055],q);
+    for(const y of [.38,1.88])cylinder(.012,.008,homeDoorX-.49+i*.195,y,homeDoorZ+.069,rust,new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1,0,0),Math.PI/2));
+  }
+  for(const dx of [-.65,.65])box(.10,2.54,.15,homeDoorX+dx,1.26,homeDoorZ+.009,doorFrame);
+  box(1.39,.10,.16,homeDoorX,2.50,homeDoorZ+.009,doorFrame);
+  for(const y of [.39,1.88]){box(.29,.055,.018,homeDoorX-.45,y,homeDoorZ+.076,rust);cylinder(.034,.15,homeDoorX-.57,y,homeDoorZ+.082,metal);}
+  const braceQ=new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,0,1),-.11);
+  instance('box',oldWood,[homeDoorX,.62,homeDoorZ+.086],[1.12,.11,.032],braceQ);
+  box(.09,.25,.016,homeDoorX+.39,1.13,homeDoorZ+.077,rust);rod([homeDoorX+.39,1.14,homeDoorZ+.089],[homeDoorX+.39,1.20,homeDoorZ+.15],.018,metal);rod([homeDoorX+.39,1.20,homeDoorZ+.15],[homeDoorX+.27,1.20,homeDoorZ+.15],.018,metal);
+  box(1.40,.055,.32,homeDoorX,.023,homeDoorZ+.04,darkConcrete);
+  box(.30,.20,.15,homeDoorX,2.82,homeDoorZ+.05,metal);cylinder(.095,.16,homeDoorX,2.78,homeDoorZ+.19,lampGlass);
+  const homeLight=new THREE.PointLight('#e1b479',11,7,2);homeLight.position.set(homeDoorX,2.69,homeDoorZ+.47);homeLight.userData.flickerBase=11;group.add(homeLight);lightList.push(homeLight);
+  flatPatch(homeDoorX,.1,1.48,1.25,reflection,.006,8411);
+  for(let i=0;i<23;i++){const x=65.7+random(i+6721)*12.3,z=-1.45+random(i+7631)*.4;box(.045+random(i+321)*.12,.035,.035+random(i+811)*.08,x,.003,z,i%3===0?brickMats[i%brickMats.length]:darkConcrete,false);}
+  const home={x:homeConfig.x,bounds:{min:[homeConfig.x-homeWidth/2,0,homeZ-3.8],max:[homeConfig.x+homeWidth/2,13.6,homeZ+.2]},door:{x:homeDoorX,y:0,z:homeDoorZ+.15,kind:'closed-weathered-wood',interactive:false},brickPatches};
   // Beyond the entry block, a parking court opens in front of layered blocks.
   for(const spec of [[15,16,17,-13.5,431],[33,15,21,-17,731],[51,18,18,-13,1103]])facade(spec[0],spec[1],-.1,spec[2],spec[3],distantWall,spec[4],true);
   for(const spec of [[23,13,26,-29,1765],[44,20,29,-36,2031],[66,16,24,-30,2701]])facade(spec[0],spec[1],-.1,spec[2],spec[3],farWall,spec[4]);
@@ -248,7 +307,8 @@ export function createStreetWorld(THREE,scene){
     wire([[a.x-.33,4.65,a.z-1.23],[(a.x+b.x)/2,4.26,(a.z+b.z)/2-1.35],[b.x-.33,4.65,b.z-1.23]],.009,black);
   }
   wire([[-4,10.1,-2.0],[2,8.7,-2.7],[9,4.62,-1.56]],.018,black);
-  // A quiet, closed gate marks the visible end of the prototype street.
+  // The first fence is climbed using the dumpster; a second, raised panel
+  // leaves a low opening that can only be passed while crouched.
   box(.34,2.7,.36,55.8,1.25,-2.4,darkConcrete);box(3.8,.07,.09,57.7,2.5,-2.4,metal);
   for(let i=0;i<17;i++)rod([56.0+i*.22,-.05,-2.4],[56.0+i*.22,2.45,-2.4],.014,metal);
   const gateX=STREET.fence.x+STREET.fence.w/2,gateTop=STREET.fence.y,gateBack=-1.05,gateFront=1.75;
@@ -258,6 +318,46 @@ export function createStreetWorld(THREE,scene){
   rod([gateX,.16,gateBack+.05],[gateX,2.15,gateFront-.05],.019,metal);
   box(.10,.17,.18,gateX+.02,1.15,.38,rust);
   const endGate={bounds:{min:[gateX-.08,-.08,gateBack-.08],max:[gateX+.08,gateTop+.027,gateFront+.08]}};
+  const crawl=STREET.crawl??{x:61,w:1.8,bottomY:1.02,topY:2.55};
+  const crawlBack=-1.05,crawlFront=1.75,gap=crawl.bottomY;
+  // A bent fence section sits diagonally across the path, making its raised
+  // bottom visible in the side view. Its posts stay outside the walking lane.
+  const fencePoint=(t,y,offset=0)=>[crawl.x+.07+(crawl.w-.14)*t+offset,y,crawlBack+(crawlFront-crawlBack)*t];
+  const supportPositions=[];
+  for(const t of [0,1]){
+    const point=fencePoint(t,0),z=point[2]+(t? .18:-.18),x=point[0];supportPositions.push([x,z]);
+    rod([x,-.06,z],[x,crawl.topY+.12,z],.065,metal);
+    box(.20,.10,.20,x,.015,z,darkConcrete);box(.18,.055,.18,x,crawl.topY+.15,z,rust);
+    rod([x,crawl.topY-.14,z],fencePoint(t,crawl.topY-.14),.034,rust);
+  }
+  for(const offset of [-.028,.028]){
+    rod(fencePoint(0,gap+.035,offset),fencePoint(1,gap+.035,offset),.035,metal);
+    rod(fencePoint(0,crawl.topY-.035,offset),fencePoint(1,crawl.topY-.035,offset),.035,metal);
+  }
+  for(let n=0;n<=16;n++){
+    const t=n/16,tilt=(random(n+811)-.5)*.013;
+    rod(fencePoint(t,gap+.065+random(n+877)*.045),fencePoint(Math.max(0,Math.min(1,t+tilt)),crawl.topY-.065),.014,n%5===0?rust:metal);
+    if(n<16){
+      const next=(n+1)/16;
+      rod(fencePoint(t,gap+.18),fencePoint(next,crawl.topY-.18),.007,metal);
+      rod(fencePoint(t,crawl.topY-.18),fencePoint(next,gap+.18),.007,metal);
+    }
+  }
+  for(const t of [0,1])rod(fencePoint(t,gap+.035),fencePoint(t,crawl.topY-.035),.042,metal);
+  // A few uneven repair plates and snapped wire tips keep the opening rough.
+  for(const [t0,t1,y0]of[[.04,.27,2.12],[.42,.57,2.02],[.73,.96,2.15]]){
+    const points=[fencePoint(t0,y0),fencePoint(t1,y0+.05),fencePoint(t1,crawl.topY-.085),fencePoint(t0,crawl.topY-.09)];
+    quad(points,rust,group);quad([...points].reverse(),metal,group);
+    rod(fencePoint(t0,y0+.025,.012),fencePoint(t1,y0+.075,.012),.012,trim);
+  }
+  for(const t of [.15,.38,.66,.89])rod(fencePoint(t,gap+.16),fencePoint(t+.018,gap+.045),.009,rust);
+  // Boundary sections turn into the gardens, with no support in the opening.
+  const rearX=fencePoint(0,0)[0];
+  rod([58.55,2.50,-2.4],[rearX,2.50,-2.4],.031,metal);
+  for(let x=59.65;x<rearX;x+=.22)rod([x,.04,-2.4],[x,2.47,-2.4],.014,metal);
+  rod([rearX,.10,-2.4],[rearX,.10,crawlBack-.18],.027,metal);
+  rod([rearX,2.50,-2.4],[rearX,2.50,crawlBack-.18],.027,metal);
+  const crawlGate={id:'raised-fence',bounds:{min:[crawl.x,gap,crawlBack-.045],max:[crawl.x+crawl.w,crawl.topY,crawlFront+.045]},opening:{min:[crawl.x,0,crawlBack+.08],max:[crawl.x+crawl.w,gap,crawlFront-.08],height:gap},supports:[crawlBack-.18,crawlFront+.18],supportPositions};
   const dumpsterConfig=STREET.dumpster??{startX:43.5,w:1.9,y:1.05,z:0,minX:8.2,maxX:53.25};
   const dumpsterGroup=new THREE.Group();dumpsterGroup.name='movable-dumpster';dumpsterGroup.position.set(dumpsterConfig.startX,0,0);group.add(dumpsterGroup);
   const dumpsterPaint=mat('#4f6557',.87,{metalness:.26,map:plasterMap,bumpMap:plasterBump,bumpScale:.009});
@@ -312,7 +412,7 @@ export function createStreetWorld(THREE,scene){
   for(const batch of batches.values()){
     const object=new THREE.InstancedMesh(geometries[batch.type],batch.material,batch.matrices.length);batch.matrices.forEach((m,i)=>object.setMatrixAt(i,m));object.instanceMatrix.needsUpdate=true;object.castShadow=batch.shadow;object.receiveShadow=true;group.add(object);
   }
-  const metadata={entryDoor:{x:doorX,y:0,z:doorZ,kind:'building-exit'},route:{minX:STREET.minX,maxX:STREET.maxX,y:0,z:0,clearHalfWidth:.5},cars,props,lamps,endGate,fence:endGate,dumpster:dumpsterMetadata,
+  const metadata={entryDoor:{x:doorX,y:0,z:doorZ,kind:'building-exit'},route:{minX:STREET.minX,maxX:STREET.maxX,y:0,z:0,clearHalfWidth:.5},cars,props,lamps,endGate,fence:endGate,crawlGate,home,dumpster:dumpsterMetadata,
     neighbouringBuilding:{minX:-22,maxX:-8.2,z:-2.12},graffiti:{x:-3.45,y:1.20,z:-1.924,width:4.65,height:1.48},lights:lightList.length,drawBatches:batches.size};
   group.userData.street=metadata;let enteredAt=null;
   const entryDoor={reset(){enteredAt=null;entryLeaf.rotation.y=1.05;},get angle(){return entryLeaf.rotation.y;}};
@@ -321,6 +421,6 @@ export function createStreetWorld(THREE,scene){
     if(enteredAt===null)enteredAt=time;
     dumpster.setPosition(streetState?.dumpsterX??dumpsterConfig.startX);
     const closing=Math.max(0,Math.min(1,(time-enteredAt-.8)/2.4));entryLeaf.rotation.y=1.05*(1-closing*closing*(3-2*closing));
-    for(let i=0;i<lightList.length;i++){const base=i===0?15:18;lightList[i].intensity=base*(.992+.006*Math.sin(time*.85+i*1.9));}
+    for(let i=0;i<lightList.length;i++){const base=lightList[i].userData.flickerBase??(i===0?15:18);lightList[i].intensity=base*(.992+.006*Math.sin(time*.85+i*1.9));}
   }};
 }

@@ -2,20 +2,25 @@ import {MOVEMENT,movementVelocity,crateSideContact} from './movement.js';
 import {createClimb,sampleClimb} from './climb.js';
 
 const clamp=(value,min,max)=>Math.max(min,Math.min(max,value));
-const RADIUS=.22,EPS=.001;
+const RADIUS=.22,CRAWL_RADIUS=.72,EPS=.001;
 export const STREET=Object.freeze({
-  minX:-.2,maxX:58.5,groundY:0,z:0,
+  minX:-.2,maxX:77.5,groundY:0,z:0,
   entry:Object.freeze({x:2.8,y:0,face:1}),doorX:1.2,endX:54.65,
   dumpster:Object.freeze({id:'dumpster',startX:43.5,w:1.9,y:1.05,z:0,minX:8.2,maxX:53.25}),
-  fence:Object.freeze({id:'street-fence',x:54.65,w:.16,y:2.45})
+  fence:Object.freeze({id:'street-fence',x:54.65,w:.16,y:2.45}),
+  crawl:Object.freeze({x:61,w:1.8,bottomY:1.02,topY:2.55}),
+  home:Object.freeze({x:71.8,doorX:70.5})
 });
 export const dumpsterCollider=x=>({id:'dumpster',x:x-STREET.dumpster.w/2,w:STREET.dumpster.w,y:STREET.dumpster.y});
+export const beneathCrawlGate=x=>x+CRAWL_RADIUS>STREET.crawl.x+EPS&&x-CRAWL_RADIUS<STREET.crawl.x+STREET.crawl.w-EPS;
 
 // Old ground saves remain usable even if a newly added bin occupies that spot.
 export function normalizeStreetSave(value){
   if(!value||typeof value!=='object'||Array.isArray(value))return null;
   const {x,face}=value,y=value.y??0,D=STREET.dumpster,F=STREET.fence;
   if(!Number.isFinite(x)||x<STREET.minX||x>STREET.maxX||(face!==1&&face!==-1)||!Number.isFinite(y))return null;
+  if(value.crouched!==undefined&&typeof value.crouched!=='boolean')return null;
+  const pose=value.crouched?{crouched:true}:{};
   let dumpsterX=value.dumpsterX??D.startX;
   if(!Number.isFinite(dumpsterX)||dumpsterX<D.minX||dumpsterX>D.maxX)return null;
   const overlapsBin=()=>x+RADIUS>dumpsterX-D.w/2+EPS&&x-RADIUS<dumpsterX+D.w/2-EPS;
@@ -25,9 +30,10 @@ export function normalizeStreetSave(value){
   }
   if(Math.abs(y)<.025){
     if(overlapsBin()||x+RADIUS>F.x+EPS&&x-RADIUS<F.x+F.w-EPS)return null;
-    return {x,y:0,face,dumpsterX};
+    if(beneathCrawlGate(x)&&!value.crouched)return null;
+    return {x,y:0,face,dumpsterX,...pose};
   }
-  if(Math.abs(y-D.y)<.025&&x>=dumpsterX-D.w/2+.23-EPS&&x<=dumpsterX+D.w/2-.23+EPS)return {x,y:D.y,face,dumpsterX};
+  if(Math.abs(y-D.y)<.025&&x>=dumpsterX-D.w/2+.23-EPS&&x<=dumpsterX+D.w/2-.23+EPS)return {x,y:D.y,face,dumpsterX,...pose};
   return null;
 }
 
@@ -37,7 +43,7 @@ export function createStreet(){
   function begin(player,saved=null){
     if(state||!player||typeof player!=='object')return false;
     const restore=normalizeStreetSave(saved)??normalizeStreetSave(STREET.entry);
-    state={direction:0,running:false,acceleration:0,landImpact:0,jumpHeld:false,buffer:0,coyote:MOVEMENT.coyote,
+    state={direction:0,running:false,acceleration:0,landImpact:0,jumpHeld:false,buffer:0,coyote:MOVEMENT.coyote,crouch:restore.crouched?1:0,underLowGate:beneathCrawlGate(restore.x),
       dumpsterX:restore.dumpsterX,objectVelocity:0,grabbedSide:0,grabOffset:0,interaction:null,climb:null,climbsCompleted:0,
       jump:{preparing:false,elapsed:0,duration:.12,airTime:0,launched:false,launchSpeed:0}};
     Object.assign(player,{x:restore.x,y:restore.y,z:0,vx:0,vy:0,vz:0,grounded:true,face:restore.face});
@@ -61,7 +67,17 @@ export function createStreet(){
     dt=Math.min(dt,.1);lastPlayer=player;state.landImpact=0;
     const D=STREET.dumpster,F=STREET.fence,jump=state.jump;
     const direction=Number.isFinite(input?.direction)?Math.sign(input.direction):0;
-    const running=!!input?.running,wantsJump=!!input?.jump,interact=!!input?.interact;
+    const underGate=beneathCrawlGate(player.x)&&player.y<STREET.crawl.topY&&player.y+.96>STREET.crawl.bottomY;
+    state.underLowGate=beneathCrawlGate(player.x)&&Math.abs(player.y)<.03;
+    const wantsCrouch=player.grounded&&!state.climb&&(!!input?.crouch||state.underLowGate);
+    if(wantsCrouch&&state.jump.preparing)resetJump();
+    const targetCrouch=wantsCrouch?1:0,step=dt/.36;
+    if(targetCrouch>state.crouch)state.crouch=Math.min(1,state.crouch+step);
+    else if(targetCrouch<state.crouch)state.crouch=Math.max(0,state.crouch-step);
+    // A low beam keeps the complete bent torso/backpack beneath it after release.
+    if(state.underLowGate&&player.grounded)state.crouch=1;
+    const crouching=state.crouch>.001||wantsCrouch||underGate;
+    const running=!!input?.running&&!crouching,wantsJump=!!input?.jump,interact=!!input?.interact&&!crouching;
     state.direction=direction;state.running=running;
     const freshJump=wantsJump&&!state.jumpHeld;state.jumpHeld=wantsJump;
     if(state.climb){
@@ -73,7 +89,8 @@ export function createStreet(){
       }
       return null;
     }
-    if(freshJump)state.buffer=MOVEMENT.buffer;
+    if(freshJump&&!crouching)state.buffer=MOVEMENT.buffer;
+    if(crouching)state.buffer=state.coyote=0;
     state.buffer=Math.max(0,state.buffer-dt);state.coyote=player.grounded?MOVEMENT.coyote:Math.max(0,state.coyote-dt);
     const b=dumpsterCollider(state.dumpsterX);
     if(!interact||!player.grounded||Math.abs(player.y)>.04||wantsJump){state.grabbedSide=0;state.interaction=null;state.objectVelocity=0;}
@@ -97,10 +114,12 @@ export function createStreet(){
     }
     state.interaction=null;
     const oldVX=player.vx;
-    player.vx=movementVelocity(player.vx,direction,running,player.grounded,dt);
+    const normalVelocity=movementVelocity(player.vx,direction,running,player.grounded,dt);
+    const lowVelocity=direction*.80+(player.vx-direction*.80)*Math.exp(-(direction?8:12)*dt);
+    player.vx=normalVelocity+(lowVelocity-normalVelocity)*state.crouch;
     if(!direction&&player.grounded&&Math.abs(player.vx)<.002)player.vx=0;
     if(direction&&(Math.sign(player.vx)===direction||Math.abs(player.vx)<.2))player.face=direction;
-    if(!interact||wantsJump||jump.launched){
+    if(!crouching&&(!interact||wantsJump||jump.launched)){
       const targets=[b,F];
       for(const target of targets)if(reachable(player,target)&&(
         player.grounded&&state.buffer>0||!player.grounded&&(wantsJump||jump.launched)&&direction===player.face)){
@@ -123,6 +142,13 @@ export function createStreet(){
       const contact=crateSideContact(player,nextX,obstacle,RADIUS);
       if(contact){nextX=contact.x;player.vx=0;}
     }
+    const gate=STREET.crawl,gateHeight=state.crouch>=.98&&player.grounded?.96:1.60;
+    if(player.y<gate.topY&&player.y+gateHeight>gate.bottomY&&beneathCrawlGate(nextX)){
+      if(player.x<=gate.x-CRAWL_RADIUS+EPS)nextX=Math.min(nextX,gate.x-CRAWL_RADIUS);
+      else if(player.x>=gate.x+gate.w+CRAWL_RADIUS-EPS)nextX=Math.max(nextX,gate.x+gate.w+CRAWL_RADIUS);
+      else nextX=player.x;
+      player.vx=0;
+    }
     player.x=clamp(nextX,STREET.minX,STREET.maxX);if(player.x!==nextX)player.vx=0;
     state.acceleration=clamp((player.vx-oldVX)/dt,-16,16);player.z=0;player.vz=0;
     if(player.grounded&&!jump.launched&&supportAt(player.x)<player.y-.03)player.grounded=false;
@@ -138,7 +164,7 @@ export function createStreet(){
     return event;
   }
   return {get active(){return !!state;},get state(){return state;},begin,update,supportY(x){return state?supportAt(x):0;},
-    snapshot(){if(!state||!lastPlayer||!lastPlayer.grounded||state.climb||state.jump.preparing||state.jump.launched||Math.abs(lastPlayer.z)>.025)return null;
-      return normalizeStreetSave({...lastPlayer,dumpsterX:state.dumpsterX});},
+    snapshot(){if(!state||!lastPlayer||!lastPlayer.grounded||state.climb||state.jump.preparing||state.jump.launched||Math.abs(lastPlayer.z)>.025||state.crouch>.001&&state.crouch<.98)return null;
+      return normalizeStreetSave({...lastPlayer,dumpsterX:state.dumpsterX,...(state.crouch>=.98?{crouched:true}:{})});},
     reset(){state=null;lastPlayer=null;}};
 }

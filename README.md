@@ -30,11 +30,12 @@ Open the generated `dist/Runaway.html` file in Chrome, Edge, or Firefox. No serv
 - **S** or **Down** at the wall ladder: climb down, including entering the ladder from the upper roof.
 - **D / Right** or **A / Left** while on the ladder: climb up or down, respectively. Release the controls to hold still; reverse direction at any point.
 - **Hold E + a direction**: push the crate; push or pull the street dumpster.
+- **Hold Ctrl or C** on the street: crouch and move slowly. Release to stand after clearing low obstacles.
 - **E**: open the lit door.
 - **Esc**: pause or resume; close Settings to return to its previous menu. On a touchscreen, the small pause icon opens the pause menu.
 - **R**: restart the level.
 
-Small touch icons appear on touchscreen devices. The running figure toggles running; the open hand interacts. Hold the hand icon and a direction to push or pull the dumpster. Press **↑** beside the crate or dumpster to climb onto it. Near the ladder, an extra **↓** button appears for climbing down; the **↑** button climbs up. The **← / →** buttons also move down or up while on the ladder. Release the buttons to hold your place. Sound and volume are controlled from **Settings**.
+Small touch icons appear on touchscreen devices. The running figure toggles running; the open hand interacts. Hold the hand icon and a direction to push or pull the dumpster. Press **↑** beside the crate or dumpster to climb onto it. Near the ladder, an extra **↓** button appears for climbing down; the **↑** button climbs up. The **← / →** buttons also move down or up while on the ladder. Release the buttons to hold your place. The crouching figure toggles crouch on the street; tap it again to stand when there is room. Sound and volume are controlled from **Settings**.
 
 After **New Game**, the boy automatically braces his palms against the roof, brings a knee beneath him, and stands. Jumps preserve forward momentum, choose a leading leg from the current stride, and blend through anticipation, takeoff, airborne recovery, landing reach, and a step back into movement. A short input buffer and edge grace make repeated jumps more forgiving. At reachable vent and pipe ledges, he grabs the edge and pulls himself onto the roof automatically. Climbing onto the crate requires **Space**, **W**, **Up**, or the phone’s **↑** button.
 
@@ -168,3 +169,12 @@ Hold **E** beside either handle and use **A / D** to push or pull. The boy keeps
 Move the dumpster toward the end fence, climb onto it, then jump toward the fence to pull up and pass over. The far side has a safe landing for the next update. Continue remembers the dumpster position and safe ground or lid positions, including beyond the fence; older street saves remain compatible. New Game resets the object.
 
 The exit building now has a larger faded graffiti tag to the left of the entrance, and an adjoining apartment block fills the far-left view.
+
+
+## Low fence and home courtyard — v0.22
+
+Beyond the dumpster crossing, a raised damaged fence panel leaves a low passage into the next courtyard. Hold **Ctrl** or **C** and walk underneath. On a phone, tap the crouching figure to toggle the low posture, then use the direction icons. The boy lowers his hips, tucks his head and takes short planted steps; his backpack passes below the fence with him. Running and jumping are unavailable while crouched. Releasing the control inside the passage keeps him low until his whole body clears the panel.
+
+A brief first encounter introduces crouching once. Continue safely restores crouched positions inside the opening, while older street saves keep working. Pause freezes the posture and New Game resets the route.
+
+The path leads to his worn apartment building: broken plaster exposes individual brickwork, repaired walls surround a rough old wooden door, and a dim entrance lamp reflects in the wet sidewalk. The doorway is scenery for this stage.

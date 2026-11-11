@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {createTutorials,TUTORIAL_IDS} from '../src/tutorial.js';
 import {DEFAULT_SETTINGS} from '../src/session.js';
 import {LEVEL} from '../src/level.js';
+import {STREET} from '../src/street.js';
 
 const player=(x,y=0,grounded=true)=>({x,y,grounded,vx:1.9,vy:0,face:1});
 const context=(x=4,y=0,extra={})=>({playing:true,wake:1,player:player(x,y),crateX:13,busy:false,ladderActive:false,...extra});
@@ -12,7 +13,8 @@ const encounters={
   'running-jump':()=>context(20),
   ladder:()=>context(LEVEL.ladder.x,LEVEL.ladder.bottomY),
   door:()=>context(LEVEL.doorX,LEVEL.roofs.final.y),
-  'push-pull':()=>context(41.4,0,{chapter:'street',dumpsterX:43.5})
+  'push-pull':()=>context(41.4,0,{chapter:'street',dumpsterX:43.5}),
+  crouch:()=>context(STREET.crawl.x-1.8,0,{chapter:'street'})
 };
 const expire=tutorials=>tutorials.update(tutorials.current.duration+.01,context());
 
@@ -91,7 +93,7 @@ test('Continue restores unique learned lessons while New Game resets both curren
 });
 
 test('mobile first encounters explain the visible touch controls rather than keyboard-only actions',()=>{
-  const expected={push:/hand.*direction/i,'crate-climb':/↑/,'running-jump':/running.*↑/i,ladder:/↑.*↓/,door:/hand/i,'push-pull':/hand.*direction.*push.*pull.*↑/i};
+  const expected={push:/hand.*direction/i,'crate-climb':/↑/,'running-jump':/running.*↑/i,ladder:/↑.*↓/,door:/hand/i,'push-pull':/hand.*direction.*push.*pull.*↑/i,crouch:/crouch icon.*underneath/i};
   for(const id of TUTORIAL_IDS) {
     const learned=id==='crate-climb'?['push']:[];
     const mobile=createTutorials({touch:true,learned}),desktop=createTutorials({learned});
@@ -134,4 +136,29 @@ test('street introduction follows the dumpster and never repeats or displays roo
   assert.equal(restored.update(.1,nearMoved),null,'Continue preserves the once-only introduction.');
   restored.reset();
   assert.equal(restored.update(.1,nearMoved),'push-pull','New Game restores the first encounter.');
+});
+
+test('crouch is introduced once beside the raised panel, persists through Continue and resets for New Game',()=>{
+  const here=encounters.crouch();
+  const unavailable=[
+    {...here,chapter:'rooftop'},{...here,chapter:'stairwell'},
+    {...here,playing:false},{...here,wake:.8},{...here,busy:true},
+    {...here,player:player(here.player.x,0,false)},
+    {...here,player:player(here.player.x,STREET.dumpster.y)},
+    {...here,player:player(STREET.crawl.x-3)},
+    {...here,player:player(STREET.crawl.x+STREET.crawl.w+2)}
+  ];
+  for(const value of unavailable){
+    const tutorials=createTutorials();assert.equal(tutorials.update(.1,value),null);
+    assert.deepEqual(tutorials.learned,[],'An unrelated or unavailable encounter must not consume crouch introduction.');
+  }
+  const tutorials=createTutorials();
+  assert.equal(tutorials.update(.1,here),'crouch');
+  assert.match(tutorials.current.text,/CTRL.*C.*crouch/);
+  assert.equal(tutorials.update(1,here),null);
+  expire(tutorials);assert.equal(tutorials.current,null);
+  for(const x of [STREET.crawl.x-1,STREET.crawl.x+.7,STREET.crawl.x-1])
+    assert.equal(tutorials.update(.5,{...here,player:player(x)}),null,'Returning to either side cannot repeat the prompt.');
+  const restored=createTutorials({learned:tutorials.learned});assert.equal(restored.update(.1,here),null);
+  restored.reset();assert.equal(restored.update(.1,here),'crouch');
 });

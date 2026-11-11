@@ -12,4 +12,5 @@ body.indoors #mobile .touch-actions [data-key="e"],body.indoors #mobile .touch-a
 body.indoors.near-exit #mobile .touch-actions [data-key="e"]{display:flex}
 body.on-street #mobile .touch-actions [data-key="e"]{display:none}
 body.on-street.near-object #mobile .touch-actions [data-key="e"]{display:flex}
+#mobile .touch-crouch{display:none}body.on-street #mobile .touch-crouch{display:flex}
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}

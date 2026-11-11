@@ -1,13 +1,15 @@
 import {LEVEL} from './level.js';
+import {STREET} from './street.js';
 
-export const TUTORIAL_IDS=Object.freeze(['push','crate-climb','running-jump','ladder','door','push-pull']);
+export const TUTORIAL_IDS=Object.freeze(['push','crate-climb','running-jump','ladder','door','push-pull','crouch']);
 const copy={
   push:['Hold E + A / D to move objects.','Hold the hand icon and a direction to move objects.'],
   'crate-climb':['SPACE / W / UP — Climb the crate.','Tap ↑ to climb the crate.'],
   'running-jump':['Hold SHIFT to run, then SPACE to jump.','Use the running icon, then ↑ to jump.'],
   ladder:['W / UP — Climb. S / DOWN — Descend.','↑ climbs. ↓ descends. Release to hold on.'],
   door:['E — Open the door.','Tap the hand icon to open the door.'],
-  'push-pull':['Hold E + A / D to push or pull. SPACE / W / UP to climb.','Hold the hand icon and a direction to push or pull. Tap ↑ to climb.']
+  'push-pull':['Hold E + A / D to push or pull. SPACE / W / UP to climb.','Hold the hand icon and a direction to push or pull. Tap ↑ to climb.'],
+  crouch:['Hold CTRL or C to crouch.','Use the crouch icon to pass underneath.']
 };
 
 // Brief first encounters are separate from the optional recurring hints.
@@ -32,7 +34,8 @@ export function createTutorials({touch=false,learned=[]}={}){
       'running-jump':rooftop&&grounded&&Math.abs(y-LEVEL.roofs.first.y)<.1&&x>=19.3&&x<=22.05,
       ladder:nearLadder,
       door:rooftop&&grounded&&Math.abs(y-LEVEL.roofs.final.y)<.1&&Math.abs(x-LEVEL.doorX)<1.55,
-      'push-pull':chapter==='street'&&Number.isFinite(dumpsterX)&&grounded&&Math.abs(y)<.08&&Math.abs(x-dumpsterX)<2.65
+      'push-pull':chapter==='street'&&Number.isFinite(dumpsterX)&&grounded&&Math.abs(y)<.08&&Math.abs(x-dumpsterX)<2.65,
+      crouch:chapter==='street'&&grounded&&Math.abs(y)<.08&&x>=STREET.crawl.x-2.5&&x<=STREET.crawl.x+STREET.crawl.w+1.1
     };
     const id=TUTORIAL_IDS.find(id=>eligible[id]&&!seen.has(id));
     if(!id)return null;

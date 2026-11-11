@@ -261,9 +261,9 @@ test('indoor continuation data and lesson history are copied independently from 
   assert.equal(Object.hasOwn(roof,'stairwell'),false);
 });
 
-function streetGame({x=STREET.entry.x,y=STREET.groundY,face=1,dumpsterX,...other}={}) {
+function streetGame({x=STREET.entry.x,y=STREET.groundY,face=1,dumpsterX,crouched,...other}={}) {
   const supportY=Math.abs(y-STREET.groundY)<=.025?STREET.groundY:Math.abs(y-STREET.dumpster.y)<=.025?STREET.dumpster.y:y;
-  const street={x,y:supportY,face,...(dumpsterX===undefined?{}:{dumpsterX})};
+  const street={x,y:supportY,face,...(dumpsterX===undefined?{}:{dumpsterX}),...(crouched===undefined?{}:{crouched})};
   return liveGame({x,y,face,chapter:'street',street,checkpoint:3,crateX:16,
     bridgeBroken:true,slipPlayed:true,awakened:true,learnedMechanics:['push','ladder','door'],...other});
 }
@@ -386,4 +386,39 @@ test('dumpster positions are copied with player progress and never leak through 
   assert.deepEqual(session.getSave(),expected);
   const menu=session.getSave();menu.street.dumpsterX=43.5;menu.street.y=0;menu.player.x=3;
   assert.deepEqual(session.getSave(),expected);assert.deepEqual(createSession(storage).getSave(),expected);
+});
+
+test('Continue restores a supported crouch beneath the raised fence without exposing mutable posture state',()=>{
+  const x=STREET.crawl.x+STREET.crawl.w/2,dumpsterX=STREET.dumpster.maxX;
+  const source=streetGame({x,dumpsterX,crouched:true,learnedMechanics:['door','crouch']});
+  const canonical=createSaveSnapshot(source);
+  assert(canonical,'The child safely crouched beneath the raised fence must be resumable.');
+  assert.deepEqual(canonical.street,{x,y:0,face:1,dumpsterX,crouched:true});
+  assert.deepEqual(canonical.player,{x,y:0,face:1});
+  assert.deepEqual(canonical.learnedMechanics,['door','crouch']);
+  source.street.crouched=false;assert.equal(canonical.street.crouched,true,'Live posture cannot mutate a snapshot.');
+  const storage=memoryStorage(),session=createSession(storage);assert(session.save(canonical));
+  canonical.street.crouched=false;assert.equal(session.getSave().street.crouched,true,'Saving must copy the supplied posture.');
+  const copy=session.getSave();delete copy.street.crouched;
+  assert.equal(session.getSave().street.crouched,true,'A UI copy cannot silently stand the saved child inside the fence.');
+  const restored=createSession(storage).getSave();assert.equal(restored.street.crouched,true);
+  assert.equal(restored.street.dumpsterX,dumpsterX);assert.deepEqual(restored.learnedMechanics,['door','crouch']);
+});
+
+test('standing or malformed crouch saves beneath the panel cannot overwrite the safe Continue point',()=>{
+  const x=STREET.crawl.x+STREET.crawl.w/2,storage=memoryStorage(),session=createSession(storage);
+  const good=createSaveSnapshot(streetGame({x:STREET.crawl.x-1,crouched:true}));assert(good);assert(session.save(good));
+  const unsafe=[
+    streetGame({x}),streetGame({x,crouched:false}),streetGame({x,crouched:'true'}),
+    streetGame({x,crouched:1}),streetGame({x,crouched:null}),
+    streetGame({x,y:.5,crouched:true})
+  ];
+  for(const source of unsafe){
+    assert.equal(createSaveSnapshot(source),null,'Only a supported and explicitly crouched posture may be restored in the opening.');
+    const raw={...source,version:1};assert.equal(session.save(raw),false);
+    assert.deepEqual(session.getSave(),good,'An unsafe autosave must leave the safe prior position intact.');
+    assert.equal(createSession(memoryStorage({[saveKey]:JSON.stringify(raw)})).getSave(),null);
+  }
+  const legacy=createSaveSnapshot(streetGame({x:STREET.crawl.x-1}));assert(legacy);
+  assert.equal(Object.hasOwn(legacy.street,'crouched'),false,'Older standing street saves keep their canonical shape.');
 });

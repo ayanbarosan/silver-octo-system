@@ -140,7 +140,7 @@ export function createBoy(THREE) {
   line(head,[[-.115,.162,.044],[-.06,.187,.079],[.012,.174,.137]],M.hairHighlight,.002);
 
   // Canvas backpack: rounded body, separate front pocket, zipper and shoulder straps.
-  const bag=new THREE.Group();bag.position.set(0,.263,-.195);torso.add(bag);
+  const bag=new THREE.Group();bag.name='backpack';bag.position.set(0,.263,-.195);torso.add(bag);
   softBox(bag,M.bagSide,0,0,-.012,.335,.415,.135,.052);
   softBox(bag,M.bag,0,.008,-.058,.319,.401,.133,.055);
   softBox(bag,M.bagSide,0,-.082,-.137,.267,.148,.047,.028);
@@ -694,7 +694,7 @@ export function createBoy(THREE) {
    * foot's world anchor survives changing speeds, which avoids skating while
    * accelerating or settling into a stop.
    */
-  function animate({time=0,speed=0,grounded=true,wake=1,push=false,interaction=null,vy=0,dt,travel,acceleration=0,landImpact=0,jumpPrep=0,airTime,takeoff,climb=null,ladder=null,slip=null,stairs=null,launchSpeed,landingDistance}={}) {
+  function animate({time=0,speed=0,grounded=true,wake=1,push=false,interaction=null,crouch=0,vy=0,dt,travel,acceleration=0,landImpact=0,jumpPrep=0,airTime,takeoff,climb=null,ladder=null,slip=null,stairs=null,launchSpeed,landingDistance}={}) {
     if(climb||ladder||slip){grounded=true;speed=0;travel=0;jumpPrep=0;airTime=0;takeoff=0;}
     const delta=clamp(Number.isFinite(dt)?dt:(initialized?time-previousTime:1/60),0,.1);
     previousTime=time;
@@ -706,6 +706,10 @@ export function createBoy(THREE) {
     interactionWeight=damp(interactionWeight,gripping?1:0,14,delta);
     pullWeight=damp(pullWeight,gripping&&interaction.kind==='pull'?1:0,11,delta);
     const manipulation=grounded&&wake>=1&&!climb&&!ladder&&!slip?interactionWeight:0;
+    // The controller interpolates this channel together with the root. A
+    // second smoothing filter here would leave the visible head above a low
+    // opening after the collision capsule had already ducked underneath it.
+    const duck=grounded&&wake>=1&&!climb&&!ladder&&!slip&&!stairs&&!push&&manipulation<.001?smooth(clamp(Number.isFinite(crouch)?crouch:0,0,1)):0;
     const gaitSign=1-2*pullWeight;
     const stairSupport=!!stairs&&grounded&&!climb&&!ladder&&!slip;
     const stairStart=stairs&&stairDirection(stairs.flight)<0?STAIRWELL.right:STAIRWELL.left;
@@ -769,8 +773,8 @@ export function createBoy(THREE) {
     // The short walking stride has double support; sprinting has short contact
     // and a recovery flight. Feet retract before touch-down rather than tracing
     // a circular clockwork motion.
-    const stride=lerp(lerp(lerp(.66+Math.min(speedAbs,2.2)*.235,1.82,runTarget),2*(STAIRWELL.right-STAIRWELL.left)/STAIRWELL.steps,stairWeight),.72,manipulation);
-    const duty=lerp(lerp(lerp(.57,.36,runTarget),.64,stairWeight),.67,manipulation);
+    const stride=lerp(lerp(lerp(lerp(.66+Math.min(speedAbs,2.2)*.235,1.82,runTarget),2*(STAIRWELL.right-STAIRWELL.left)/STAIRWELL.steps,stairWeight),.72,manipulation),.50,duck);
+    const duty=lerp(lerp(lerp(lerp(.57,.36,runTarget),.64,stairWeight),.67,manipulation),.72,duck);
     const actualTravel=Number.isFinite(travel)?Math.max(0,travel):speedAbs*delta;
     if(beginsWalk&&!justLanded) {
       // A resting shoe begins under the pelvis, already halfway through its
@@ -789,13 +793,16 @@ export function createBoy(THREE) {
     const angle=phase*TAU,breathe=Math.sin(time*1.85),bodyMotion=moving*(1-air);
     const gaitHeight=lerp(.595,.607,running)-lerp(.017,.035,running)*Math.cos(angle*2);
     let hipHeight=lerp(.64+.0015*breathe,gaitHeight,bodyMotion)-landing-.095*squat+air*flight[1]-.105*stairWeight-.025*manipulation;
+    hipHeight=lerp(hipHeight,.34-.006*Math.cos(angle*2)*bodyMotion,duck);
+    const hipZ=-.13*duck;
     pose.rotation.x=(1-stand)*Math.PI*.5;
     pose.position.y=(1-stand)*.205;
     const accelerationLean=clamp(acceleration,-10,10)*.0065;
     const effortLean=lastInteraction?.kind==='pull'?-.16:lastInteraction?.kind==='push'?.23:.035;
     lean=damp(lean,lerp(lerp(.065,.225,running)*moving+accelerationLean+pushing*.19,effortLean,manipulation),9,delta);
-    torso.position.set(Math.sin(angle)*.013*bodyMotion,hipHeight,0);
+    torso.position.set(Math.sin(angle)*.013*bodyMotion,hipHeight,hipZ);
     torso.rotation.x=lerp(lean+.17*squat+landing*.7+.055*stairWeight,flight[2]+.025*takeoffRun,air);
+    torso.rotation.x=lerp(torso.rotation.x,.95+.012*Math.sin(angle*2)*bodyMotion,duck);
     torso.rotation.y=Math.cos(angle)*lerp(.045,.07,running)*moving*(1-pushing)*(1-manipulation*.75);
     torso.rotation.z=Math.sin(angle)*.019*bodyMotion*(1-manipulation*.6)+air*Math.sin(flightProgress*TAU)*.012;
     torso.scale.set(1,1+.003*breathe*(1-moving),1+.008*breathe*(1-moving));
@@ -803,6 +810,8 @@ export function createBoy(THREE) {
     headLean=damp(headLean,-torso.rotation.x*.76+landing*.18,7.5,delta);
     head.rotation.set(.025+headLean+(1-stand)*.12,Math.sin(time*.42)*.018*(1-moving),-torso.rotation.z*.6);
     head.position.y=.679-(hipHeight-.64)*.42-.003*Math.cos(angle*2)*moving;
+    head.position.y=lerp(head.position.y,.635,duck);
+    head.rotation.x=lerp(head.rotation.x,-.55,duck);
     const bagTarget=-lean*.32+Math.sin(angle*2-.7)*.055*moving+landing*1.1+air*Math.sin(flightProgress*TAU-.4)*.035;
     const bagFrequency=10,bagDecay=Math.exp(-bagFrequency*delta),bagError=bagLean-bagTarget,bagTransient=bagVelocity+bagFrequency*bagError;
     bagLean=bagTarget+(bagError+bagTransient*delta)*bagDecay;bagVelocity=(bagVelocity-bagFrequency*bagTransient*delta)*bagDecay;
@@ -866,7 +875,7 @@ export function createBoy(THREE) {
       f.wasStance=isStance;
       // Feet settle to a relaxed parallel stance when the actual root stops.
       if(!isStance||!locomotionActive)z=lerp(.025,z,moving);
-      y*=moving;roll*=moving;
+      y*=moving*lerp(1,.40,duck);roll*=moving*lerp(1,.35,duck);
       if(stairSupport) {
         if(!locomotionActive) {
           temporary.set(leg.side*.108,0,z);group.localToWorld(temporary);
@@ -899,7 +908,7 @@ export function createBoy(THREE) {
         temporary.copy(target).sub(f.target);f.target.addScaledVector(temporary,acceptanceTravel/reachDistance);
       }else if(planted)f.target.copy(target);else f.target.lerp(target,1-Math.exp(-25*delta));
       f.roll=damp(f.roll,roll,22,delta);
-      solveLeg(leg,f.target,f.roll,hipHeight);
+      solveLeg(leg,f.target,f.roll,hipHeight,hipZ);
       stances[i]=grounded&&(moving<.05||isStance);
       weights[i]=grounded?lerp(1,weight,moving)*(landingContact?1:1-air)*stand*(stairSupport?1-smooth(f.target.distanceTo(target),.005,.035):1):0;
       forward[i]=clamp((z-.025)/Math.max(.2,span*.5),-1,1);
@@ -928,8 +937,8 @@ export function createBoy(THREE) {
     for(let i=0;i<arms.length;i++) {
       const arm=arms[i];
       const swing=forward[i]*lerp(.44,.84,running)*moving;
-      const shoulderTarget=lerp(swing,-1.04,pushing)+.72*squat-.10*stairWeight;
-      const elbowTarget=lerp(lerp(-.23,-1.14,running)-Math.max(0,-forward[i])*.12*moving,-.31,pushing)-.08*stairWeight;
+      const shoulderTarget=lerp(lerp(swing,-1.04,pushing)+.72*squat-.10*stairWeight,-.72+forward[i]*.055*moving,duck);
+      const elbowTarget=lerp(lerp(lerp(-.23,-1.14,running)-Math.max(0,-forward[i])*.12*moving,-.31,pushing)-.08*stairWeight,-.84,duck);
       const armRole=i===launchLead?0:1;
       const jumpArm=flight[9+armRole*2]-.09*takeoffRun;
       arm.shoulder.position.x=damp(arm.shoulder.position.x,arm.side*.227,14,delta);
@@ -942,6 +951,7 @@ export function createBoy(THREE) {
       arm.wrist.rotation.y=damp(arm.wrist.rotation.y,0,14,delta);arm.wrist.rotation.z=damp(arm.wrist.rotation.z,0,14,delta);
     }
     animation.mode=wakeProgress<1?'wake':!grounded?'air':pushing>.5?'push':moving<.05?'idle':stairWeight>.5?'stairs':running>.5?'run':'walk';
+    if(duck>.5)animation.mode=moving<.05?'crouch':'crouch-walk';
     animation.wakeStage='awake';
     animation.jumpStage=grounded?(jumpPrep>0?'anticipation':landing>.008?'landing':'grounded'):(launchProgress<1?'takeoff':vy>1.2?'rising':vy>-.9?'apex':'descent');
     let handWeights=wakeProgress<1?applyWake(wakeProgress,time):noHands;
