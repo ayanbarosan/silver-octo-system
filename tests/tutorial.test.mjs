@@ -11,14 +11,15 @@ const encounters={
   'crate-climb':()=>context(12.2),
   'running-jump':()=>context(20),
   ladder:()=>context(LEVEL.ladder.x,LEVEL.ladder.bottomY),
-  door:()=>context(LEVEL.doorX,LEVEL.roofs.final.y)
+  door:()=>context(LEVEL.doorX,LEVEL.roofs.final.y),
+  'push-pull':()=>context(41.4,0,{chapter:'street',dumpsterX:43.5})
 };
 const expire=tutorials=>tutorials.update(tutorials.current.duration+.01,context());
 
 test('each mechanic receives one brief automatic first-encounter message even with optional hints off',()=>{
   assert.equal(DEFAULT_SETTINGS.hints,false);
   const tutorials=createTutorials(),shown=[];
-  for(const id of ['push','crate-climb','running-jump','ladder','door']) {
+  for(const id of TUTORIAL_IDS) {
     const here={...encounters[id](),hints:false};
     const before=structuredClone(here);
     assert.equal(tutorials.update(1/60,here),id);shown.push(id);
@@ -30,7 +31,7 @@ test('each mechanic receives one brief automatic first-encounter message even wi
     assert.equal(expire(tutorials),null);assert.equal(tutorials.current,null);
     for(let n=0;n<20;n++)assert.equal(tutorials.update(.1,here),null,'A learned mechanic must not repeatedly display after the prompt expires.');
   }
-  assert.deepEqual(shown,['push','crate-climb','running-jump','ladder','door']);
+  assert.deepEqual(shown,[...TUTORIAL_IDS]);
   assert.deepEqual([...tutorials.learned].sort(),[...TUTORIAL_IDS].sort());
 });
 
@@ -90,7 +91,7 @@ test('Continue restores unique learned lessons while New Game resets both curren
 });
 
 test('mobile first encounters explain the visible touch controls rather than keyboard-only actions',()=>{
-  const expected={push:/hand.*direction/i,'crate-climb':/↑/,'running-jump':/running.*↑/i,ladder:/↑.*↓/,door:/hand/i};
+  const expected={push:/hand.*direction/i,'crate-climb':/↑/,'running-jump':/running.*↑/i,ladder:/↑.*↓/,door:/hand/i,'push-pull':/hand.*direction.*push.*pull.*↑/i};
   for(const id of TUTORIAL_IDS) {
     const learned=id==='crate-climb'?['push']:[];
     const mobile=createTutorials({touch:true,learned}),desktop=createTutorials({learned});
@@ -109,4 +110,28 @@ test('encounters follow the moved crate and recognize both ladder access points 
   ])assert.equal(createTutorials().update(.1,here),'ladder');
   const unrelatedJump=context(LEVEL.ladder.x,2,{player:player(LEVEL.ladder.x,2,false)});
   assert.equal(createTutorials().update(.1,unrelatedJump),null,'Passing the ladder in unrelated air should not teach an action that has not been reached.');
+});
+
+test('street introduction follows the dumpster and never repeats or displays rooftop lessons in another chapter',()=>{
+  for(const id of ['push','crate-climb','running-jump','ladder','door']) {
+    for(const chapter of ['street','stairwell']) {
+      const tutorials=createTutorials();
+      assert.equal(tutorials.update(.1,{...encounters[id](),chapter}),null);
+      assert.deepEqual(tutorials.learned,[]);
+    }
+  }
+  const tutorials=createTutorials(),nearMoved=context(50.5,0,{chapter:'street',dumpsterX:52.6});
+  assert.equal(tutorials.update(.1,{...nearMoved,player:player(50.5,1.05)}),null,'Standing on the lid is not a ground-level manipulation encounter.');
+  assert.equal(tutorials.update(.1,{...nearMoved,player:player(50.5,0,false)}),null);
+  assert.equal(tutorials.update(.1,{...nearMoved,busy:true}),null);
+  assert.equal(tutorials.update(.1,{...nearMoved,dumpsterX:NaN}),null);
+  assert.equal(tutorials.update(.1,{...nearMoved,dumpsterX:43.5}),null,'The lesson follows the current object, not its spawn.');
+  assert.equal(tutorials.update(.1,nearMoved),'push-pull');
+  assert.match(tutorials.current.text,/E.*A \/ D.*push.*pull.*SPACE.*W.*UP/);
+  expire(tutorials);
+  assert.equal(tutorials.update(.1,nearMoved),null);
+  const restored=createTutorials({learned:tutorials.learned});
+  assert.equal(restored.update(.1,nearMoved),null,'Continue preserves the once-only introduction.');
+  restored.reset();
+  assert.equal(restored.update(.1,nearMoved),'push-pull','New Game restores the first encounter.');
 });

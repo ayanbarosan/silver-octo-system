@@ -1,7 +1,7 @@
 import {LEVEL} from './level.js';
 import {TUTORIAL_IDS} from './tutorial.js';
 import {normalizeStairSave,stairHeight} from './stairwell.js';
-import {STREET,normalizeStreetSave} from './street.js';
+import {normalizeStreetSave} from './street.js';
 
 export const DEFAULT_SETTINGS=Object.freeze({hints:false,sound:true,volume:.65,brightness:1});
 const SETTINGS_KEY='runaway.settings.v1',SAVE_KEY='runaway.save.v1';
@@ -36,8 +36,8 @@ function normalizeSave(value,requireGrounded=false){
   if(value.chapter==='street') {
     const street=normalizeStreetSave(value.street);
     if(!street||!awakened)return null;
-    if(Math.abs(player.x-street.x)>EPSILON||Math.abs(player.y-STREET.groundY)>SURFACE_TOLERANCE+EPSILON||player.face!==street.face)return null;
-    return {version:1,chapter:'street',street,checkpoint,player:{x:street.x,y:STREET.groundY,face:street.face},crateX,bridgeBroken,slipPlayed,awakened,learnedMechanics:learnedFrom(value.learnedMechanics)};
+    if(Math.abs(player.x-street.x)>EPSILON||Math.abs(player.y-street.y)>SURFACE_TOLERANCE+EPSILON||player.face!==street.face)return null;
+    return {version:1,chapter:'street',street,checkpoint,player:{x:street.x,y:street.y,face:street.face},crateX,bridgeBroken,slipPlayed,awakened,learnedMechanics:learnedFrom(value.learnedMechanics)};
   }
 
   if(value.chapter==='stairwell') {

@@ -2,7 +2,7 @@
 
 An original **2.5D adventure prototype** with a fully 3D character and city, played from a side view. A boy in a black tracksuit with white stripes and a lime backpack wakes on a torn mattress in a small rooftop shelter above a quiet city of apartment blocks. A fixed railing and concrete base guard the edge beside his bedding.
 
-Cross three rooftops: climb past the vent, move the crate to clear the pipe, take a running jump to the middle block, then cross a wooden plank to a lower landing beside the final building. The plank breaks behind you after you reach the landing safely. Climb the wall ladder to the upper roof and enter the lit door to reach the interior stairwell. Descend four flights, alternating direction at each landing, then follow the ground-floor corridor to its door. The scene uses concrete textures, layered city silhouettes, fog, shadows, and a subdued early morning palette. Walking, running, waking, jumping, landing, and climbing use animated character poses.
+Cross three rooftops: climb past the vent, move the crate to clear the pipe, take a running jump to the middle block, then cross a wooden plank to a lower landing beside the final building. The plank breaks behind you after you reach the landing safely. Climb the wall ladder to the upper roof and enter the lit door to reach the interior stairwell. Descend four flights, alternating direction at each landing, then follow the ground-floor corridor to its door and step out onto the rain-soaked street. Move a dumpster to reach and cross the tall fence. The scene uses concrete textures, layered city silhouettes, fog, shadows, and a subdued early morning palette. Walking, running, waking, jumping, landing, and climbing use animated character poses.
 
 ## Opening
 
@@ -29,12 +29,12 @@ Open the generated `dist/Runaway.html` file in Chrome, Edge, or Firefox. No serv
 - **Jump toward the ladder**: catch a reachable rung at the height reached, then climb or hold still.
 - **S** or **Down** at the wall ladder: climb down, including entering the ladder from the upper roof.
 - **D / Right** or **A / Left** while on the ladder: climb up or down, respectively. Release the controls to hold still; reverse direction at any point.
-- **E + a direction**: push the crate.
+- **Hold E + a direction**: push the crate; push or pull the street dumpster.
 - **E**: open the lit door.
 - **Esc**: pause or resume; close Settings to return to its previous menu. On a touchscreen, the small pause icon opens the pause menu.
 - **R**: restart the level.
 
-Small touch icons appear on touchscreen devices. The running figure toggles running; the open hand interacts. Press **↑** beside the crate to climb onto it. Near the ladder, an extra **↓** button appears for climbing down; the **↑** button climbs up. The **← / →** buttons also move down or up while on the ladder. Release the buttons to hold your place. Sound and volume are controlled from **Settings**.
+Small touch icons appear on touchscreen devices. The running figure toggles running; the open hand interacts. Hold the hand icon and a direction to push or pull the dumpster. Press **↑** beside the crate or dumpster to climb onto it. Near the ladder, an extra **↓** button appears for climbing down; the **↑** button climbs up. The **← / →** buttons also move down or up while on the ladder. Release the buttons to hold your place. Sound and volume are controlled from **Settings**.
 
 After **New Game**, the boy automatically braces his palms against the roof, brings a knee beneath him, and stands. Jumps preserve forward momentum, choose a leading leg from the current stride, and blend through anticipation, takeoff, airborne recovery, landing reach, and a step back into movement. A short input buffer and edge grace make repeated jumps more forgiving. At reachable vent and pipe ledges, he grabs the edge and pulls himself onto the roof automatically. Climbing onto the crate requires **Space**, **W**, **Up**, or the phone’s **↑** button.
 
@@ -47,7 +47,7 @@ After **New Game**, the boy automatically braces his palms against the roof, bri
 5. Walk across the wooden plank spanning the second gap to the lower landing beside the final building. It breaks behind you only after you reach the landing safely.
 6. At the left wall, hold **W**, **Up**, or **Space** to climb the ladder, or jump toward it to catch a rung without dropping to the base. Stop to hold still, or use **S / Down** to reverse. You can also use **D / A** while climbing.
 7. Step onto the upper roof to set the final checkpoint, then continue to the lit door and press **E** (the hand icon on a phone). To go back down the outdoor ladder, hold **S / Down** at its top.
-8. Inside, walk left down the first flight. At each landing, turn around to descend the next flight: left, right, left, right. Completed flights cannot be selected again. On the ground floor, walk left to the corridor door and press **E** (the hand icon on a phone) to open it and finish.
+8. Inside, walk left down the first flight. At each landing, turn around to descend the next flight: left, right, left, right. Completed flights cannot be selected again. On the ground floor, walk left to the corridor door and press **E** (the hand icon on a phone) to open it and step onto the street.
 
 ## Android: play the downloaded ZIP offline
 
@@ -157,3 +157,14 @@ The roof-access entrance is restored on the upper-right wall where the boy enter
 Opening the ground-floor exit with **E** (the hand icon on a phone) now leads outside into a rain-soaked street. The boy emerges beside the apartment entrance and can explore the sidewalk with the usual walking, running and jump controls. Continue saves the street position and restores it after reloading.
 
 The street has five parked old sedans and hatchbacks, worn apartment façades, a fenced courtyard, trees, bins, overhead wires and muted street lamps reflected in wet paving. Cars and street furniture stay behind the walking lane. The camera follows the boy along the street, and rainwater splashes accompany steps and landings.
+
+
+## Movable dumpster and fence crossing — v0.21
+
+A large wheeled steel dumpster occupies the sidewalk. Walking into it stops the boy; **Space / W / Up** deliberately climbs onto its lid. Jumping toward a reachable ledge catches it from the height attained. Stepping off either side returns to normal falling.
+
+Hold **E** beside either handle and use **A / D** to push or pull. The boy keeps facing the dumpster, braces both hands on its handles, and leans into the load or steps backward while pulling. On a phone, hold the nearby hand icon and a direction; **↑** climbs. A short first-encounter caption introduces these controls once.
+
+Move the dumpster toward the end fence, climb onto it, then jump toward the fence to pull up and pass over. The far side has a safe landing for the next update. Continue remembers the dumpster position and safe ground or lid positions, including beyond the fence; older street saves remain compatible. New Game resets the object.
+
+The exit building now has a larger faded graffiti tag to the left of the entrance, and an adjoining apartment block fills the far-left view.

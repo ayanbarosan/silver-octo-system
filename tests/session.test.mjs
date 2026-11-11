@@ -261,8 +261,10 @@ test('indoor continuation data and lesson history are copied independently from 
   assert.equal(Object.hasOwn(roof,'stairwell'),false);
 });
 
-function streetGame({x=STREET.entry.x,y=STREET.groundY,face=1,...other}={}) {
-  return liveGame({x,y,face,chapter:'street',street:{x,face},checkpoint:3,crateX:16,
+function streetGame({x=STREET.entry.x,y=STREET.groundY,face=1,dumpsterX,...other}={}) {
+  const supportY=Math.abs(y-STREET.groundY)<=.025?STREET.groundY:Math.abs(y-STREET.dumpster.y)<=.025?STREET.dumpster.y:y;
+  const street={x,y:supportY,face,...(dumpsterX===undefined?{}:{dumpsterX})};
+  return liveGame({x,y,face,chapter:'street',street,checkpoint:3,crateX:16,
     bridgeBroken:true,slipPlayed:true,awakened:true,learnedMechanics:['push','ladder','door'],...other});
 }
 
@@ -271,7 +273,7 @@ test('street continuation survives reload at the entrance, both route bounds and
   for(const [x,face] of [[STREET.minX,-1],[STREET.entry.x,1],[18.4,-1],[37,1],[STREET.maxX,1]]) {
     const source=streetGame({x,face,y:STREET.groundY+.01}),canonical=createSaveSnapshot(source);
     assert(canonical,`Supported street position ${x} must be resumable.`);
-    assert.equal(canonical.chapter,'street');assert.deepEqual(canonical.street,{x,face});
+    assert.equal(canonical.chapter,'street');assert.deepEqual(canonical.street,{x,y:STREET.groundY,face,dumpsterX:STREET.dumpster.startX});
     assert.deepEqual(canonical.player,{x,y:STREET.groundY,face});
     assert.equal(Object.hasOwn(canonical,'stairwell'),false,'Street saves must not carry a stale stair flight.');
     assert.equal(canonical.crateX,16);assert.equal(canonical.bridgeBroken,true);
@@ -309,7 +311,7 @@ test('unsafe or malformed street snapshots cannot replace the last safe continue
 test('street route, player and learned history never share mutable state with saved progress',()=>{
   const source=streetGame({x:22,face:-1}),canonical=createSaveSnapshot(source);assert(canonical);
   source.street.x=1;source.learnedMechanics.length=0;
-  assert.deepEqual(canonical.street,{x:22,face:-1});assert.deepEqual(canonical.learnedMechanics,['push','ladder','door']);
+  assert.deepEqual(canonical.street,{x:22,y:0,face:-1,dumpsterX:STREET.dumpster.startX});assert.deepEqual(canonical.learnedMechanics,['push','ladder','door']);
   const storage=memoryStorage(),session=createSession(storage);assert(session.save(canonical));
   const expected=structuredClone(canonical);canonical.street.face=1;canonical.player.x=2;
   assert.deepEqual(session.getSave(),expected);
@@ -327,4 +329,61 @@ test('blocked storage still supports street Continue in memory and clearing star
     assert.equal(Object.hasOwn(session.getSave(),'chapter'),false);
     assert.equal(Object.hasOwn(session.getSave(),'street'),false);
   }
+});
+
+test('Continue restores the moved dumpster and the child on its supported lid or beyond the fence',()=>{
+  const storage=memoryStorage(),session=createSession(storage),dumpsterX=STREET.dumpster.maxX;
+  const positions=[{x:dumpsterX,y:STREET.dumpster.y,face:1},{x:STREET.fence.x+1.1,y:0,face:-1}];
+  for(const position of positions){
+    const input=streetGame({...position,dumpsterX}),canonical=createSaveSnapshot(input);
+    assert(canonical,`A settled dumpster puzzle position must survive Continue: ${JSON.stringify(position)}.`);
+    assert.deepEqual(canonical.street,{...position,dumpsterX});
+    assert.deepEqual(canonical.player,position);
+    assert(session.save(canonical));assert.deepEqual(createSession(storage).getSave(),canonical);
+    assert.equal(createSession(storage).getSave().street.dumpsterX,dumpsterX);
+  }
+});
+
+test('stale dumpster supports and embedded or unsupported puzzle saves cannot replace a safe save',()=>{
+  const storage=memoryStorage(),session=createSession(storage),good=createSaveSnapshot(streetGame({x:40,dumpsterX:52}));
+  assert(good);assert(session.save(good));
+  const invalid=[
+    streetGame({x:52,y:0,dumpsterX:52}),
+    streetGame({x:40,y:STREET.dumpster.y,dumpsterX:52}),
+    streetGame({x:STREET.fence.x,y:0,dumpsterX:52}),
+    streetGame({x:55,y:.7,dumpsterX:52}),
+    streetGame({x:40,dumpsterX:STREET.dumpster.maxX+.1}),
+    streetGame({x:40,dumpsterX:NaN})
+  ];
+  for(const source of invalid)assert.equal(createSaveSnapshot(source),null,`Unsupported puzzle snapshot ${JSON.stringify(source.street)} must be rejected.`);
+  const lid=createSaveSnapshot(streetGame({x:52,y:STREET.dumpster.y,dumpsterX:52}));assert(lid);
+  for(const value of [
+    {...lid,player:{...lid.player,y:0}},
+    {...lid,street:{...lid.street,dumpsterX:48}},
+    {...good,street:{...good.street,dumpsterX:Infinity}},
+    {...good,street:{...good.street,y:.6}}
+  ]){
+    assert.equal(session.save(value),false);assert.deepEqual(session.getSave(),good);
+  }
+});
+
+test('older street saves gain a safe default dumpster without losing a player standing at its spawn',()=>{
+  for(const x of [STREET.entry.x,STREET.dumpster.startX]){
+    const old={version:1,chapter:'street',checkpoint:3,player:{x,y:0,face:1},street:{x,face:1},crateX:16,bridgeBroken:true,slipPlayed:true,awakened:true,learnedMechanics:['door']};
+    const session=createSession(memoryStorage({[saveKey]:JSON.stringify(old)})),continued=session.getSave();
+    assert(continued,'An older street save must remain playable after adding the movable dumpster.');
+    assert.deepEqual(continued.player,old.player);assert.equal(continued.street.y,0);
+    assert(Number.isFinite(continued.street.dumpsterX));
+    assert(continued.street.dumpsterX>=STREET.dumpster.minX&&continued.street.dumpsterX<=STREET.dumpster.maxX);
+    assert(Math.abs(x-continued.street.dumpsterX)>=STREET.dumpster.w/2+.21,'Restoring an older save cannot embed the child in the default dumpster.');
+  }
+});
+
+test('dumpster positions are copied with player progress and never leak through caller or menu objects',()=>{
+  const canonical=createSaveSnapshot(streetGame({x:52,y:STREET.dumpster.y,dumpsterX:52}));assert(canonical);
+  const storage=memoryStorage(),session=createSession(storage);assert(session.save(canonical));
+  const expected=structuredClone(canonical);canonical.street.dumpsterX=44;canonical.player.y=0;
+  assert.deepEqual(session.getSave(),expected);
+  const menu=session.getSave();menu.street.dumpsterX=43.5;menu.street.y=0;menu.player.x=3;
+  assert.deepEqual(session.getSave(),expected);assert.deepEqual(createSession(storage).getSave(),expected);
 });

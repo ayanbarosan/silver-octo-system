@@ -12,7 +12,7 @@ function advance(r,input,frames=120,fps=120){
 test('street entry is awake, supported and restored Continue data has no live velocity',()=>{
   const r=setup();
   assert.deepEqual(r.player,{x:STREET.entry.x,y:0,z:0,vx:0,vy:0,vz:0,grounded:true,face:1});
-  assert.deepEqual(r.street.snapshot(),{x:STREET.entry.x,face:1});
+  assert.deepEqual(r.street.snapshot(),{x:STREET.entry.x,y:0,face:1,dumpsterX:STREET.dumpster.startX});
   const restored=setup({x:24.2,face:-1});
   assert.equal(restored.player.x,24.2);assert.equal(restored.player.face,-1);
   assert.equal(restored.player.vx,0);assert.equal(restored.street.state.jump.launched,false);
@@ -75,16 +75,17 @@ test('both street ends stay supported and explorable without automatically finis
   const events=advance(r,{direction:1,running:true},600);
   assert.equal(r.player.x,STREET.maxX);assert.equal(r.player.vx,0);assert(r.player.grounded);
   assert(!events.includes('complete'));
-  advance(r,{direction:-1,running:true},2500);
-  assert.equal(r.player.x,STREET.minX);assert(r.player.grounded);
-  const jumpEvents=advance(r,{direction:-1,jump:true},180);
-  assert.equal(r.player.x,STREET.minX);assert.deepEqual(jumpEvents,['takeoff','land']);
+  const left=setup({x:STREET.minX+.1,face:-1});
+  advance(left,{direction:-1,running:true},300);
+  assert.equal(left.player.x,STREET.minX);assert(left.player.grounded);
+  const jumpEvents=advance(left,{direction:-1,jump:true},180);
+  assert.equal(left.player.x,STREET.minX);assert.deepEqual(jumpEvents,['takeoff','land']);
 });
 
 test('saved snapshots reject malformed data and never share state or contain airborne positions',()=>{
   const seed={x:14,face:-1,velocity:9};
-  assert.deepEqual(normalizeStreetSave(seed),{x:14,face:-1});
-  for(const value of [null,[],{}, {x:'2',face:1},{x:NaN,face:1},{x:Infinity,face:1},{x:55,face:1},{x:-1,face:-1},{x:2,face:0}])assert.equal(normalizeStreetSave(value),null);
+  assert.deepEqual(normalizeStreetSave(seed),{x:14,y:0,face:-1,dumpsterX:STREET.dumpster.startX});
+  for(const value of [null,[],{}, {x:'2',face:1},{x:NaN,face:1},{x:Infinity,face:1},{x:STREET.maxX+1,face:1},{x:-1,face:-1},{x:2,face:0}])assert.equal(normalizeStreetSave(value),null);
   assert(normalizeStreetSave({x:STREET.minX,face:1}));assert(normalizeStreetSave({x:STREET.maxX,face:-1}));
   const r=setup(seed),snapshot=r.street.snapshot();snapshot.x=50;assert.equal(r.player.x,14);
   r.street.update(1/120,{jump:true},r.player);assert.equal(r.street.snapshot(),null);
@@ -106,4 +107,77 @@ test('walking and jump height stay consistent at low and high update rates',()=>
   }
   assert(Math.max(...samples.map(s=>s.x))-Math.min(...samples.map(s=>s.x))<.015);
   assert(Math.max(...samples.map(s=>s.peak))-Math.min(...samples.map(s=>s.peak))<.015);
+});
+
+const D=STREET.dumpster,F=STREET.fence;
+const beside=(side=-1,dumpsterX=D.startX)=>setup({x:dumpsterX+side*(D.w/2+.22),y:0,face:-side,dumpsterX});
+function finishClimb(r){
+  for(let n=0;n<300&&r.street.state.climb;n++)r.street.update(1/120,{},r.player);
+  assert.equal(r.street.state.climb,null);
+}
+test('walking into the dumpster blocks the body without automatically climbing it',()=>{
+  const r=beside();advance(r,{direction:1},350);
+  assert(Math.abs(r.player.x-(D.startX-D.w/2-.22))<.001);
+  assert.equal(r.player.y,0);assert.equal(r.street.state.climb,null);assert.equal(r.street.state.dumpsterX,D.startX);
+  assert.equal(r.street.update(1/120,{jump:true},r.player),'climb-start');
+  finishClimb(r);assert.equal(r.player.y,D.y);assert(r.player.grounded);assert(r.street.snapshot());
+});
+test('E plus a direction pushes and pulls from both sides while facing the object',()=>{
+  for(const side of [-1,1]){
+    const r=beside(side),before=r.player.x;
+    advance(r,{interact:true,direction:-side},240);
+    const pushed=r.street.state.dumpsterX;
+    assert((pushed-D.startX)*-side>1);assert((r.player.x-before)*-side>1);
+    assert.equal(r.player.face,-side);assert.equal(r.street.state.interaction.kind,'push');
+    advance(r,{interact:true,direction:side},240);
+    assert((r.street.state.dumpsterX-pushed)*side>.6);assert.equal(r.player.face,-side);
+    assert.equal(r.street.state.interaction.kind,'pull');
+    advance(r,{interact:true},200);const stopped=r.street.state.dumpsterX;advance(r,{interact:true},100);
+    assert.equal(r.street.state.interaction.kind,'hold');assert.equal(r.street.state.dumpsterX,stopped);
+    advance(r,{},20);assert.equal(r.street.state.interaction,null);
+  }
+});
+test('jumping onto a reachable edge catches at the attained height',()=>{
+  const r=setup({x:D.startX-D.w/2-.5,face:1,dumpsterX:D.startX});
+  Object.assign(r.player,{y:.6,vy:-1,vx:1.3,grounded:false});r.street.state.jump.launched=true;
+  assert.equal(r.street.update(1/120,{direction:1},r.player),'climb-start');
+  assert.equal(r.street.state.climb.startY,.6);assert.equal(r.player.y,.6);
+  finishClimb(r);assert.equal(r.player.y,D.y);assert(r.player.grounded);
+});
+test('walking off either lid edge falls normally and can move away without sticking',()=>{
+  for(const side of [-1,1]){
+    const r=setup({x:D.startX,y:D.y,face:side,dumpsterX:D.startX});
+    advance(r,{direction:side},240);
+    assert.equal(r.player.y,0);assert(r.player.grounded);assert((r.player.x-D.startX)*side>D.w/2+.3);
+  }
+});
+test('a ground jump cannot bypass the tall fence, including a held jump',()=>{
+  const r=setup({x:F.x-.22,y:0,face:1,dumpsterX:D.startX});
+  const events=advance(r,{direction:1,running:true,jump:true},420);
+  assert(!events.includes('climb-start'));assert(r.player.x<=F.x-.219);assert.equal(r.player.y,0);
+});
+test('the complete bin puzzle pushes, climbs, catches the fence and lands beyond it',()=>{
+  const r=beside();
+  for(let n=0;n<2400&&r.street.state.dumpsterX<52.85;n++)r.street.update(1/120,{interact:true,direction:1},r.player);
+  assert(r.street.state.dumpsterX>=52.85);
+  advance(r,{},5);assert.equal(r.street.update(1/120,{jump:true},r.player),'climb-start');finishClimb(r);
+  const bin=r.street.state.dumpsterX;assert.equal(r.player.y,D.y);
+  for(let n=0;n<180&&r.player.x<bin+.55;n++)r.street.update(1/120,{direction:1},r.player);
+  advance(r,{},70);
+  assert(r.player.grounded&&r.player.y===D.y,'The jump must start from the lid.');
+  const events=[];for(let n=0;n<700;n++){
+    const event=r.street.update(1/120,{direction:1,jump:true},r.player);if(event)events.push(event);
+    if(r.player.x>F.x+F.w+.3&&r.player.grounded&&r.player.y===0)break;
+  }
+  assert(events.includes('climb-start'),'Hands must catch the fence top.');assert(events.includes('climb-end'));
+  assert(r.player.x>F.x+F.w+.3);assert.equal(r.player.y,0);assert(r.player.grounded);assert(r.street.snapshot());
+});
+test('paused manipulation and climbing preserve every controller and root value',()=>{
+  const r=beside();advance(r,{interact:true,direction:1},100);
+  let before=structuredClone({p:r.player,s:r.street.state});
+  for(let n=0;n<50;n++)r.street.update(0,{direction:-1,jump:true},r.player);
+  assert.deepEqual({p:r.player,s:r.street.state},before);
+  advance(r,{},3);r.street.update(1/120,{jump:true},r.player);assert(r.street.state.climb);
+  before=structuredClone({p:r.player,s:r.street.state});r.street.update(0,{},r.player);
+  assert.deepEqual({p:r.player,s:r.street.state},before);assert.equal(r.street.snapshot(),null);
 });

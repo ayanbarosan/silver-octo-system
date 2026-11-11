@@ -105,6 +105,9 @@ export function createStreetWorld(THREE,scene){
   }
   // The exit building is close enough to read its worn plaster and fittings.
   facade(-.6,15.2,0,16.4,-2.12,plaster,17,true);
+  // A neighbouring apartment block meets the left edge of the entry building.
+  facade(-15.1,13.8,0,18.1,-2.12,plaster,1907,true);
+  box(.13,18.1,.19,-8.2,9.05,-1.99,darkConcrete);
   // A projecting end face lets the opening street read beyond the entry block.
   box(.13,16.3,4.4,7.03,8.15,-4.1,darkConcrete);
   const doorX=STREET.doorX??1.2,doorZ=-1.88;
@@ -127,6 +130,25 @@ export function createStreetWorld(THREE,scene){
   const graffitiCanvas=document.createElement('canvas');graffitiCanvas.width=512;graffitiCanvas.height=256;const gc=graffitiCanvas.getContext('2d');gc.strokeStyle='#263b39';gc.lineWidth=8;gc.lineCap='round';
   for(let i=0;i<8;i++){gc.beginPath();gc.moveTo(35+i*48,210);gc.bezierCurveTo(5+i*48,35,100+i*42,15,57+i*45,180);gc.bezierCurveTo(105+i*38,230,15+i*45,100,80+i*45,115);gc.stroke();}
   const graffitiMap=new THREE.CanvasTexture(graffitiCanvas);const graffiti=mesh(new THREE.PlaneGeometry(1.62,.82),new THREE.MeshBasicMaterial({map:graffitiMap,transparent:true,depthWrite:false}),group,false);graffiti.position.set(3.05,1.12,-1.927);
+  const muralCanvas=document.createElement('canvas');muralCanvas.width=1024;muralCanvas.height=384;
+  const mc=muralCanvas.getContext('2d');mc.lineCap='round';mc.lineJoin='round';
+  // An original, loosely lettered tag with uneven spray strokes and worn paint.
+  const tagStrokes=[
+    'M 70 91 Q 108 168 132 281 L 289 65 M 69 116 L 127 297 L 317 75',
+    'M 385 75 C 278 70 268 292 360 290 C 474 309 522 54 385 75 M 386 105 C 326 111 310 257 361 259 C 415 260 466 98 386 105',
+    'M 542 100 L 686 79 M 623 90 L 558 278 M 494 289 L 648 265',
+    'M 721 96 L 678 285 C 913 309 1025 48 721 96 M 739 122 L 705 255 C 856 253 935 97 739 122',
+    'M 56 320 Q 468 293 941 318 M 133 332 Q 534 343 974 287'
+  ];
+  for(let layer=0;layer<3;layer++){
+    mc.strokeStyle=['rgba(29,42,41,.80)','rgba(118,126,105,.74)','rgba(173,159,121,.37)'][layer];mc.lineWidth=[32,19,4][layer];
+    mc.save();if(layer===2)mc.translate(-3,-4);for(const stroke of tagStrokes)mc.stroke(new Path2D(stroke));mc.restore();
+  }
+  mc.strokeStyle='rgba(103,112,96,.35)';mc.lineWidth=3;
+  for(let i=0;i<19;i++){const x=70+random(i+982)*870,y=225+random(i+1191)*51;mc.beginPath();mc.moveTo(x,y);mc.lineTo(x+random(i+341)*3,y+18+random(i+415)*55);mc.stroke();}
+  mc.globalCompositeOperation='destination-out';for(let i=0;i<950;i++){mc.fillStyle=`rgba(0,0,0,${.15+random(i+177)*.65})`;mc.fillRect(random(i+814)*1024,random(i+945)*384,1+random(i+734)*8,1+random(i+125)*3);}
+  const muralMap=new THREE.CanvasTexture(muralCanvas);muralMap.colorSpace=THREE.SRGBColorSpace;
+  const mural=mesh(new THREE.PlaneGeometry(4.65,1.48),new THREE.MeshStandardMaterial({map:muralMap,transparent:true,depthWrite:false,roughness:1,polygonOffset:true,polygonOffsetFactor:-1}),group,false);mural.position.set(-3.45,1.20,-1.924);
   box(.34,.54,.09,doorX-.97,1.18,doorZ+.09,metal);for(let i=0;i<5;i++)box(.11,.025,.012,doorX-.98,1.28-i*.055,doorZ+.145,black,false);
   for(const x of [-2.95,4.78]){
     box(.83,.62,.32,x,4.38,-1.82,trim);cylinder(.23,.05,x,4.38,-1.63,metal,new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1,0,0),Math.PI/2));
@@ -229,22 +251,75 @@ export function createStreetWorld(THREE,scene){
   // A quiet, closed gate marks the visible end of the prototype street.
   box(.34,2.7,.36,55.8,1.25,-2.4,darkConcrete);box(3.8,.07,.09,57.7,2.5,-2.4,metal);
   for(let i=0;i<17;i++)rod([56.0+i*.22,-.05,-2.4],[56.0+i*.22,2.45,-2.4],.014,metal);
-  const gateX=STREET.maxX+.65,gateBack=-1.05,gateFront=1.75;
-  for(const z of [gateBack,gateFront])rod([gateX,-.08,z],[gateX,2.40,z],.065,metal);
-  for(const y of [.12,1.10,2.20])rod([gateX,y,gateBack],[gateX,y,gateFront],.027,metal);
-  for(let z=gateBack+.16;z<gateFront-.05;z+=.19)rod([gateX,.12,z],[gateX,2.20,z],.014,metal);
+  const gateX=STREET.fence.x+STREET.fence.w/2,gateTop=STREET.fence.y,gateBack=-1.05,gateFront=1.75;
+  for(const z of [gateBack,gateFront])rod([gateX,-.08,z],[gateX,gateTop,z],.065,metal);
+  for(const y of [.12,1.10,gateTop])rod([gateX,y,gateBack],[gateX,y,gateFront],.027,metal);
+  for(let z=gateBack+.16;z<gateFront-.05;z+=.19)rod([gateX,.12,z],[gateX,gateTop,z],.014,metal);
   rod([gateX,.16,gateBack+.05],[gateX,2.15,gateFront-.05],.019,metal);
   box(.10,.17,.18,gateX+.02,1.15,.38,rust);
-  const endGate={bounds:{min:[gateX-.08,-.08,gateBack-.08],max:[gateX+.08,2.45,gateFront+.08]}};
+  const endGate={bounds:{min:[gateX-.08,-.08,gateBack-.08],max:[gateX+.08,gateTop+.027,gateFront+.08]}};
+  const dumpsterConfig=STREET.dumpster??{startX:43.5,w:1.9,y:1.05,z:0,minX:8.2,maxX:53.25};
+  const dumpsterGroup=new THREE.Group();dumpsterGroup.name='movable-dumpster';dumpsterGroup.position.set(dumpsterConfig.startX,0,0);group.add(dumpsterGroup);
+  const dumpsterPaint=mat('#4f6557',.87,{metalness:.26,map:plasterMap,bumpMap:plasterBump,bumpScale:.009});
+  const dumpsterInset=mat('#364e42',.91,{metalness:.16}),lidPaint=mat('#3e5248',.73,{metalness:.30});
+  // Keep the many small steel details batched while the casters turn independently.
+  const dumpsterBatches=new Map(),localDummy=new THREE.Object3D();
+  function localInstance(type,material,position,scale,quaternion=null){
+    const key=`${type}/${material.uuid}`;
+    if(!dumpsterBatches.has(key))dumpsterBatches.set(key,{type,material,matrices:[]});
+    localDummy.position.set(...position);localDummy.scale.set(...scale);localDummy.quaternion.identity();
+    if(quaternion)localDummy.quaternion.copy(quaternion);localDummy.updateMatrix();
+    dumpsterBatches.get(key).matrices.push(localDummy.matrix.clone());
+  }
+  function localBox(w,h,d,x,y,z,material=dumpsterPaint){localInstance('box',material,[x,y,z],[w,h,d]);}
+  function localRod(a,b,r=.018,material=trim){
+    const delta=new THREE.Vector3(...b).sub(new THREE.Vector3(...a)),length=delta.length();
+    localInstance('cylinder',material,a.map((v,i)=>(v+b[i])/2),[r,length,r],new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,1,0),delta.normalize()));
+  }
+  mesh(profileGeometry([[-.81,.22],[-.925,.92],[-.925,1.0],[.925,1.0],[.925,.92],[.81,.22]],.94,.018),dumpsterPaint,dumpsterGroup);
+  localBox(1.90,.055,1.0,0,1.0225,0,lidPaint);
+  localBox(1.80,.025,.91,0,.995,0,metal);
+  for(const z of [-.479,.479]){
+    localBox(1.53,.55,.012,0,.58,z,dumpsterInset);
+    for(const x of [-.69,0,.69])localBox(.028,.58,.022,x,.60,z,trim);
+    for(let i=0;i<20;i++){const x=(random(i+1287)-.5)*1.60,h=.025+random(i+1488)*.16;localBox(.015+random(i+1788)*.055,h,.007,x,.32+h/2,z+(z>0?.01:-.01),rust);}
+  }
+  for(const x of [-.965,.965]){
+    localRod([x,.82,-.23],[x,.82,.23],.018,trim);
+    for(const z of [-.23,.23])localRod([x*.965,.72,z],[x,.82,z],.014,metal);
+  }
+  for(const x of [-.62,0,.62])localBox(.14,.026,.09,x,1.018,-.45,metal);
+  const wheels=[];
+  for(const x of [-.69,.69])for(const z of [-.39,.39]){
+    localBox(.17,.055,.18,x,.235,z,metal);
+    for(const dx of [-.073,.073])localBox(.025,.12,.14,x+dx,.176,z,trim);
+    const wheel=new THREE.Group();wheel.position.set(x,.11,z);dumpsterGroup.add(wheel);
+    const tyre=mesh(new THREE.CylinderGeometry(.11,.11,.115,14),rubber,wheel);tyre.rotation.x=Math.PI/2;
+    const hub=mesh(new THREE.CylinderGeometry(.055,.055,.128,12),trim,wheel);hub.rotation.x=Math.PI/2;wheels.push(wheel);
+  }
+  for(const batch of dumpsterBatches.values()){
+    const object=new THREE.InstancedMesh(geometries[batch.type],batch.material,batch.matrices.length);
+    batch.matrices.forEach((matrix,index)=>object.setMatrixAt(index,matrix));object.instanceMatrix.needsUpdate=true;
+    object.castShadow=true;object.receiveShadow=true;dumpsterGroup.add(object);
+  }
+  const dumpsterMetadata={id:'dumpster',type:'movable-steel-dumpster',centerX:dumpsterConfig.startX,width:1.9,topY:1.05,z:0,
+    bounds:{min:[dumpsterConfig.startX-.99,0,-.5],max:[dumpsterConfig.startX+.99,1.05,.5]}};
+  const dumpster={group:dumpsterGroup,position:dumpsterGroup.position,get bounds(){return dumpsterMetadata.bounds;},setPosition(value){
+    if(!Number.isFinite(value))return;const x=Math.max(dumpsterConfig.minX,Math.min(dumpsterConfig.maxX,value)),delta=x-dumpsterGroup.position.x;
+    dumpsterGroup.position.x=x;dumpsterMetadata.centerX=x;dumpsterMetadata.bounds.min[0]=x-.99;dumpsterMetadata.bounds.max[0]=x+.99;
+    for(const wheel of wheels)wheel.rotation.z-=delta/.11;
+  }};
   for(const batch of batches.values()){
     const object=new THREE.InstancedMesh(geometries[batch.type],batch.material,batch.matrices.length);batch.matrices.forEach((m,i)=>object.setMatrixAt(i,m));object.instanceMatrix.needsUpdate=true;object.castShadow=batch.shadow;object.receiveShadow=true;group.add(object);
   }
-  const metadata={entryDoor:{x:doorX,y:0,z:doorZ,kind:'building-exit'},route:{minX:STREET.minX,maxX:STREET.maxX,y:0,z:0,clearHalfWidth:.5},cars,props,lamps,endGate,lights:lightList.length,drawBatches:batches.size};
+  const metadata={entryDoor:{x:doorX,y:0,z:doorZ,kind:'building-exit'},route:{minX:STREET.minX,maxX:STREET.maxX,y:0,z:0,clearHalfWidth:.5},cars,props,lamps,endGate,fence:endGate,dumpster:dumpsterMetadata,
+    neighbouringBuilding:{minX:-22,maxX:-8.2,z:-2.12},graffiti:{x:-3.45,y:1.20,z:-1.924,width:4.65,height:1.48},lights:lightList.length,drawBatches:batches.size};
   group.userData.street=metadata;let enteredAt=null;
   const entryDoor={reset(){enteredAt=null;entryLeaf.rotation.y=1.05;},get angle(){return entryLeaf.rotation.y;}};
-  return {group,metadata,entryDoor,update(time,playerX){
+  return {group,metadata,entryDoor,dumpster,update(time,playerX,streetState){
     if(!group.visible)return;
     if(enteredAt===null)enteredAt=time;
+    dumpster.setPosition(streetState?.dumpsterX??dumpsterConfig.startX);
     const closing=Math.max(0,Math.min(1,(time-enteredAt-.8)/2.4));entryLeaf.rotation.y=1.05*(1-closing*closing*(3-2*closing));
     for(let i=0;i<lightList.length;i++){const base=i===0?15:18;lightList[i].intensity=base*(.992+.006*Math.sin(time*.85+i*1.9));}
   }};
