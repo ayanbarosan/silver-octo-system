@@ -42,12 +42,14 @@ export function createHomeWorld(THREE,scene) {
   const hallwaySteel=mat('#85907c',.84,{metalness:.18,bumpMap:relief,bumpScale:.008});
   const hallwayPanel=mat('#6f7d68',.87,{metalness:.14,bumpMap:relief,bumpScale:.008});
   const warmGlass=mat('#f1d29b',.5,{emissive:'#ffcd79',emissiveIntensity:2.4}),coldGlass=mat('#839b9b',.5,{emissive:'#536d70',emissiveIntensity:.22});
-  let placement=null;
+  let placement=null,movingParent=null,movingOffset=null,apartmentDoorMotion=null;
   const batches=new Map(),dummy=new THREE.Object3D(),unitBox=new THREE.BoxGeometry(1,1,1),unitCylinder=new THREE.CylinderGeometry(1,1,1,10);
   function instance(type,material,position,scale,quaternion=null,shadow=true){
-    const key=`${type}/${material.uuid}/${shadow}`;
-    if(!batches.has(key))batches.set(key,{type,material,shadow,matrices:[]});
-    dummy.position.set(...position);dummy.scale.set(...scale);dummy.quaternion.identity();if(quaternion)dummy.quaternion.copy(quaternion);dummy.updateMatrix();const matrix=dummy.matrix.clone();if(placement)matrix.premultiply(placement);batches.get(key).matrices.push(matrix);
+    const key=`${type}/${material.uuid}/${shadow}/${movingParent?.uuid??'static'}`;
+    if(!batches.has(key))batches.set(key,{type,material,shadow,parent:movingParent,matrices:[]});
+    dummy.position.set(...position);dummy.scale.set(...scale);dummy.quaternion.identity();if(quaternion)dummy.quaternion.copy(quaternion);dummy.updateMatrix();const matrix=dummy.matrix.clone();
+    if(movingParent)matrix.premultiply(movingOffset);else if(placement)matrix.premultiply(placement);
+    batches.get(key).matrices.push(matrix);
   }
   function box(w,h,d,x,y,z,material=concrete,shadow=true){instance('box',material,[x,y,z],[w,h,d],null,shadow);}
   function rod(a,b,r=.025,material=metal){
@@ -65,7 +67,12 @@ export function createHomeWorld(THREE,scene) {
   }
   // The outer wall and piers enclose the frame. No façade windows or sky holes.
   box(roomRight-roomLeft,roof+.5,.36,(roomLeft+roomRight)/2,(roof-.5)/2,back-.2,plaster);
-  box(.38,roof+.55,4.9,roomLeft-.16,(roof-.45)/2,.55,shadowConcrete);
+  // The inhabited flat has a real opening through this side wall. The leaf
+  // swings out of the stairwell, rather than disappearing through solid render.
+  const apartmentY=C.apartmentFloor*C.rise,doorTop=apartmentY+2.44;
+  box(.38,apartmentY+.5,4.9,roomLeft-.16,(apartmentY-.5)/2,.55,shadowConcrete);
+  box(.38,roof+.05-doorTop,4.9,roomLeft-.16,(roof+.05+doorTop)/2,.55,shadowConcrete);
+  for(const [z0,z1]of[[-1.9,-.475],[.775,3]])box(.38,2.44,z1-z0,roomLeft-.16,apartmentY+1.22,(z0+z1)/2,shadowConcrete);
   box(.38,roof+.55,4.9,roomRight+.16,(roof-.45)/2,.55,shadowConcrete);
   box(roomRight-roomLeft+.7,.28,4.9,(roomLeft+roomRight)/2,roof+.1,.55,shadowConcrete);
   box(roomRight-roomLeft+.7,.38,4.9,(roomLeft+roomRight)/2,-.22,.55,shadowConcrete);
@@ -120,10 +127,21 @@ export function createHomeWorld(THREE,scene) {
     }
     const z=side?0:worldZ,apartment=kind==='apartment';
     const doorWood=apartment?mat('#765a3e',.93,{map:lowerMap,bumpMap:relief,bumpScale:.015}):wood;
-    box(1.22,2.4,.16,x,y+1.19,side?-.12:back+.15,shadowConcrete);
-    box(1.04,2.21,.07,x,y+1.105,z,doorWood);
+    if(!apartment)box(1.22,2.4,.16,x,y+1.19,side?-.12:back+.15,shadowConcrete);
+    else{
+      for(const dx of [-.575,.575])box(.07,2.4,.16,x+dx,y+1.19,-.12,shadowConcrete);
+      box(1.22,.08,.16,x,y+2.36,-.12,shadowConcrete);
+    }
     for(const dx of [-.59,.59])box(.07,2.43,.12,x+dx,y+1.20,z,apartment?doorWood:zinc);
     box(1.25,.075,.12,x,y+2.40,z,apartment?doorWood:zinc);box(1.25,.04,.24,x,y+.025,z+.07,concrete);
+    let hinge=null,closedRotation=0;
+    if(apartment){
+      hinge=new THREE.Group();hinge.name='home-apartment-door-hinge';
+      const transform=placement.clone().multiply(new THREE.Matrix4().makeTranslation(x-.52,y,z));
+      transform.decompose(hinge.position,hinge.quaternion,hinge.scale);closedRotation=hinge.rotation.y;group.add(hinge);
+      movingParent=hinge;movingOffset=new THREE.Matrix4().makeTranslation(.52-x,-y,-z);
+    }
+    box(1.04,2.21,.07,x,y+1.105,z,doorWood);
     for(const panelY of [.60,1.50]){
       box(.77,.67,.018,x,y+panelY,z+.047,doorWood);
       for(const dx of [-.4,.4])box(.024,.72,.026,x+dx,y+panelY,z+.064,apartment?zinc:metal);
@@ -138,17 +156,31 @@ export function createHomeWorld(THREE,scene) {
       box(.065,.024,.008,x-.31,y+1.661,z+.071,tape,false);
       for(const [a,b]of[[[-.375,1.53],[-.31,1.59]],[[-.31,1.59],[-.245,1.53]],[[-.36,1.53],[-.36,1.45]],[[-.26,1.53],[-.26,1.45]],[[-.36,1.45],[-.26,1.45]]])
         rod([x+a[0],y+a[1],z+.073],[x+b[0],y+b[1],z+.073],.0025,wood);
+      movingParent=null;movingOffset=null;
       // Warm light leaks from the inhabited flat, with no sign or floor number.
       const leak=mat('#d4a970',.8,{emissive:'#e7b678',emissiveIntensity:.55});
       box(.91,.018,.018,x,y+.016,z+.066,leak,false);
       const light=new THREE.PointLight('#e5b578',3.6,3.7,2);light.position.set(x,y+.35,z+.34);
       if(placement)light.position.applyMatrix4(placement);
       group.add(light);
+      let progress=0;
+      apartmentDoorMotion={
+        update(value){
+          if(!Number.isFinite(value))return;
+          progress=Math.max(0,Math.min(1,value));
+          const p=progress*progress*(3-2*progress);
+          hinge.rotation.y=closedRotation+p*Math.PI*80/180;
+          light.intensity=3.6+p*1.6;
+        },
+        reset(){this.update(0);},
+        get progress(){return progress;},
+        get angle(){return hinge.rotation.y-closedRotation;},
+      };
     }
     placement=null;
     const bounds=side?{min:[worldX-.09,worldY,worldZ-.625],max:[worldX+.20,worldY+2.44,worldZ+.625]}:
       {min:[worldX-.625,worldY,worldZ-.16],max:[worldX+.625,worldY+2.44,worldZ+.13]};
-    const door={floor:apartment?C.apartmentFloor:0,kind,interactive:false,wall,normal:side?[1,0,0]:[0,0,1],
+    const door={floor:apartment?C.apartmentFloor:0,kind,interactive:apartment,wall,normal:side?[1,0,0]:[0,0,1],
       x:worldX,y:worldY,z:worldZ,width:1.04,height:2.21,rotationY:side?Math.PI/2:0,bounds};
     doors.push(door);return door;
   }
@@ -238,12 +270,12 @@ export function createHomeWorld(THREE,scene) {
   for(let i=0;i<dustCount;i++){dustPositions[i*3]=roomLeft+random(i+2)*(roomRight-roomLeft);dustPositions[i*3+1]=random(i+151)*roof;dustPositions[i*3+2]=-1.2+random(i+317)*1.5;}
   const dustGeometry=new THREE.BufferGeometry();dustGeometry.setAttribute('position',new THREE.BufferAttribute(dustPositions,3));const dust=new THREE.Points(dustGeometry,new THREE.PointsMaterial({color:'#bdb79b',size:.018,transparent:true,opacity:.17,depthWrite:false}));group.add(dust);
   for(const batch of batches.values()){
-    const mesh=new THREE.InstancedMesh(batch.type==='box'?unitBox:unitCylinder,batch.material,batch.matrices.length);batch.matrices.forEach((m,i)=>mesh.setMatrixAt(i,m));mesh.instanceMatrix.needsUpdate=true;mesh.castShadow=batch.shadow;mesh.receiveShadow=true;group.add(mesh);
+    const mesh=new THREE.InstancedMesh(batch.type==='box'?unitBox:unitCylinder,batch.material,batch.matrices.length);batch.matrices.forEach((m,i)=>mesh.setMatrixAt(i,m));mesh.instanceMatrix.needsUpdate=true;mesh.castShadow=batch.shadow;mesh.receiveShadow=true;(batch.parent??group).add(mesh);
   }
   const floors=Array.from({length:C.floors+1},(_,index)=>({index,y:index*C.rise,side:index%2?'right':'left',apartment:index===C.apartmentFloor}));
   const metadata={floors,apartmentFloor:C.apartmentFloor,apartmentDoor,entryDoor,brickPatches,bounds:{min:[roomLeft-.36,-.4,-2.1],max:[roomRight+.36,roof+.3,3]},flights:flightMetadata,landings:landingMetadata,devices,doors,numbers,ground:{minX:roomLeft,maxX:roomRight,minZ:groundBack,maxZ:groundFront,y:0},lights:lightList.length,drawBatches:batches.size};
   group.userData.home=metadata;
-  return {group,metadata,lights:lightList,update(time,state){
+  return {group,metadata,lights:lightList,apartmentDoor:apartmentDoorMotion,update(time,state){
     if(!group.visible)return;
     for(let i=0;i<lightList.length;i++){
       const light=lightList[i],base=i===1?4.5:13;

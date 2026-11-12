@@ -202,3 +202,13 @@ The opening rooftop chapter now uses a colder night palette, layered mist and ra
 Wet concrete, worn plaster, oxidized metal and wooden props use locally generated color, relief and roughness maps. Shallow puddles have irregular shores, broken reflections and animated rain rings; leaves, drains and small debris add detail along the roof. The original route, collision surfaces, jumps, slip event, plank and ladder mechanics remain in place.
 
 This is a visual preview for the first chapter. The street, both interior stairwells and home courtyard keep their previous graphics. The standalone HTML includes every new texture and shader and still works offline.
+
+## The apartment — v0.26
+
+At the child's second-floor landing, press **E** near his wooden side-wall door, or tap the hand icon on a phone. The door swings open, the boy aligns with its threshold, and the view enters his apartment. Holding E before reaching the doorway does not open it automatically.
+
+The kitchen is immediately visible from the entrance. His father sits slumped at a stained dining table, with brown and greying hair, his head resting on a folded arm and a glass held in his other hand. Only his breathing moves. Worn cabinets, dirty dishes, bottles, an old stove and peeling plaster surround the table beneath a dim pendant lamp.
+
+Walk right into the living room, with its worn sofa, rug, books and flickering CRT television, then continue right into the child's bedroom. An iron bed, teddy bear, football, taped drawings and a desk lamp sit beside a cold courtyard window. Furniture stays behind a continuous supported walking lane; the passages pass beside the room partitions.
+
+Continue remembers a safe position in any of the three rooms. Pausing freezes the door, character and father. At the apartment entrance, a fresh **E** press returns to the second-floor landing. New Game still begins on the rooftop. All apartment models, textures and animation are included in the offline HTML.

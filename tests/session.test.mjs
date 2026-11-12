@@ -4,6 +4,7 @@ import {DEFAULT_SETTINGS,createSession,createSaveSnapshot} from '../src/session.
 import {LEVEL} from '../src/level.js';
 import {STREET} from '../src/street.js';
 import {HOME,homeHeight} from '../src/home.js';
+import {APARTMENT} from '../src/apartment.js';
 
 const settingsKey='runaway.settings.v1',saveKey='runaway.save.v1';
 const defaults={hints:false,sound:true,volume:.65,brightness:1};
@@ -480,4 +481,56 @@ test('home route data and learned slide history are copied independently from th
   const expected=structuredClone(canonical);canonical.home.flight=0;canonical.player.y=0;
   const menu=session.getSave();menu.home.x=7;menu.home.face=-1;menu.learnedMechanics.length=0;
   assert.deepEqual(session.getSave(),expected);assert.deepEqual(createSession(storage).getSave(),expected);
+});
+
+function apartmentGame({x=APARTMENT.entry.x,face=1,y=APARTMENT.floorY,...other}={}) {
+  return liveGame({x,y,face,chapter:'apartment',apartment:{x,face},checkpoint:3,crateX:16,
+    bridgeBroken:true,slipPlayed:true,awakened:true,learnedMechanics:['door','crouch','running-slide'],...other});
+}
+
+test('apartment Continue restores the kitchen, living room and bedroom without losing previous world progress',()=>{
+  const storage=memoryStorage(),session=createSession(storage);
+  for(const x of[APARTMENT.minX,APARTMENT.entry.x,7.2,9.5,14,17.3,22,APARTMENT.maxX])for(const face of[-1,1]){
+    const source=apartmentGame({x,face,y:.01}),canonical=createSaveSnapshot(source);assert(canonical);
+    assert.equal(canonical.chapter,'apartment');assert.deepEqual(canonical.apartment,{x,face});
+    assert.deepEqual(canonical.player,{x,y:0,face});assert.equal(canonical.checkpoint,3);
+    assert.equal(canonical.crateX,16);assert(canonical.bridgeBroken&&canonical.slipPlayed&&canonical.awakened);
+    assert.deepEqual(canonical.learnedMechanics,['door','crouch','running-slide']);
+    assert.equal(Object.hasOwn(canonical,'home'),false);assert.equal(Object.hasOwn(canonical,'street'),false);
+    assert(session.save(canonical));assert.deepEqual(createSession(storage).getSave(),canonical);
+  }
+});
+
+test('unsafe or mismatched apartment continuation cannot replace the last reachable room position',()=>{
+  const storage=memoryStorage(),session=createSession(storage),good=createSaveSnapshot(apartmentGame({x:14}));assert(good);assert(session.save(good));
+  const invalid=[
+    {...good,apartment:null},{...good,apartment:[]},{...good,apartment:undefined},
+    {...good,apartment:{x:NaN,face:1}},{...good,apartment:{x:Infinity,face:1}},
+    {...good,apartment:{x:APARTMENT.minX-.01,face:1}},{...good,apartment:{x:APARTMENT.maxX+.01,face:1}},
+    {...good,apartment:{x:14,face:0}},{...good,apartment:{x:14,face:-1}},{...good,apartment:{x:14.1,face:1}},
+    {...good,player:{...good.player,x:14.1}},{...good,player:{...good.player,y:.04}},
+    {...good,player:{...good.player,face:-1}},{...good,awakened:false}
+  ];
+  for(const value of invalid){assert.equal(session.save(value),false);assert.deepEqual(session.getSave(),good);assert.equal(createSession(memoryStorage({[saveKey]:JSON.stringify(value)})).getSave(),null);}
+  for(const grounded of[false,undefined]){const source=apartmentGame();source.player.grounded=grounded;assert.equal(createSaveSnapshot(source),null);}
+});
+
+test('apartment snapshots and Continue copies isolate room and player data from caller mutations',()=>{
+  const source=apartmentGame({x:22,face:-1}),canonical=createSaveSnapshot(source);assert(canonical);
+  source.apartment.x=1;source.player.x=1;source.learnedMechanics.length=0;
+  assert.deepEqual(canonical.apartment,{x:22,face:-1});assert.deepEqual(canonical.learnedMechanics,['door','crouch','running-slide']);
+  const storage=memoryStorage(),session=createSession(storage),expected=structuredClone(canonical);assert(session.save(canonical));
+  canonical.apartment.face=1;canonical.player.y=100;
+  const menu=session.getSave();menu.apartment.x=1;menu.player.face=1;menu.learnedMechanics.length=0;
+  assert.deepEqual(session.getSave(),expected);assert.deepEqual(createSession(storage).getSave(),expected);
+});
+
+test('blocked storage supports apartment Continue in memory and New Game clears the apartment route',()=>{
+  const unavailable={getItem(){throw new Error('blocked');},setItem(){throw new Error('blocked');},removeItem(){throw new Error('blocked');}};
+  for(const storage of[null,unavailable]){
+    const session=createSession(storage),canonical=createSaveSnapshot(apartmentGame({x:23}));assert(session.save(canonical));assert.deepEqual(session.getSave(),canonical);
+    session.clearSave();assert.equal(session.getSave(),null);
+    assert(session.save(snapshot({x:0,y:.12,awakened:false,slipPlayed:false})));
+    assert.equal(Object.hasOwn(session.getSave(),'apartment'),false);assert.equal(Object.hasOwn(session.getSave(),'chapter'),false);
+  }
 });

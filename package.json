@@ -1,12 +1,12 @@
 {
   "name": "runaway",
-  "version": "0.25.0",
+  "version": "0.26.0",
   "private": true,
   "scripts": {
     "dev": "npm run build && node server.js",
     "start": "node server.js",
     "build": "node scripts/build.mjs",
-    "test": "node --check src/main.js && node --check src/world.js && node --check server.js && node tests/animation.test.mjs && node tests/climb-water.test.mjs && node tests/movement-opening.test.mjs && node tests/bridge.test.mjs && node tests/ladder.test.mjs && node tests/ladder-animation.test.mjs && node tests/slip.test.mjs && node tests/slip-animation.test.mjs && node tests/session.test.mjs && node tests/tutorial.test.mjs && node tests/stairwell.test.mjs && node tests/stair-animation.test.mjs && node tests/stair-clearance.test.mjs && node tests/street.test.mjs && node tests/manipulation-animation.test.mjs && node tests/crouch-animation.test.mjs && node tests/slide.test.mjs && node tests/slide-animation.test.mjs && node tests/home.test.mjs && node tests/home-animation.test.mjs"
+    "test": "node --check src/main.js && node --check src/world.js && node --check server.js && node tests/animation.test.mjs && node tests/climb-water.test.mjs && node tests/movement-opening.test.mjs && node tests/bridge.test.mjs && node tests/ladder.test.mjs && node tests/ladder-animation.test.mjs && node tests/slip.test.mjs && node tests/slip-animation.test.mjs && node tests/session.test.mjs && node tests/tutorial.test.mjs && node tests/stairwell.test.mjs && node tests/stair-animation.test.mjs && node tests/stair-clearance.test.mjs && node tests/street.test.mjs && node tests/manipulation-animation.test.mjs && node tests/crouch-animation.test.mjs && node tests/slide.test.mjs && node tests/slide-animation.test.mjs && node tests/home.test.mjs && node tests/home-animation.test.mjs && node tests/apartment.test.mjs"
   },
   "dependencies": {
     "three": "0.180.0"
