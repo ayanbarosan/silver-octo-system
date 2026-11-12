@@ -63,19 +63,19 @@ renderer.setPixelRatio(qualityRatio);
 renderer.shadowMap.enabled=true;
 renderer.shadowMap.type=THREE.PCFSoftShadowMap;
 renderer.toneMapping=THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure=.82*preferences.brightness;
+renderer.toneMappingExposure=(chapter==='rooftop'?.93:.82)*preferences.brightness;
 renderer.outputColorSpace=THREE.SRGBColorSpace;
 const scene=new THREE.Scene();
 const skyCanvas=document.createElement('canvas');skyCanvas.width=4;skyCanvas.height=512;
 const skyContext=skyCanvas.getContext('2d'),skyGradient=skyContext.createLinearGradient(0,0,0,512);
-skyGradient.addColorStop(0,'#334550');skyGradient.addColorStop(.55,'#6e8186');skyGradient.addColorStop(1,'#4e6570');skyContext.fillStyle=skyGradient;skyContext.fillRect(0,0,4,512);
+skyGradient.addColorStop(0,'#10242f');skyGradient.addColorStop(.55,'#2c4655');skyGradient.addColorStop(1,'#425b65');skyContext.fillStyle=skyGradient;skyContext.fillRect(0,0,4,512);
 scene.background=new THREE.CanvasTexture(skyCanvas);scene.background.colorSpace=THREE.SRGBColorSpace;
-scene.fog=new THREE.FogExp2('#536a74',.017);
+scene.fog=new THREE.FogExp2('#2b4554',.018);
 const camera=new THREE.PerspectiveCamera(38,innerWidth/innerHeight,.1,250);
-const hemi=new THREE.HemisphereLight('#b6c9d5','#202b2c',1.75);scene.add(hemi);
-const sun=new THREE.DirectionalLight('#cddbdc',1.95);sun.position.set(5,18,-9);sun.castShadow=true;sun.shadow.mapSize.set(software?512:2048,software?512:2048);sun.shadow.camera.left=-19;sun.shadow.camera.right=19;sun.shadow.camera.top=18;sun.shadow.camera.bottom=-13;sun.shadow.camera.near=1;sun.shadow.camera.far=65;sun.shadow.bias=-.0005;sun.shadow.normalBias=.035;sun.shadow.radius=3;scene.add(sun,sun.target);
-const fill=new THREE.DirectionalLight('#8fa8b7',.8);fill.position.set(-8,5,12);scene.add(fill);
-const rim=new THREE.DirectionalLight('#dae8e8',1.25);rim.position.set(-3,8,-5);scene.add(rim);
+const hemi=new THREE.HemisphereLight('#a9cadc','#172328',1.15);scene.add(hemi);
+const sun=new THREE.DirectionalLight('#bed6e4',1.65);sun.position.set(5,18,-9);sun.castShadow=true;sun.shadow.mapSize.set(software?512:2048,software?512:2048);sun.shadow.camera.left=-19;sun.shadow.camera.right=19;sun.shadow.camera.top=18;sun.shadow.camera.bottom=-13;sun.shadow.camera.near=1;sun.shadow.camera.far=65;sun.shadow.bias=-.0005;sun.shadow.normalBias=.035;sun.shadow.radius=3;scene.add(sun,sun.target);
+const fill=new THREE.DirectionalLight('#7499b1',.85);fill.position.set(-8,5,12);scene.add(fill);
+const rim=new THREE.DirectionalLight('#b9d9e7',1.9);rim.position.set(-3,8,-5);scene.add(rim);
 const world=createWorld(THREE,scene),boy=createBoy(THREE);scene.add(boy.group);
 const interior=createStairwellWorld(THREE,scene);
 const streetWorld=createStreetWorld(THREE,scene);
@@ -97,13 +97,7 @@ const random=(n)=>{const x=Math.sin(n*127.1+74.7)*43758.5453;return x-Math.floor
 for(let i=0;i<rainCount;i++){const o=i*6;rainPositions[o]=random(i)*66-25;rainPositions[o+1]=random(i+722)*25-5;rainPositions[o+2]=random(i+1000)*45-20;rainPositions[o+3]=rainPositions[o]-.06;rainPositions[o+4]=rainPositions[o+1]-.28;rainPositions[o+5]=rainPositions[o+2];}
 const rainGeometry=new THREE.BufferGeometry();rainGeometry.setAttribute('position',new THREE.BufferAttribute(rainPositions,3));
 const rain=new THREE.LineSegments(rainGeometry,new THREE.LineBasicMaterial({color:'#bbcbd1',transparent:true,opacity:.16,depthWrite:false}));scene.add(rain);
-// Soft shafts are behind the play lane rather than a screen-space filter.
-const shafts=new THREE.Group();
-for(let i=0;i<4;i++){
- const geometry=new THREE.PlaneGeometry(1.8+i*.6,28);
- const mat=new THREE.ShaderMaterial({transparent:true,depthWrite:false,side:THREE.DoubleSide,blending:THREE.AdditiveBlending,vertexShader:'varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',fragmentShader:'varying vec2 vUv;void main(){float a=pow(sin(vUv.x*3.14159),2.)*sin(vUv.y*3.14159);gl_FragColor=vec4(.75,.84,.86,a*.035);}'});
- const shaft=new THREE.Mesh(geometry,mat);shaft.position.set(-5+i*13,6,-10-i*4);shaft.rotation.z=-.27;shafts.add(shaft);
-}scene.add(shafts);
+rain.visible=false;
 const composer=new EffectComposer(renderer);composer.addPass(new RenderPass(scene,camera));
 const bloom=new UnrealBloomPass(new THREE.Vector2(innerWidth,innerHeight),.16,.6,1.05);bloom.enabled=!software;composer.addPass(bloom);
 const grade=new ShaderPass({uniforms:{tDiffuse:{value:null},uTime:{value:0},uFade:{value:0}},vertexShader:`varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`,fragmentShader:`uniform sampler2D tDiffuse;uniform float uTime;uniform float uFade;varying vec2 vUv;void main(){vec3 c=texture2D(tDiffuse,vUv).rgb;vec2 p=vUv-.5;float vignette=1.-smoothstep(.2,.8,length(p*vec2(.95,1.1)));c*=mix(.56,1.,vignette);float noise=fract(sin(dot(vUv*1900.+fract(uTime)*100.,vec2(12.9898,78.233)))*43758.5453);float luminance=dot(c,vec3(.2126,.7152,.0722));c=mix(c,vec3(luminance),.10);c+=(noise-.5)*.007;c=mix(c,vec3(.012,.02,.026),uFade);gl_FragColor=vec4(c,1.);}`});
@@ -124,12 +118,15 @@ function syncStreetArea(){
 function setChapter(next){
  if(next!==chapter)tutorials.reset(tutorials.learned);
  chapter=next;const indoors=next==='stairwell'||next==='home',onStreet=next==='street';
- world.world.visible=next==='rooftop';interior.group.visible=next==='stairwell';streetWorld.group.visible=onStreet;rain.visible=!indoors;shafts.visible=next==='rooftop';
+ world.world.visible=next==='rooftop';interior.group.visible=next==='stairwell';streetWorld.group.visible=onStreet;rain.visible=onStreet;
  syncStreetArea();
  scene.background=indoors?new THREE.Color('#080b0c'):onStreet?new THREE.Color('#26343d'):outdoorBackground;
  scene.fog=indoors?new THREE.FogExp2('#0b0e0e',.014):onStreet?new THREE.FogExp2('#263740',.025):outdoorFog;
- hemi.intensity=indoors?.65:onStreet?.9:1.75;sun.intensity=indoors?.32:onStreet?.55:1.95;
- fill.intensity=indoors?.65:onStreet?.6:.8;rim.intensity=indoors?.65:onStreet?.85:1.25;
+ hemi.intensity=indoors?.65:onStreet?.9:1.15;sun.intensity=indoors?.32:onStreet?.55:1.65;
+ fill.intensity=indoors?.65:onStreet?.6:.85;rim.intensity=indoors?.65:onStreet?.85:1.9;
+ hemi.color.set(next==='rooftop'?'#a9cadc':'#b6c9d5');hemi.groundColor.set(next==='rooftop'?'#172328':'#202b2c');
+ sun.color.set(next==='rooftop'?'#bed6e4':'#cddbdc');fill.color.set(next==='rooftop'?'#7499b1':'#8fa8b7');rim.color.set(next==='rooftop'?'#b9d9e7':'#dae8e8');
+ renderer.toneMappingExposure=(next==='rooftop'?.93:.82)*preferences.brightness;
  if(audio&&ambienceFilter){ambienceFilter.frequency.setTargetAtTime(indoors?160:420,audio.currentTime,.25);ambienceLevel.gain.setTargetAtTime(indoors?.045:.18,audio.currentTime,.25);}
  renderer.shadowMap.needsUpdate=true;
  document.body.classList.toggle('indoors',indoors);
@@ -224,7 +221,7 @@ function applySettings(patch=null,gesture=false){
  $('#setting-volume').value=Math.round(preferences.volume*100);
  $('#setting-brightness').value=Math.round(preferences.brightness*100);
  $('#setting-hints').checked=preferences.hints;
- renderer.toneMappingExposure=.82*preferences.brightness;
+ renderer.toneMappingExposure=(chapter==='rooftop'?.93:.82)*preferences.brightness;
  if(!preferences.hints){hintText='';messageUntil=0;}
  refreshHint();configureAudio(gesture);
 }
@@ -715,4 +712,4 @@ boy.group.position.set(restArea.spawnX,restArea.surfaceY,0);boy.group.rotation.y
 applySettings();updateContinue();showOverlay(intro);requestAnimationFrame(frame);
 canvas.addEventListener('webglcontextlost',e=>{e.preventDefault();state='pause';$('#error').hidden=false;$('#error').textContent='3D graphics were interrupted. Reload the page to continue.'});
 // Non-enumerable observation hook for repeatable browser smoke tests.
-Object.defineProperty(window,'__game',{value:{get state(){return state},get chapter(){return chapter},get transition(){return chapterTransition?{...chapterTransition}:null},get stairwell(){return stairwell.state?{...stairwell.state,turn:stairwell.state.turn?{...stairwell.state.turn}:undefined,snapshot:stairwell.snapshot()}:null},get interiorLayout(){return interior.metadata},get street(){return street.state?{...street.state,jump:{...street.state.jump},snapshot:street.snapshot()}:null},get streetLayout(){return streetWorld.metadata},get playgroundLayout(){return playgroundWorld.metadata},get homeDoor(){return {progress:streetWorld.homeDoor.progress,angle:streetWorld.homeDoor.angle}},get home(){return home.state?{...home.state,turn:home.state.turn?{...home.state.turn}:undefined,snapshot:home.snapshot()}:null},get homeLayout(){return homeWorld.metadata},get exitDoor(){return {progress:interior.exitDoor.progress,angle:interior.exitDoor.angle}},get actor(){const bounds=new THREE.Box3().setFromObject(boy.group);return {bounds:{min:bounds.min.toArray(),max:bounds.max.toArray()},position:{x:boy.group.position.x,y:boy.group.position.y,z:boy.group.position.z},heading:boy.group.rotation.y,probes:Object.fromEntries(['head','pelvis','leftKnee','rightKnee'].map(name=>[name,boy.group.getObjectByName(name).getWorldPosition(new THREE.Vector3()).toArray()]))}},get sceneVisibility(){return {outdoor:world.world.visible,interior:interior.group.visible,street:streetWorld.group.visible,playground:playgroundWorld.group.visible,home:homeWorld.group.visible,rain:rain.visible}},get wake(){return wake},get checkpoint(){return checkpoint},get tutorials(){return {current:tutorials.current,learned:tutorials.learned}},get roofRails(){return world.world.userData.roofRails??[]},get settings(){return {...preferences}},get saved(){return session.getSave()},get exposure(){return renderer.toneMappingExposure},get audio(){return {muted,volume:master?.gain.value??0,state:audio?.state??'uninitialized'}},get slip(){return slip.state?{...slip.state,wobble:{...slip.state.wobble}}:null},get slipPlayed(){return slip.played},get slipsCompleted(){return slipsCompleted},get dust(){return {active:dust.activeCount,emitted:dust.emittedCount}},get ladder(){return ladder.state?{...ladder.state}:null},get laddersCompleted(){return laddersCompleted},get bridge(){return {...bridge.state,supported:bridge.supported}},get opening(){return {...opening.state}},get jump(){return {...(chapter==='street'?street.state.jump:jumpMotion)}},get animation(){return boy.group.userData.animation},get climb(){const c=chapter==='street'?street.state?.climb:mantle;return c?{...c}:null},get climbsCompleted(){return chapter==='street'?(street.state?.climbsCompleted??0):climbsCompleted},get splashes(){return {active:water.activeCount,emitted:water.emittedCount}},get software(){return software},player,get crateX(){return world.crate.position.x},get drawCalls(){return renderer.info.render.calls},get triangles(){return renderer.info.render.triangles}}});
+Object.defineProperty(window,'__game',{value:{get state(){return state},get chapter(){return chapter},get transition(){return chapterTransition?{...chapterTransition}:null},get stairwell(){return stairwell.state?{...stairwell.state,turn:stairwell.state.turn?{...stairwell.state.turn}:undefined,snapshot:stairwell.snapshot()}:null},get interiorLayout(){return interior.metadata},get street(){return street.state?{...street.state,jump:{...street.state.jump},snapshot:street.snapshot()}:null},get streetLayout(){return streetWorld.metadata},get playgroundLayout(){return playgroundWorld.metadata},get homeDoor(){return {progress:streetWorld.homeDoor.progress,angle:streetWorld.homeDoor.angle}},get home(){return home.state?{...home.state,turn:home.state.turn?{...home.state.turn}:undefined,snapshot:home.snapshot()}:null},get homeLayout(){return homeWorld.metadata},get exitDoor(){return {progress:interior.exitDoor.progress,angle:interior.exitDoor.angle}},get actor(){const bounds=new THREE.Box3().setFromObject(boy.group);return {bounds:{min:bounds.min.toArray(),max:bounds.max.toArray()},position:{x:boy.group.position.x,y:boy.group.position.y,z:boy.group.position.z},heading:boy.group.rotation.y,probes:Object.fromEntries(['head','pelvis','leftKnee','rightKnee'].map(name=>[name,boy.group.getObjectByName(name).getWorldPosition(new THREE.Vector3()).toArray()]))}},get sceneVisibility(){return {outdoor:world.world.visible,interior:interior.group.visible,street:streetWorld.group.visible,playground:playgroundWorld.group.visible,home:homeWorld.group.visible,rain:rain.visible||world.world.visible&&world.weather.group.visible}},get wake(){return wake},get checkpoint(){return checkpoint},get tutorials(){return {current:tutorials.current,learned:tutorials.learned}},get roofRails(){return world.world.userData.roofRails??[]},get roofGraphics(){return {city:world.world.userData.roofCity,surface:world.world.userData.roofSurface,weather:world.world.userData.roofWeather}},get settings(){return {...preferences}},get saved(){return session.getSave()},get exposure(){return renderer.toneMappingExposure},get audio(){return {muted,volume:master?.gain.value??0,state:audio?.state??'uninitialized'}},get slip(){return slip.state?{...slip.state,wobble:{...slip.state.wobble}}:null},get slipPlayed(){return slip.played},get slipsCompleted(){return slipsCompleted},get dust(){return {active:dust.activeCount,emitted:dust.emittedCount}},get ladder(){return ladder.state?{...ladder.state}:null},get laddersCompleted(){return laddersCompleted},get bridge(){return {...bridge.state,supported:bridge.supported}},get opening(){return {...opening.state}},get jump(){return {...(chapter==='street'?street.state.jump:jumpMotion)}},get animation(){return boy.group.userData.animation},get climb(){const c=chapter==='street'?street.state?.climb:mantle;return c?{...c}:null},get climbsCompleted(){return chapter==='street'?(street.state?.climbsCompleted??0):climbsCompleted},get splashes(){return {active:water.activeCount,emitted:water.emittedCount}},get software(){return software},player,get crateX(){return world.crate.position.x},get drawCalls(){return renderer.info.render.calls},get triangles(){return renderer.info.render.triangles}}});

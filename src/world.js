@@ -1,4 +1,8 @@
 import { LEVEL } from './level.js';
+import {createRoofMaterials} from './roof-materials.js';
+import {createRoofCity} from './roof-city.js';
+import {createRoofSurface} from './roof-surface.js';
+import {createRoofWeather} from './roof-weather.js';
 
 // Original rooftop set, built entirely from local geometry and procedural textures.
 export function createWorld(THREE, scene) {
@@ -7,60 +11,13 @@ export function createWorld(THREE, scene) {
   const finalRise = LEVEL.roofs.final.y - .45;
   scene.add(world);
   const random = n => { const f = Math.sin(n * 127.1 + 311.7) * 43758.5453123; return f - Math.floor(f); };
-  function texture(kind) {
-    const canvas = document.createElement('canvas'); canvas.width = canvas.height = 512;
-    const c = canvas.getContext('2d');
-    c.fillStyle = kind === 'wood' ? '#8b8271' : '#a4aaa8'; c.fillRect(0, 0, 512, 512);
-    const image = c.getImageData(0, 0, 512, 512);
-    for (let i = 0; i < image.data.length; i += 4) {
-      const r = random(i * .13), shade = (r - .5) * (kind === 'wood' ? 30 : 36);
-      image.data[i] += shade; image.data[i + 1] += shade; image.data[i + 2] += shade;
-    }
-    c.putImageData(image, 0, 0);
-    for (let i = 0; i < 70; i++) {
-      const x = random(i + 100) * 512, y = random(i + 203) * 512;
-      if (kind === 'wood') {
-        c.strokeStyle = `rgba(44,39,29,${.04 + random(i) * .08})`;
-        c.lineWidth = 1 + random(i + 3) * 2;
-        c.beginPath(); c.moveTo(x, 0); c.bezierCurveTo(x + 10, 180, x - 9, 350, x, 512); c.stroke();
-      } else {
-        const glow = c.createRadialGradient(x, y, 0, x, y, 10 + random(i) * 60);
-        glow.addColorStop(0, `rgba(39,49,46,${.018 + random(i + 1) * .055})`); glow.addColorStop(1, 'rgba(39,49,46,0)');
-        c.fillStyle = glow; c.fillRect(0, 0, 512, 512);
-      }
-    }
-    if (kind === 'concrete') {
-      c.fillStyle = 'rgba(21,32,34,.15)'; c.fillRect(0, 0, 512, 2); c.fillRect(0, 510, 512, 2);
-      c.fillStyle = 'rgba(223,231,225,.11)'; c.fillRect(0, 3, 512, 1);
-      for (let i = 0; i < 7; i++) {
-        const x = random(i + 270) * 512;
-        c.fillStyle = 'rgba(44,55,48,.05)'; c.fillRect(x, 0, 3 + random(i + 20) * 5, 50 + random(i + 21) * 250);
-      }
-    }
-    if (kind === 'concrete') {
-      // Fine repaired cracks and aggregate stay subtle beneath the lighting.
-      c.lineWidth = .65; c.strokeStyle = 'rgba(31,42,41,.09)';
-      for (let i = 0; i < 13; i++) {
-        const x = random(i + 370) * 512, y = random(i + 440) * 512;
-        c.beginPath(); c.moveTo(x, y);
-        for (let j = 1; j < 5; j++) c.lineTo(x + j * 8 + random(i * 21 + j) * 9, y + j * 5 + random(i * 19 + j) * 11);
-        c.stroke();
-      }
-    }
-    const map = new THREE.CanvasTexture(canvas); map.colorSpace = THREE.SRGBColorSpace;
-    map.wrapS = map.wrapT = THREE.RepeatWrapping; map.anisotropy = 4;
-    return map;
-  }
-  const concreteMap = texture('concrete'), woodMap = texture('wood');
-  const concreteRelief = concreteMap.clone(); concreteRelief.colorSpace = THREE.NoColorSpace;
-  const mat = (color, roughness = .88, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness, ...extra });
-  const roofMat = mat('#65716f', .83, { map: concreteMap, bumpMap: concreteRelief, bumpScale: .026, roughnessMap: concreteRelief });
-  const rimMat = mat('#7d8581', .88, { map: concreteMap, bumpMap: concreteRelief, bumpScale: .018 });
-  const wallMat = mat('#6a7675', .95, { map: concreteMap, bumpMap: concreteRelief, bumpScale: .028 });
-  const darkMetal = mat('#323f40', .78, { metalness: .45 });
-  const zinc = mat('#6c7b78', .59, { metalness: .56 });
-  const rust = mat('#615546', .94);
-  const black = mat('#1d2b30');
+  const roofMaterials=createRoofMaterials(THREE);
+  const concreteMap=roofMaterials.maps.roof.color,woodMap=roofMaterials.maps.wood.color;
+  const concreteRelief=roofMaterials.maps.roof.height;
+  const mat=(color,roughness=.88,extra={})=>new THREE.MeshStandardMaterial({color,roughness,...extra});
+  const roofMat=roofMaterials.roof,rimMat=roofMaterials.rim,wallMat=roofMaterials.wall;
+  const darkMetal=roofMaterials.metal,zinc=roofMaterials.zinc,rust=roofMaterials.rust;
+  const black=mat('#132129',.9);
   function box(w, h, d, x, y, z, material, parent = world, shadow = true) {
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), material);
     mesh.position.set(x, y, z); mesh.castShadow = shadow; mesh.receiveShadow = true;
@@ -84,20 +41,22 @@ export function createWorld(THREE, scene) {
     const mesh = new THREE.Mesh(new THREE.TubeGeometry(curve, 24, radius, 4, false), mat(color, .8));
     world.add(mesh); return mesh;
   }
-  const panes = [], warmPanes = [], frames = [], stairGlass = [], wetPatches = [], dampPatches = [], ribbons = [];
-  const wetMat = mat('#53686b', .24, { metalness: .27 });
-  const dampMat = mat('#526160', .56, { metalness: .07 });
-  const glass = mat('#586e75', .39, { metalness: .22 });
-  const balconyMat = mat('#7d8987', .91, { map: concreteMap });
+  const panes = [], warmPanes = [], ribbons = [];
+  const glass = roofMaterials.glass;
 
   function facade(x, width, top, bottom, z, seed, spacing = 1.7, windowW = .65, windowH = 1.15) {
     const columns = Math.floor((width - 1) / spacing), rows = Math.floor((top - bottom - 2) / 2.4);
     for (let row = 0; row < rows; row++) {
       for (let col = 0; col < columns; col++) {
         const xx = x - width / 2 + 1 + col * spacing, yy = top - 2 - row * 2.4;
-        const spec = { x: xx, y: yy, z, w: windowW, h: windowH, shade: random(seed + col * 19 + row * 137) };
+        const spec = { x: xx, y: yy, z:z+.042, w: windowW, h: windowH, shade: random(seed + col * 19 + row * 137) };
         if (spec.shade > .973) warmPanes.push(spec); else panes.push(spec);
-        frames.push({ ...spec, y: yy - windowH / 2 - .07, w: windowW + .16, h: .07, z: z + .04 });
+        box(windowW+.10,windowH+.10,.025,xx,yy,z+.018,black,world,false);
+        for(const dx of [-windowW/2-.018,windowW/2+.018])box(.038,windowH+.14,.10,xx+dx,yy,z+.055,darkMetal,world,false);
+        for(const dy of [-windowH/2-.018,windowH/2+.018])box(windowW+.14,.038,.10,xx,yy+dy,z+.055,darkMetal,world,false);
+        box(.025,windowH,.075,xx,yy,z+.068,zinc,world,false);
+        box(windowW,.027,.075,xx,yy-.08,z+.068,darkMetal,world,false);
+        box(windowW+.21,.08,.20,xx,yy-windowH/2-.07,z+.09,rimMat,world,false);
       }
     }
   }
@@ -155,19 +114,6 @@ export function createWorld(THREE, scene) {
     // Rear parapet and old safety rail stay behind the playable lane.
     box(width, .19, .21, center, level + .095, -2.38, rimMat);
     finishedRoofRail(left, right, level);
-    // Layered irregular patches read as rainwater, with a darker damp perimeter.
-    for (let i = 0; i < 7; i++) {
-      const spec = { x: left + 1.1 + random(seed + i + 50) * (width - 2.2), y: level + .008,
-        z: -.8 + random(seed + i + 15) * 2, sx: .48 + random(seed + i) * .88,
-        sz: .13 + random(seed + i + 10) * .27, angle: random(seed + i + 311) * 3 };
-      // This existing puddle reaches the walking lane so the scripted slip
-      // happens on visible water, without adding a trip obstacle or draw call.
-      if (seed === 38 && i === 3) Object.assign(spec, {
-        x: LEVEL.slipPuddle.centerX, z: LEVEL.slipPuddle.centerZ,
-        sx: LEVEL.slipPuddle.sx, sz: LEVEL.slipPuddle.sz, angle: LEVEL.slipPuddle.angle
-      });
-      dampPatches.push(spec); wetPatches.push({ ...spec, y: level + .011, sx: spec.sx * .81, sz: spec.sz * .77 });
-    }
     for (let i = 0; i < 12; i++) {
       const x = left + .7 + random(seed + i + 119) * (width - 1.4), z = random(seed + i + 132) > .5 ? -1.8 : 1.45;
       const stone = box(.05 + random(i + seed) * .09, .025, .04 + random(i + 20) * .07, x, level + .025, z, random(i) > .5 ? darkMetal : rimMat);
@@ -273,6 +219,8 @@ export function createWorld(THREE, scene) {
     louver.rotation.x = -.3;
   }
   box(1.3, .025, .86, 7, .8375, 0, zinc);
+  for(const x of [6.35,7.65])for(const z of [-.43,.43])cylinder(.018,.009,x,.846,z,darkMetal);
+  for(const x of [6.22,7.78])box(.025,.54,.06,x,.38,.56,darkMetal);
   // Tall flue: reachable from the movable crate.
   cylinder(.265, 1.42, 17, .71, 0, darkMetal);
   cylinder(.305, .13, 17, .065, 0, zinc);
@@ -283,7 +231,7 @@ export function createWorld(THREE, scene) {
   cap.position.set(17, 1.57, 0); cap.castShadow = true; world.add(cap);
   // Main crate, locally rooted so physics can move the whole prop.
   const crate = new THREE.Group(); crate.position.set(13, 0, 0); world.add(crate);
-  const wood = mat('#8c8571', .91, { map: woodMap, bumpMap: woodMap, bumpScale: .012 });
+  const wood = roofMaterials.wood;
   const woodDark = mat('#615e4d', .91, { map: woodMap });
   const strap = mat('#4b5651', .67, { metalness: .4 });
   box(1.1, .85, .82, 0, .425, 0, woodDark, crate);
@@ -296,6 +244,9 @@ export function createWorld(THREE, scene) {
   }
   box(1.11, .07, .86, 0, .06, 0, wood, crate);
   box(1.11, .065, .86, 0, .82, 0, wood, crate);
+  for(const sign of [-1,1]){
+    const brace=box(1.19,.067,.028,0,.425,.454,wood,crate);brace.rotation.z=sign*.59;
+  }
   // A faded shipping mark gives the crate scale.
   const mark = document.createElement('canvas'); mark.width = 128; mark.height = 64;
   const mc = mark.getContext('2d'); mc.fillStyle = '#ded9bf'; mc.globalAlpha = .7; mc.font = 'bold 28px monospace'; mc.fillText('09', 22, 43);
@@ -444,46 +395,8 @@ export function createWorld(THREE, scene) {
     }
   };
   bridge.reset();
-  // City layers: intact apartment slabs with staggered setbacks and muted facades.
-  const colors = ['#687c80', '#63787e', '#738486', '#61757b', '#7c8a89'];
-  const cityMaterials = colors.map(color => mat(color, .98, { map: concreteMap }));
-  for (let layer = 0; layer < 3; layer++) {
-    const z = [-24, -48, -77][layer], count = layer === 0 ? 9 : 12;
-    for (let i = 0; i < count; i++) {
-      const seed = 1000 + layer * 131 + i * 37;
-      const width = 7.5 + random(seed) * 7.5;
-      const center = -47 + i * (layer === 0 ? 14 : 17) + layer * 4;
-      const top = -5.5 + random(seed + 1) * 20 - layer * 1.1;
-      const depth = 5 + random(seed + 2) * 7;
-      const material = cityMaterials[(i + layer * 2) % cityMaterials.length];
-      box(width, top + 40, depth, center, (top - 40) / 2, z - depth / 2, material, world, false);
-      box(width + .18, .22, depth + .1, center, top + .1, z - depth / 2, material, world, false);
-      facade(center, width, top, layer === 0 ? -30 : -24, z + .02, seed, layer === 2 ? 1.9 : 1.7, .66, 1.2);
-      // Narrow glazed stairwells and a few cantilever balconies break the slab rhythm.
-      const stairX = center + width * .22;
-      box(.62, top + 39, .035, stairX, (top - 39) / 2, z + .045, darkMetal, world, false);
-      if (layer < 2) {
-        for (let row = 0; row < Math.min(13, Math.floor((top + 36) / 2.4)); row++) {
-          stairGlass.push({ x: stairX, y: top - 1.85 - row * 2.4, z: z + .072, w: .46, h: 1.7 });
-          if (layer === 0 && i % 3 === 1 && row < 7) {
-            const bx = center - width * .29, by = top - 2.6 - row * 2.4;
-            box(1.45, .11, .9, bx, by, z + .43, balconyMat, world, false);
-            box(1.42, .55, .07, bx, by + .32, z + .85, balconyMat, world, false);
-            box(.06, .55, .76, bx - .68, by + .32, z + .44, darkMetal, world, false);
-            box(.06, .55, .76, bx + .68, by + .32, z + .44, darkMetal, world, false);
-            box(1.4, .035, .06, bx, by + .61, z + .85, zinc, world, false);
-          }
-        }
-      }
-      for (let x = center - width / 2 + 3.4; x < center + width / 2; x += 3.4) {
-        box(.025, top + 39, .022, x, (top - 39) / 2, z + .035, darkMetal, world, false);
-      }
-      if (random(seed + 3) > .45) {
-        cylinder(.07, 2.1, center + width * .28, top + 1.1, z - 1.5, zinc).castShadow = false;
-        box(1.4, .03, .03, center + width * .28, top + 1.8, z - 1.5, darkMetal, world, false);
-      }
-    }
-  }
+  const city=createRoofCity(THREE,world,{materials:roofMaterials,random});
+  world.userData.roofCity=city.metadata;
   // Industrial silhouettes give each layer an identity without adding draw calls:
   // these beams and tanks enter the same static primitive batches as the city.
   function structuralBeam(a, b, thickness = .09, material = darkMetal) {
@@ -491,19 +404,6 @@ export function createWorld(THREE, scene) {
     const center = from.clone().add(to).multiplyScalar(.5);
     const beam = box(thickness, direction.length(), thickness, center.x, center.y, center.z, material, world, false);
     beam.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction.normalize()); return beam;
-  }
-  for (const [cx, z, top, span] of [[18, -44, 18, 23], [-28, -69, 16, 17]]) {
-    for (const dx of [-.25, .25]) structuralBeam([cx + dx, 0, z], [cx + dx, top, z], .12);
-    for (let y = .8; y < top - .8; y += 2) {
-      structuralBeam([cx - .25, y, z], [cx + .25, y + 1.8, z], .045);
-      structuralBeam([cx + .25, y, z], [cx - .25, y + 1.8, z], .045);
-    }
-    box(span, .12, .32, cx + span * .22, top, z, darkMetal, world, false);
-    box(span, .09, .09, cx + span * .22, top + .85, z, darkMetal, world, false);
-    for (let x = cx - span * .28; x < cx + span * .72; x += 2.1) structuralBeam([x, top, z], [Math.min(x + 2.1, cx + span * .72), top + .85, z], .045);
-    box(1.2, .8, .7, cx - span * .23, top - .15, z, zinc, world, false);
-    structuralBeam([cx + span * .6, top, z], [cx + span * .6, top - 6, z], .018);
-    box(.28, .12, .15, cx + span * .6, top - 6, z, darkMetal, world, false);
   }
   for (const [x, y, z] of [[8.2, 10.4, -26], [49.5, 11, -28], [-35, 4, -51]]) {
     // Old rooftop water tanks, supported on visible narrow legs.
@@ -552,26 +452,11 @@ export function createWorld(THREE, scene) {
     });
     mesh.instanceMatrix.needsUpdate = true; mesh.receiveShadow = true; world.add(mesh); return mesh;
   }
-  instancedWindows(panes, mat('#29414b', .63, { metalness: .12 }));
-  const warmWindows = instancedWindows(warmPanes, mat('#c8b383', .79, { emissive: '#d8ae61', emissiveIntensity: .28 }));
+  instancedWindows(panes, glass);
+  const warmWindows = instancedWindows(warmPanes, mat('#c8b383', .79, { emissive: '#d8ae61', emissiveIntensity: .48 }));
   const warmColor = new THREE.Color();
-  instancedWindows(frames, mat('#8b9690', .96));
-  instancedWindows(stairGlass, glass);
-  // All puddles share a low-poly irregular outline and render in two instanced draws.
-  const waterShape = new THREE.Shape();
-  for (let i = 0; i <= 32; i++) {
-    const a = i / 32 * Math.PI * 2, r = 1 + .11 * Math.sin(a * 3 + 1) + .07 * Math.cos(a * 7);
-    const x = Math.cos(a) * r, y = Math.sin(a) * r;
-    if (i === 0) waterShape.moveTo(x, y); else waterShape.lineTo(x, y);
-  }
-  waterShape.closePath();
-  const waterGeometry = new THREE.ShapeGeometry(waterShape, 1); waterGeometry.rotateX(-Math.PI / 2);
-  function waterInstances(list, material) {
-    const mesh = new THREE.InstancedMesh(waterGeometry, material, list.length), dummy = new THREE.Object3D();
-    list.forEach((p, i) => { dummy.position.set(p.x, p.y, p.z); dummy.scale.set(p.sx, 1, p.sz); dummy.rotation.y = p.angle; dummy.updateMatrix(); mesh.setMatrixAt(i, dummy.matrix); });
-    mesh.instanceMatrix.needsUpdate = true; mesh.receiveShadow = true; world.add(mesh);
-  }
-  waterInstances(dampPatches, dampMat); waterInstances(wetPatches, wetMat);
+  const surface=createRoofSurface(THREE,world,{materials:roofMaterials,roofs:Object.values(LEVEL.roofs).map((r,i)=>({left:r.x,right:r.x+r.w,level:r.y,seed:[38,145,171,91][i]}))});
+  world.userData.roofSurface=surface.metadata;
   // Short frayed ties breathe in the wind behind the walking lane.
   const tieMaterial = mat('#898d7b', .96, { side: THREE.DoubleSide });
   for (const [x, y] of [[4.2, 1], [10, 1], [28 + finalOffset, 1.45 + finalRise]]) {
@@ -598,21 +483,42 @@ export function createWorld(THREE, scene) {
   fc.putImageData(cloud, 0, 0);
   const mistTexture = new THREE.CanvasTexture(mistCanvas); mistTexture.colorSpace = THREE.SRGBColorSpace;
   for (let i = 0; i < 6; i++) {
-    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: mistTexture, transparent: true, depthWrite: false, opacity: .23, fog: true }));
-    sprite.position.set(-17 + i * 21, -3 + random(i + 17) * 6, -9 - i * 5);
-    sprite.scale.set(32 + i * 4, 5, 1); sprite.userData.startX = sprite.position.x; mist.push(sprite); world.add(sprite);
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: mistTexture, transparent: true, depthWrite: false, opacity: .38, fog: true }));
+    sprite.position.set(-17 + i * 21, -3 + random(i + 17) * 6, -7 - i * 8);
+    sprite.scale.set(38 + i * 4, 5+i*.4, 1); sprite.userData.startX = sprite.position.x; mist.push(sprite); world.add(sprite);
   }
   // A distant security searchlight wakes up while the sleeping child remains protected.
-  const searchOrigin = new THREE.Vector3(-5, 4.25, -23.6);
-  box(.14, 1.1, .14, -5, 3.6, -24, darkMetal, world, false);
-  box(.7, .15, .5, -5, 3.1, -24, zinc, world, false);
-  const searchRig = new THREE.Group(); searchRig.position.copy(searchOrigin); world.add(searchRig);
-  const searchLength = 20;
-  const beamGeometry = new THREE.ConeGeometry(1.55, searchLength, 18, 1, true); beamGeometry.translate(0, -searchLength / 2, 0);
-  const beamMaterial = new THREE.MeshBasicMaterial({ color: '#c0d7df', transparent: true, opacity: .029, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, fog: true });
-  const searchBeam = new THREE.Mesh(beamGeometry, beamMaterial); searchRig.add(searchBeam);
-  const beaconMaterial = new THREE.MeshBasicMaterial({ color: '#c8dfe6', transparent: true, opacity: .8, fog: true });
-  const beacon = new THREE.Mesh(new THREE.SphereGeometry(.105, 8, 6), beaconMaterial); searchRig.add(beacon);
+  const mount=city.metadata.searchlightMount??{x:8,y:8.3,z:-17.55};
+  const searchOrigin=new THREE.Vector3(mount.x,mount.y,mount.z);
+  box(.15,.72,.15,mount.x,mount.y-.48,mount.z-.10,darkMetal,world,false);
+  box(.72,.14,.58,mount.x,mount.y-.84,mount.z-.10,zinc,world,false);
+  const searchRig=new THREE.Group();searchRig.position.copy(searchOrigin);world.add(searchRig);
+  const housing=new THREE.Mesh(new THREE.CylinderGeometry(.20,.245,.40,20),darkMetal);housing.position.y=.15;searchRig.add(housing);
+  const searchLength=26;
+  const beamGeometry=new THREE.ConeGeometry(4.6,searchLength,40,6,true);beamGeometry.translate(0,-searchLength/2,0);
+  const beamMaterial=new THREE.ShaderMaterial({transparent:true,depthWrite:false,side:THREE.DoubleSide,blending:THREE.AdditiveBlending,fog:true,
+    uniforms:THREE.UniformsUtils.merge([THREE.UniformsLib.fog,{uColor:{value:new THREE.Color('#e2d7ba')}}]),
+    vertexShader:`varying vec2 vUv;varying vec3 vNormal;varying vec3 vView;
+    #include <fog_pars_vertex>
+    void main(){vUv=uv;vec4 mvPosition=modelViewMatrix*vec4(position,1.);vNormal=normalize(normalMatrix*normal);vView=-mvPosition.xyz;gl_Position=projectionMatrix*mvPosition;
+    #include <fog_vertex>
+    }`,
+    fragmentShader:`uniform vec3 uColor;varying vec2 vUv;varying vec3 vNormal;varying vec3 vView;
+    #include <fog_pars_fragment>
+    void main(){
+      float facing=abs(dot(normalize(vNormal),normalize(vView)));
+      float softEdge=smoothstep(.035,.82,facing);
+      float endFade=smoothstep(0.,.42,vUv.y);
+      float a=.13*endFade*softEdge*softEdge*pow(max(.02,vUv.y),.55);
+      gl_FragColor=vec4(uColor,a);
+    #include <tonemapping_fragment>
+    #include <colorspace_fragment>
+    #include <fog_fragment>
+    }`});
+  const searchBeam=new THREE.Mesh(beamGeometry,beamMaterial);searchRig.add(searchBeam);
+  const beaconMaterial=new THREE.MeshBasicMaterial({color:'#fff0c7',transparent:true,opacity:.9,fog:true});
+  const beacon=new THREE.Mesh(new THREE.SphereGeometry(.16,12,8),beaconMaterial);beacon.position.y=-.055;searchRig.add(beacon);
+  const searchSpot=new THREE.SpotLight('#f4e5c4',180,36,.22,.65,1.6);searchSpot.position.copy(searchOrigin);world.add(searchSpot,searchSpot.target);searchSpot.visible=false;
   searchRig.visible = false;
   const searchDirection = new THREE.Vector3(), beamDown = new THREE.Vector3(0, -1, 0);
   // The waking place is protected; only the distant searchlight drives the opening.
@@ -629,13 +535,16 @@ export function createWorld(THREE, scene) {
     get state() { return { beamOn: beamArmed, stoneFalling: false, escaped: !!openingState.escaped }; }
   };
   function updateOpening(time) {
-    searchRig.visible = beamArmed;
+    searchRig.visible = beamArmed;searchSpot.visible=beamArmed;
     if (beamArmed) {
-      searchDirection.set(.45 + Math.sin(time * .24) * .55, -.15 + Math.sin(time * .17) * .035, 1).normalize();
+      searchDirection.set(-.42+Math.sin(time*.18)*.20,-.43+Math.sin(time*.13)*.025,1).normalize();
       searchRig.quaternion.setFromUnitVectors(beamDown, searchDirection);
+      searchSpot.target.position.copy(searchOrigin).addScaledVector(searchDirection,searchLength);searchSpot.target.updateMatrixWorld();
       beaconMaterial.opacity = .7 + Math.sin(time * 1.8) * .1;
     }
   }
+  const weather=createRoofWeather(THREE,world);
+  world.userData.roofWeather=weather.metadata;
   // Consolidate static set dressing without touching the moving crate, door or mist.
   // Shared unit primitives retain individual transforms and normals in a handful of draws.
   const batches = new Map(), disposedGeometry = new Set();
@@ -658,10 +567,10 @@ export function createWorld(THREE, scene) {
     mesh.castShadow = batch.castShadow; mesh.receiveShadow = batch.receiveShadow; world.add(mesh);
   }
   for (const geometry of disposedGeometry) geometry.dispose();
-  return { crate, door, doorLight, world, opening, restArea, bridge, slipPuddle: LEVEL.slipPuddle, update(time, playerX = 0, openingUpdate) {
+  return { crate, door, doorLight, world, opening, restArea, bridge, weather, slipPuddle: LEVEL.slipPuddle, update(time, playerX = 0, openingUpdate) {
     lastWorldTime = Number.isFinite(time) ? time : lastWorldTime;
     if (openingUpdate) opening.update(openingUpdate);
-    updateOpening(lastWorldTime);
+    updateOpening(lastWorldTime);city.update(lastWorldTime,playerX);surface.update(lastWorldTime,playerX);weather.update(lastWorldTime,playerX,openingUpdate?.wake??1);
     tram.position.x = -35 + ((lastWorldTime * .65) % 100);
     if (warmPanes.length) {
       warmColor.setScalar(.87 + Math.sin(lastWorldTime * .3) * .13); warmWindows.setColorAt(0, warmColor);

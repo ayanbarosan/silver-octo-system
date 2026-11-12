@@ -194,3 +194,11 @@ The children's playground is scenery behind the block for a later stage: faded s
 The third-floor landing reconnects to its staircase: walk left to descend the last flight and return to the child's second-floor apartment. Reversing on the staircase can go back upstairs. Existing top-floor saves and Continue during the descent remain supported.
 
 The child's wooden apartment door now sits in the left side wall of the second-floor landing, with its taped drawing and warm light. The ground entrance keeps its position.
+
+## Rainy rooftop graphics preview — v0.25
+
+The opening rooftop chapter now uses a colder night palette, layered mist and rain at several depths. Apartment blocks have recessed windows, occasional warm interiors, curtains, balconies, air conditioners, antennas and suspended cables. A moving searchlight casts a soft beam through the haze.
+
+Wet concrete, worn plaster, oxidized metal and wooden props use locally generated color, relief and roughness maps. Shallow puddles have irregular shores, broken reflections and animated rain rings; leaves, drains and small debris add detail along the roof. The original route, collision surfaces, jumps, slip event, plank and ladder mechanics remain in place.
+
+This is a visual preview for the first chapter. The street, both interior stairwells and home courtyard keep their previous graphics. The standalone HTML includes every new texture and shader and still works offline.
