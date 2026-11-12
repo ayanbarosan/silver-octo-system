@@ -1,5 +1,6 @@
 import {MOVEMENT,movementVelocity,crateSideContact} from './movement.js';
 import {createClimb,sampleClimb} from './climb.js';
+import {createSlide} from './slide.js';
 
 const clamp=(value,min,max)=>Math.max(min,Math.min(max,value));
 const RADIUS=.22,CRAWL_RADIUS=.72,EPS=.001;
@@ -18,7 +19,10 @@ export const beneathCrawlGate=x=>x+CRAWL_RADIUS>STREET.crawl.x+EPS&&x-CRAWL_RADI
 export function normalizeStreetSave(value){
   if(!value||typeof value!=='object'||Array.isArray(value))return null;
   const {x,face}=value,y=value.y??0,D=STREET.dumpster,F=STREET.fence;
-  if(!Number.isFinite(x)||x<STREET.minX||x>STREET.maxX||(face!==1&&face!==-1)||!Number.isFinite(y))return null;
+  const area=value.area===undefined?'street':value.area;
+  if(area!=='street')return null;
+  const bounds=STREET;
+  if(!Number.isFinite(x)||x<bounds.minX||x>bounds.maxX||(face!==1&&face!==-1)||!Number.isFinite(y))return null;
   if(value.crouched!==undefined&&typeof value.crouched!=='boolean')return null;
   const pose=value.crouched?{crouched:true}:{};
   let dumpsterX=value.dumpsterX??D.startX;
@@ -38,12 +42,14 @@ export function normalizeStreetSave(value){
 }
 
 export function createStreet(){
-  let state=null,lastPlayer=null;
+  let state=null,lastPlayer=null;const slide=createSlide();
   function resetJump(){Object.assign(state.jump,{preparing:false,elapsed:0,duration:.12,airTime:0,launched:false,launchSpeed:0});state.buffer=0;state.coyote=0;}
   function begin(player,saved=null){
     if(state||!player||typeof player!=='object')return false;
     const restore=normalizeStreetSave(saved)??normalizeStreetSave(STREET.entry);
-    state={direction:0,running:false,acceleration:0,landImpact:0,jumpHeld:false,buffer:0,coyote:MOVEMENT.coyote,crouch:restore.crouched?1:0,underLowGate:beneathCrawlGate(restore.x),
+    slide.reset();
+    state={direction:0,running:false,acceleration:0,landImpact:0,jumpHeld:false,crouchHeld:false,interactHeld:false,buffer:0,coyote:MOVEMENT.coyote,crouch:restore.crouched?1:0,underLowGate:beneathCrawlGate(restore.x),
+      slide:null,slidesCompleted:0,nearHomeDoor:false,homeDoor:{phase:'closed',elapsed:0,progress:0},
       dumpsterX:restore.dumpsterX,objectVelocity:0,grabbedSide:0,grabOffset:0,interaction:null,climb:null,climbsCompleted:0,
       jump:{preparing:false,elapsed:0,duration:.12,airTime:0,launched:false,launchSpeed:0}};
     Object.assign(player,{x:restore.x,y:restore.y,z:0,vx:0,vy:0,vz:0,grounded:true,face:restore.face});
@@ -66,9 +72,51 @@ export function createStreet(){
     if(!state||!player||!Number.isFinite(dt)||dt<=0)return null;
     dt=Math.min(dt,.1);lastPlayer=player;state.landImpact=0;
     const D=STREET.dumpster,F=STREET.fence,jump=state.jump;
+    const bounds=STREET;
     const direction=Number.isFinite(input?.direction)?Math.sign(input.direction):0;
+    const crouchInput=!!input?.crouch,freshCrouch=crouchInput&&!state.crouchHeld;state.crouchHeld=crouchInput;
+    const interactInput=!!input?.interact,freshInteract=interactInput&&!state.interactHeld;state.interactHeld=interactInput;
+    const door=state.homeDoor;
+    state.nearHomeDoor=player.grounded&&Math.abs(player.y)<.03&&Math.abs(player.z)<.04&&Math.abs(player.x-STREET.home.doorX)<1.10&&!slide.active&&!state.climb;
+    if(door.phase==='opening'){
+      const oldX=player.x,oldZ=player.z;door.elapsed+=dt;door.progress=Math.min(1,door.elapsed/.85);
+      const p=clamp((door.elapsed-.35)/1.20,0,1),walk=p*p*(3-2*p);
+      player.x=door.startX+(STREET.home.doorX-door.startX)*walk;player.z=walk?-2.3*walk:0;
+      player.vx=(player.x-oldX)/dt;player.vz=(player.z-oldZ)/dt;player.vy=0;player.grounded=true;
+      state.nearHomeDoor=false;state.acceleration=0;
+      if(door.elapsed>=1.65){door.phase='open';player.vx=player.vz=0;return 'home-complete';}
+      return null;
+    }
+    if(door.phase==='open'){player.vx=player.vy=player.vz=0;return null;}
+    if(door.phase==='closed'&&freshInteract&&state.nearHomeDoor&&state.crouch<.01){
+      state.homeDoor={phase:'opening',elapsed:0,progress:0,startX:player.x,startFace:player.face};
+      player.vx=player.vy=player.vz=0;state.interaction=null;state.grabbedSide=0;state.nearHomeDoor=false;resetJump();return 'open-home';
+    }
     const underGate=beneathCrawlGate(player.x)&&player.y<STREET.crawl.topY&&player.y+.96>STREET.crawl.bottomY;
     state.underLowGate=beneathCrawlGate(player.x)&&Math.abs(player.y)<.03;
+    let slideEvent=null;
+    if(freshCrouch&&!!input?.running&&player.grounded&&!state.climb&&!state.interaction&&state.crouch<.02&&!jump.preparing&&!jump.launched&&slide.begin(player)){
+      state.slide=slide.state;state.grabbedSide=0;state.interaction=null;resetJump();slideEvent='slide-start';
+    }
+    if(slide.active){
+      state.jumpHeld=!!input?.jump;
+      const oldVX=player.vx;
+      const finished=slide.update(dt,{underLowGate:state.underLowGate},player);
+      const b=dumpsterCollider(state.dumpsterX);
+      let nextX=player.x+(oldVX+player.vx)*.5*dt,blocked=false;
+      for(const obstacle of [b,F]){const contact=crateSideContact(player,nextX,obstacle,RADIUS);if(contact){nextX=contact.x;blocked=true;}}
+      const g=STREET.crawl,low=slide.state?.lowAmount??1;
+      if(low<.98&&beneathCrawlGate(nextX)){
+        nextX=player.x<=g.x-CRAWL_RADIUS+EPS?Math.min(nextX,g.x-CRAWL_RADIUS):player.x>=g.x+g.w+CRAWL_RADIUS-EPS?Math.max(nextX,g.x+g.w+CRAWL_RADIUS):player.x;blocked=true;
+      }
+      const clamped=clamp(nextX,bounds.minX,bounds.maxX);blocked||=clamped!==nextX;player.x=clamped;player.z=player.vz=0;
+      if(blocked&&slide.active)slide.update(.000001,{blocked:true,underLowGate:state.underLowGate},player);
+      state.slide=slide.state;state.crouch=state.underLowGate||state.slide?.recoverLow||state.slide?.phase==='recover'&&crouchInput?1:state.slide?.lowAmount??(crouchInput?1:0);
+      state.direction=direction;state.running=false;state.acceleration=clamp((player.vx-oldVX)/dt,-16,16);
+      if(supportAt(player.x)<player.y-.03){player.grounded=false;slide.reset();state.slide=null;}
+      if(finished||!slide.active){state.slidesCompleted++;state.slide=null;state.crouch=state.underLowGate||crouchInput?1:0;resetJump();}
+      return slideEvent;
+    }
     const wantsCrouch=player.grounded&&!state.climb&&(!!input?.crouch||state.underLowGate);
     if(wantsCrouch&&state.jump.preparing)resetJump();
     const targetCrouch=wantsCrouch?1:0,step=dt/.36;
@@ -149,7 +197,7 @@ export function createStreet(){
       else nextX=player.x;
       player.vx=0;
     }
-    player.x=clamp(nextX,STREET.minX,STREET.maxX);if(player.x!==nextX)player.vx=0;
+    player.x=clamp(nextX,bounds.minX,bounds.maxX);if(player.x!==nextX)player.vx=0;
     state.acceleration=clamp((player.vx-oldVX)/dt,-16,16);player.z=0;player.vz=0;
     if(player.grounded&&!jump.launched&&supportAt(player.x)<player.y-.03)player.grounded=false;
     if(!player.grounded){
@@ -164,7 +212,7 @@ export function createStreet(){
     return event;
   }
   return {get active(){return !!state;},get state(){return state;},begin,update,supportY(x){return state?supportAt(x):0;},
-    snapshot(){if(!state||!lastPlayer||!lastPlayer.grounded||state.climb||state.jump.preparing||state.jump.launched||Math.abs(lastPlayer.z)>.025||state.crouch>.001&&state.crouch<.98)return null;
+    snapshot(){if(!state||!lastPlayer||!lastPlayer.grounded||state.climb||slide.active||state.homeDoor.phase==='opening'||state.jump.preparing||state.jump.launched||Math.abs(lastPlayer.z)>.025||state.crouch>.001&&state.crouch<.98)return null;
       return normalizeStreetSave({...lastPlayer,dumpsterX:state.dumpsterX,...(state.crouch>=.98?{crouched:true}:{})});},
-    reset(){state=null;lastPlayer=null;}};
+    reset(){slide.reset();state=null;lastPlayer=null;}};
 }

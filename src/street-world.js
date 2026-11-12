@@ -79,8 +79,13 @@ export function createStreetWorld(THREE,scene){
   for(let x=-2;x<79;x+=6.9){box(.64,.015,.32,x,-.035,1.27,metal);for(let n=0;n<9;n++)box(.027,.008,.29,x-.28+n*.07,-.023,1.27,black,false);}
   for(let i=0;i<70;i++){const x=-2+random(i+11)*81,z=-6.5+random(i+53)*12;flatPatch(x,z,.6+random(i+98)*3.5,.25+random(i+221)*1.4,i%4===0?damp:wet,z>-.8&&z<.8?.004:-.073,i*31);}
   for(let i=0;i<105;i++){const x=-2+random(i+242)*79,z=-.7+random(i+322)*1.4;box(.018+random(i+400)*.05,.009,.015+random(i+500)*.04,x,.007,z,darkConcrete,false);}
-  function facade(center,width,bottom,top,z,material,seed,near=false){
-    box(width,top-bottom,3.7,center,(top+bottom)/2,z-1.9,material);
+  function facade(center,width,bottom,top,z,material,seed,near=false,opening=null){
+    if(opening){
+      const left=center-width/2,right=center+width/2,doorLeft=opening.x-opening.w/2,doorRight=opening.x+opening.w/2;
+      box(doorLeft-left,top-bottom,3.7,(left+doorLeft)/2,(top+bottom)/2,z-1.9,material);
+      box(right-doorRight,top-bottom,3.7,(doorRight+right)/2,(top+bottom)/2,z-1.9,material);
+      box(opening.w,top-opening.h,3.7,opening.x,(top+opening.h)/2,z-1.9,material);
+    }else box(width,top-bottom,3.7,center,(top+bottom)/2,z-1.9,material);
     const left=center-width/2,columns=Math.max(1,Math.floor((width-1)/2.1)),firstWindowY=bottom+(near&&z>-3?4.1:2.0);
     for(let row=0;firstWindowY+row*2.8<top-.7;row++)for(let col=0;col<columns;col++){
       const x=left+1.15+col*(width-2.1)/Math.max(1,columns-1),y=firstWindowY+row*2.8;
@@ -161,8 +166,9 @@ export function createStreetWorld(THREE,scene){
   const homeWall=mat('#777563',.99,{map:plasterMap,bumpMap:plasterBump,bumpScale:.047});
   const mortar=mat('#6e6a58',1,{map:plasterMap,bumpMap:plasterBump,bumpScale:.018});
   const brickMats=['#85644c','#6e5445','#98775a','#735e4e','#8c6d55'].map(color=>mat(color,.99,{map:plasterMap,bumpMap:plasterBump,bumpScale:.012}));
-  facade(homeConfig.x,homeWidth,0,13.4,homeZ,homeWall,7311,true);
-  box(homeWidth,.68,.13,homeConfig.x,.32,homeZ+.035,darkConcrete);
+  facade(homeConfig.x,homeWidth,0,13.4,homeZ,homeWall,7311,true,{x:homeConfig.doorX,w:1.24,h:2.47});
+  const foundationLeft=homeConfig.x-homeWidth/2,foundationRight=homeConfig.x+homeWidth/2;
+  for(const [a,b]of[[foundationLeft,homeConfig.doorX-.62],[homeConfig.doorX+.62,foundationRight]])box(b-a,.68,.13,(a+b)/2,.32,homeZ+.035,darkConcrete);
   const brickPatches=[];
   function brickPatch(x,y,w,h,seed){
     const edge=[[-.49,-.43],[-.30,-.50],[-.11,-.44],[.12,-.50],[.40,-.41],[.48,-.21],[.43,.02],[.50,.21],[.32,.47],[.10,.44],[-.14,.50],[-.37,.36],[-.50,.13],[-.43,-.09]];
@@ -195,25 +201,50 @@ export function createStreetWorld(THREE,scene){
   const doorMap=new THREE.CanvasTexture(doorCanvas);doorMap.colorSpace=THREE.SRGBColorSpace;
   const oldWood=mat('#9d8767',.98,{map:doorMap,bumpMap:doorMap,bumpScale:.008}),doorFrame=mat('#575244',.98,{map:plasterMap});
   const homeDoorX=homeConfig.doorX,homeDoorZ=homeZ+.15;
-  box(1.40,2.58,.15,homeDoorX,1.27,homeZ+.055,darkConcrete);
-  box(1.17,2.31,.04,homeDoorX,1.16,homeDoorZ,black);
+  // The opening has real depth. Its side walls and dim rear wall remain visible
+  // while the wooden leaf swings inward, instead of revealing a solid facade.
+  box(1.24,.045,3.55,homeDoorX,-.0225,homeZ-1.7,darkConcrete);
+  box(1.40,.06,1.55,homeDoorX,-.03,-1.53,pavement);
+  box(1.24,2.47,.08,homeDoorX,1.235,homeZ-3.5,black);
+  for(const dx of [-.65,.65])box(.07,2.47,3.45,homeDoorX+dx,1.235,homeZ-1.7,darkConcrete);
+  box(1.24,.08,3.45,homeDoorX,2.47,homeZ-1.7,darkConcrete);
+  const passageGlow=mat('#68583d',1,{emissive:'#8b6130',emissiveIntensity:.19});
+  box(.73,1.91,.013,homeDoorX,1.03,homeZ-3.44,passageGlow,false);
+  box(.34,.05,.13,homeDoorX,2.21,homeZ-2.15,lampGlass,false);
+  const passageLight=new THREE.PointLight('#d0a06b',2.6,4.0,2);passageLight.position.set(homeDoorX,2.13,homeZ-1.37);group.add(passageLight);
+  const homeLeaf=new THREE.Group();homeLeaf.name='home-wooden-door';homeLeaf.position.set(homeDoorX-.59,.02,homeDoorZ+.035);group.add(homeLeaf);
+  const homeLeafBatches=new Map(),homeLeafDummy=new THREE.Object3D();
+  function leafInstance(type,material,position,scale,quaternion=null){
+    const key=`${type}/${material.uuid}`;if(!homeLeafBatches.has(key))homeLeafBatches.set(key,{type,material,matrices:[]});
+    homeLeafDummy.position.set(position[0]-homeLeaf.position.x,position[1]-homeLeaf.position.y,position[2]-homeLeaf.position.z);
+    homeLeafDummy.scale.set(...scale);homeLeafDummy.quaternion.identity();if(quaternion)homeLeafDummy.quaternion.copy(quaternion);homeLeafDummy.updateMatrix();
+    homeLeafBatches.get(key).matrices.push(homeLeafDummy.matrix.clone());
+  }
+  function leafBox(w,h,d,x,y,z,material,quaternion=null){leafInstance('box',material,[x,y,z],[w,h,d],quaternion);}
+  function leafCylinder(r,h,x,y,z,material,quaternion=null){leafInstance('cylinder',material,[x,y,z],[r,h,r],quaternion);}
+  function leafRod(a,b,r,material){const delta=new THREE.Vector3(...b).sub(new THREE.Vector3(...a));leafInstance('cylinder',material,a.map((v,i)=>(v+b[i])/2),[r,delta.length(),r],new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,1,0),delta.normalize()));}
   for(let i=0;i<6;i++){
     const q=new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,0,1),(random(i+4481)-.5)*.012);
-    instance('box',oldWood,[homeDoorX-.49+i*.195,1.17+(random(i+7341)-.5)*.018,homeDoorZ+.035],[.184,2.28,.055],q);
-    for(const y of [.38,1.88])cylinder(.012,.008,homeDoorX-.49+i*.195,y,homeDoorZ+.069,rust,new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1,0,0),Math.PI/2));
+    leafBox(.184,2.28,.055,homeDoorX-.49+i*.195,1.17+(random(i+7341)-.5)*.018,homeDoorZ+.035,oldWood,q);
+    for(const y of [.38,1.88])leafCylinder(.012,.008,homeDoorX-.49+i*.195,y,homeDoorZ+.069,rust,new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1,0,0),Math.PI/2));
   }
   for(const dx of [-.65,.65])box(.10,2.54,.15,homeDoorX+dx,1.26,homeDoorZ+.009,doorFrame);
   box(1.39,.10,.16,homeDoorX,2.50,homeDoorZ+.009,doorFrame);
-  for(const y of [.39,1.88]){box(.29,.055,.018,homeDoorX-.45,y,homeDoorZ+.076,rust);cylinder(.034,.15,homeDoorX-.57,y,homeDoorZ+.082,metal);}
+  for(const y of [.39,1.88]){leafBox(.29,.055,.018,homeDoorX-.45,y,homeDoorZ+.076,rust);leafCylinder(.034,.15,homeDoorX-.57,y,homeDoorZ+.082,metal);}
   const braceQ=new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,0,1),-.11);
-  instance('box',oldWood,[homeDoorX,.62,homeDoorZ+.086],[1.12,.11,.032],braceQ);
-  box(.09,.25,.016,homeDoorX+.39,1.13,homeDoorZ+.077,rust);rod([homeDoorX+.39,1.14,homeDoorZ+.089],[homeDoorX+.39,1.20,homeDoorZ+.15],.018,metal);rod([homeDoorX+.39,1.20,homeDoorZ+.15],[homeDoorX+.27,1.20,homeDoorZ+.15],.018,metal);
-  box(1.40,.055,.32,homeDoorX,.023,homeDoorZ+.04,darkConcrete);
+  leafBox(1.12,.11,.032,homeDoorX,.62,homeDoorZ+.086,oldWood,braceQ);
+  leafBox(.09,.25,.016,homeDoorX+.39,1.13,homeDoorZ+.077,rust);leafRod([homeDoorX+.39,1.14,homeDoorZ+.089],[homeDoorX+.39,1.20,homeDoorZ+.15],.018,metal);leafRod([homeDoorX+.39,1.20,homeDoorZ+.15],[homeDoorX+.27,1.20,homeDoorZ+.15],.018,metal);
+  for(const batch of homeLeafBatches.values()){
+    const object=new THREE.InstancedMesh(geometries[batch.type],batch.material,batch.matrices.length);batch.matrices.forEach((m,i)=>object.setMatrixAt(i,m));object.instanceMatrix.needsUpdate=true;object.castShadow=true;object.receiveShadow=true;homeLeaf.add(object);
+  }
+  let homeDoorProgress=0;
+  const homeDoor={reset(){this.setProgress(0);},setProgress(value){if(!Number.isFinite(value))return;homeDoorProgress=Math.max(0,Math.min(1,value));homeLeaf.rotation.y=1.48*homeDoorProgress*homeDoorProgress*(3-2*homeDoorProgress);},get progress(){return homeDoorProgress;},get angle(){return homeLeaf.rotation.y;}};
+  box(1.40,.022,.32,homeDoorX,-.011,homeDoorZ+.04,darkConcrete);
   box(.30,.20,.15,homeDoorX,2.82,homeDoorZ+.05,metal);cylinder(.095,.16,homeDoorX,2.78,homeDoorZ+.19,lampGlass);
   const homeLight=new THREE.PointLight('#e1b479',11,7,2);homeLight.position.set(homeDoorX,2.69,homeDoorZ+.47);homeLight.userData.flickerBase=11;group.add(homeLight);lightList.push(homeLight);
   flatPatch(homeDoorX,.1,1.48,1.25,reflection,.006,8411);
   for(let i=0;i<23;i++){const x=65.7+random(i+6721)*12.3,z=-1.45+random(i+7631)*.4;box(.045+random(i+321)*.12,.035,.035+random(i+811)*.08,x,.003,z,i%3===0?brickMats[i%brickMats.length]:darkConcrete,false);}
-  const home={x:homeConfig.x,bounds:{min:[homeConfig.x-homeWidth/2,0,homeZ-3.8],max:[homeConfig.x+homeWidth/2,13.6,homeZ+.2]},door:{x:homeDoorX,y:0,z:homeDoorZ+.15,kind:'closed-weathered-wood',interactive:false},brickPatches};
+  const home={x:homeConfig.x,bounds:{min:[homeConfig.x-homeWidth/2,0,homeZ-3.8],max:[homeConfig.x+homeWidth/2,13.6,homeZ+.2]},door:{x:homeDoorX,y:0,z:homeDoorZ+.15,kind:'hinged-weathered-wood',interactive:true,hinge:[homeLeaf.position.x,homeLeaf.position.y,homeLeaf.position.z],aperture:{min:[homeDoorX-.62,0,homeZ-3.4],max:[homeDoorX+.62,2.47,homeDoorZ+.11]}},brickPatches};
   // Beyond the entry block, a parking court opens in front of layered blocks.
   for(const spec of [[15,16,17,-13.5,431],[33,15,21,-17,731],[51,18,18,-13,1103]])facade(spec[0],spec[1],-.1,spec[2],spec[3],distantWall,spec[4],true);
   for(const spec of [[23,13,26,-29,1765],[44,20,29,-36,2031],[66,16,24,-30,2701]])facade(spec[0],spec[1],-.1,spec[2],spec[3],farWall,spec[4]);
@@ -416,10 +447,11 @@ export function createStreetWorld(THREE,scene){
     neighbouringBuilding:{minX:-22,maxX:-8.2,z:-2.12},graffiti:{x:-3.45,y:1.20,z:-1.924,width:4.65,height:1.48},lights:lightList.length,drawBatches:batches.size};
   group.userData.street=metadata;let enteredAt=null;
   const entryDoor={reset(){enteredAt=null;entryLeaf.rotation.y=1.05;},get angle(){return entryLeaf.rotation.y;}};
-  return {group,metadata,entryDoor,dumpster,update(time,playerX,streetState){
+  return {group,metadata,entryDoor,homeDoor,dumpster,update(time,playerX,streetState){
     if(!group.visible)return;
     if(enteredAt===null)enteredAt=time;
     dumpster.setPosition(streetState?.dumpsterX??dumpsterConfig.startX);
+    homeDoor.setProgress(streetState?.homeDoor?.progress??0);
     const closing=Math.max(0,Math.min(1,(time-enteredAt-.8)/2.4));entryLeaf.rotation.y=1.05*(1-closing*closing*(3-2*closing));
     for(let i=0;i<lightList.length;i++){const base=lightList[i].userData.flickerBase??(i===0?15:18);lightList[i].intensity=base*(.992+.006*Math.sin(time*.85+i*1.9));}
   }};

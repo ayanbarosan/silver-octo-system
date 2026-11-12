@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {DEFAULT_SETTINGS,createSession,createSaveSnapshot} from '../src/session.js';
 import {LEVEL} from '../src/level.js';
 import {STREET} from '../src/street.js';
+import {HOME,homeHeight} from '../src/home.js';
 
 const settingsKey='runaway.settings.v1',saveKey='runaway.save.v1';
 const defaults={hints:false,sound:true,volume:.65,brightness:1};
@@ -421,4 +422,62 @@ test('standing or malformed crouch saves beneath the panel cannot overwrite the 
   }
   const legacy=createSaveSnapshot(streetGame({x:STREET.crawl.x-1}));assert(legacy);
   assert.equal(Object.hasOwn(legacy.street,'crouched'),false,'Older standing street saves keep their canonical shape.');
+});
+
+function homeGame({flight=0,x=HOME.left,y=homeHeight(flight,x),face=flight%2?-1:1,...other}={}) {
+  return liveGame({x,y,face,chapter:'home',home:{flight,x,face},checkpoint:3,crateX:16,
+    bridgeBroken:true,slipPlayed:true,awakened:true,learnedMechanics:['door','crouch','running-slide'],...other});
+}
+
+test('home Continue restores all three ascending flights and the child’s second-floor apartment landing',()=>{
+  const storage=memoryStorage(),session=createSession(storage);
+  for(const position of [
+    {flight:0,x:2.1},{flight:0,x:7.5},{flight:1,x:13.4},{flight:1,x:7.5},
+    {flight:2,x:2.2},{flight:2,x:7.5},{flight:3,x:13.3}
+  ]){
+    const source=homeGame(position),canonical=createSaveSnapshot(source);
+    assert(canonical,'A supported ascent or apartment landing must remain resumable.');
+    assert.equal(canonical.chapter,'home');assert.deepEqual(canonical.home,source.home);
+    assert.deepEqual(canonical.player,{x:position.x,y:homeHeight(position.flight,position.x),face:source.home.face});
+    assert.deepEqual(canonical.learnedMechanics,['door','crouch','running-slide']);
+    assert.equal(Object.hasOwn(canonical,'street'),false,'The interior save must not carry the outdoor movement route.');
+    assert(session.save(canonical));assert.deepEqual(createSession(storage).getSave(),canonical);
+  }
+  const apartment=createSaveSnapshot(homeGame({flight:2,x:2.2}));
+  assert(Math.abs(apartment.player.y-6.4)<1e-9,'The child lives on floor two, not the top floor.');
+});
+
+test('home saves reject stale supports and malformed routes without replacing a safe apartment Continue point',()=>{
+  const session=createSession(memoryStorage()),good=createSaveSnapshot(homeGame({flight:2,x:2.2}));
+  assert(good);assert(session.save(good));
+  const unsafe=[
+    {...good,chapter:'playground'},{...good,awakened:false},
+    {...good,home:null},{...good,home:[]},{...good,home:undefined},
+    {...good,home:{...good.home,flight:-1}},{...good,home:{...good.home,flight:4}},
+    {...good,home:{...good.home,flight:1.5}},{...good,home:{...good.home,x:NaN}},
+    {...good,home:{...good.home,x:Infinity}},{...good,home:{...good.home,x:15}},
+    {...good,home:{...good.home,x:2.3}},{...good,home:{...good.home,face:0}},
+    {...good,home:{...good.home,face:-1}},{...good,home:{...good.home,flight:1}},
+    {...good,player:{...good.player,y:good.player.y+.04}},
+    {...good,player:{...good.player,x:good.player.x+.01}},
+    {...good,player:{...good.player,face:-1}}
+  ];
+  for(const value of unsafe){
+    assert.equal(session.save(value),false,'Only a matching supported route and physical position can be restored.');
+    assert.deepEqual(session.getSave(),good);
+    assert.equal(createSession(memoryStorage({[saveKey]:JSON.stringify(value)})).getSave(),null);
+  }
+  const airborne=homeGame({flight:1,x:7.5});airborne.player.grounded=false;
+  assert.equal(createSaveSnapshot(airborne),null,'A transient action cannot replace the safe floor checkpoint.');
+});
+
+test('home route data and learned slide history are copied independently from the caller, menu and reloaded session',()=>{
+  const source=homeGame({flight:2,x:2.2}),canonical=createSaveSnapshot(source);assert(canonical);
+  source.home.flight=3;source.home.x=13;source.learnedMechanics.length=0;
+  assert.deepEqual(canonical.home,{flight:2,x:2.2,face:1});
+  assert.deepEqual(canonical.learnedMechanics,['door','crouch','running-slide']);
+  const storage=memoryStorage(),session=createSession(storage);assert(session.save(canonical));
+  const expected=structuredClone(canonical);canonical.home.flight=0;canonical.player.y=0;
+  const menu=session.getSave();menu.home.x=7;menu.home.face=-1;menu.learnedMechanics.length=0;
+  assert.deepEqual(session.getSave(),expected);assert.deepEqual(createSession(storage).getSave(),expected);
 });

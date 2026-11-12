@@ -177,4 +177,13 @@ Beyond the dumpster crossing, a raised damaged fence panel leaves a low passage 
 
 A brief first encounter introduces crouching once. Continue safely restores crouched positions inside the opening, while older street saves keep working. Pause freezes the posture and New Game resets the route.
 
-The path leads to his worn apartment building: broken plaster exposes individual brickwork, repaired walls surround a rough old wooden door, and a dim entrance lamp reflects in the wet sidewalk. The doorway is scenery for this stage.
+The path leads to his worn apartment building: broken plaster exposes individual brickwork, repaired walls surround a rough old wooden door, and a dim entrance lamp reflects in the wet sidewalk. In v0.23 the doorway opens with E and leads into the home stairwell.
+
+
+## Running slide and home entrance — v0.23
+
+While running, press **Ctrl** or **C** (tap the crouching icon on a phone) to slide. A fresh press at running speed starts the action: the boy drops onto a low sliding pose, carries momentum over the wet ground and recovers into a crouch if the control remains held or an obstacle is still overhead. Walking into a crouch keeps the existing slower movement. Held controls never repeat the slide automatically, and solid objects stop it.
+
+At the worn wooden entrance, press **E** or the nearby hand icon. The door swings inward before the boy walks through the supported passage. Inside is a three-floor apartment block with upward switchback stairs, exposed brick, worn plaster and warm wall lamps. The child's apartment is on the **second floor**, on the left landing; the third floor remains above it. Continue remembers supported positions inside this building.
+
+The children's playground is scenery behind the block for a later stage: faded swings, a metal slide, a seesaw, sandpit and benches sit in the rainy rear courtyard. It is visible in the background and is not the destination of the entrance door.

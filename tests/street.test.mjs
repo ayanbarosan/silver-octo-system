@@ -240,3 +240,36 @@ test('crouch opening and low movement remain consistent across update rates',()=
   }
   assert(Math.max(...samples)-Math.min(...samples)<.04);
 });
+
+test('fresh crouch while actually running starts one intentional slide and holding cannot repeat it',()=>{
+ const r=setup({x:64.5,face:1});advance(r,{direction:1,running:true},100);
+ const x=r.player.x;assert.equal(r.street.update(1/120,{direction:1,running:true,crouch:true},r.player),'slide-start');
+ assert(r.street.state.slide);assert.equal(r.street.snapshot(),null);
+ advance(r,{direction:1,running:true,crouch:true,jump:true},180);
+ assert.equal(r.street.state.slidesCompleted,1);assert.equal(r.street.state.slide,null);assert.equal(r.street.state.crouch,1);
+ assert(r.player.x>x+.8&&r.player.x<x+3);assert.equal(r.player.y,0);
+ advance(r,{direction:1,running:true,crouch:true},200);assert.equal(r.street.state.slidesCompleted,1);
+ const walking=setup({x:64.5,face:1});advance(walking,{direction:1},100);advance(walking,{direction:1,crouch:true},100);
+ assert.equal(walking.street.state.slidesCompleted,0,'Walking into a crouch must not start a slide.');
+});
+test('slide keeps its heading, stops at solid objects and hands a low fence recovery to crouch',()=>{
+ const r=setup({x:58.9,face:1});r.player.vx=3.3;
+ assert.equal(r.street.update(1/120,{direction:1,running:true,crouch:true},r.player),'slide-start');
+ for(let n=0;n<150&&r.street.state.slide;n++)r.street.update(1/120,{direction:-1},r.player);
+ assert.equal(r.player.face,1,'Reversing input during a slide cannot reverse its momentum instantly.');
+ assert(r.street.state.underLowGate);assert.equal(r.street.state.crouch,1);
+ advance(r,{direction:1},600);assert(r.player.x>STREET.crawl.x+STREET.crawl.w+.72);assert.equal(r.street.state.crouch,0);
+ const wall=beside();wall.player.vx=3.3;
+ wall.street.update(1/120,{running:true,crouch:true},wall.player);advance(wall,{},180);
+ assert(wall.player.x<=D.startX-D.w/2-.219);assert.equal(wall.player.vx,0);assert.equal(wall.street.state.slide,null);
+});
+test('the wooden home door requires a fresh E press and opens before walking into its supported passage',()=>{
+ const r=setup({x:STREET.home.doorX-2.4,face:1});advance(r,{direction:1,interact:true},140);advance(r,{interact:true},100);
+ assert(r.street.state.nearHomeDoor);assert.equal(r.street.state.homeDoor.phase,'closed','Holding E before reaching the doorway must not open it later.');
+ advance(r,{},1);assert.equal(r.street.update(1/120,{interact:true},r.player),'open-home');
+ assert.equal(r.street.snapshot(),null);const startX=r.player.x;advance(r,{},35);assert.equal(r.player.z,0);assert(r.street.state.homeDoor.progress>0);
+ const frozen=structuredClone({p:r.player,s:r.street.state});for(const dt of [0,-1,NaN,Infinity])r.street.update(dt,{},r.player);assert.deepEqual({p:r.player,s:r.street.state},frozen);
+ const events=advance(r,{},180);assert(events.includes('home-complete'));assert.equal(r.street.state.homeDoor.progress,1);
+ assert(Math.abs(r.player.x-STREET.home.doorX)<.001);assert.equal(r.player.z,-2.3);assert(r.player.grounded);assert.equal(r.player.y,0);assert(Number.isFinite(startX));
+ assert.equal(r.street.snapshot(),null,'A position inside the passage cannot replace the preceding street save.');
+});

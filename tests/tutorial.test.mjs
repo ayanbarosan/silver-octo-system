@@ -14,7 +14,8 @@ const encounters={
   ladder:()=>context(LEVEL.ladder.x,LEVEL.ladder.bottomY),
   door:()=>context(LEVEL.doorX,LEVEL.roofs.final.y),
   'push-pull':()=>context(41.4,0,{chapter:'street',dumpsterX:43.5}),
-  crouch:()=>context(STREET.crawl.x-1.8,0,{chapter:'street'})
+  crouch:()=>context(STREET.crawl.x-1.8,0,{chapter:'street'}),
+  'running-slide':()=>context(56.5,0,{chapter:'street',player:{...player(56.5),vx:3.1}})
 };
 const expire=tutorials=>tutorials.update(tutorials.current.duration+.01,context());
 
@@ -93,7 +94,7 @@ test('Continue restores unique learned lessons while New Game resets both curren
 });
 
 test('mobile first encounters explain the visible touch controls rather than keyboard-only actions',()=>{
-  const expected={push:/hand.*direction/i,'crate-climb':/↑/,'running-jump':/running.*↑/i,ladder:/↑.*↓/,door:/hand/i,'push-pull':/hand.*direction.*push.*pull.*↑/i,crouch:/crouch icon.*underneath/i};
+  const expected={push:/hand.*direction/i,'crate-climb':/↑/,'running-jump':/running.*↑/i,ladder:/↑.*↓/,door:/hand/i,'push-pull':/hand.*direction.*push.*pull.*↑/i,crouch:/crouch icon.*underneath/i,'running-slide':/run.*crouch icon.*slide/i};
   for(const id of TUTORIAL_IDS) {
     const learned=id==='crate-climb'?['push']:[];
     const mobile=createTutorials({touch:true,learned}),desktop=createTutorials({learned});
@@ -161,4 +162,31 @@ test('crouch is introduced once beside the raised panel, persists through Contin
     assert.equal(tutorials.update(.5,{...here,player:player(x)}),null,'Returning to either side cannot repeat the prompt.');
   const restored=createTutorials({learned:tutorials.learned});assert.equal(restored.update(.1,here),null);
   restored.reset();assert.equal(restored.update(.1,here),'crouch');
+});
+
+test('running slide is taught during a real street run, stays once-only and cannot appear inside the home',()=>{
+  const here=encounters['running-slide']();
+  for(const value of [
+    {...here,chapter:'rooftop'},{...here,chapter:'stairwell'},
+    {...here,chapter:'home'},{...here,busy:true},{...here,playing:false},
+    {...here,player:{...here.player,vx:1.9}},
+    {...here,player:{...here.player,vx:NaN}},
+    {...here,player:{...here.player,grounded:false}},
+    {...here,player:{...here.player,y:STREET.dumpster.y}},
+    {...here,player:{...here.player,x:66}}
+  ]){
+    const tutorials=createTutorials();assert.equal(tutorials.update(.1,value),null);
+    assert.deepEqual(tutorials.learned,[],'An unrelated encounter must not consume a running slide lesson.');
+  }
+  const tutorials=createTutorials();
+  assert.equal(tutorials.update(.1,here),'running-slide');
+  assert.match(tutorials.current.text,/running.*CTRL.*C.*slide/i);
+  expire(tutorials);
+  for(const vx of [3.3,-3.3,2.2])assert.equal(tutorials.update(.1,{...here,player:{...here.player,vx}}),null);
+  const restored=createTutorials({learned:tutorials.learned});assert.equal(restored.update(.1,here),null);
+  restored.reset();assert.equal(restored.update(.1,here),'running-slide');
+  for(const id of ['push-pull','crouch','running-slide']){
+    const hidden=createTutorials();
+    assert.equal(hidden.update(.1,{...encounters[id](),chapter:'home'}),null,'The home interior must not show instructions belonging to an outdoor street prop.');
+  }
 });

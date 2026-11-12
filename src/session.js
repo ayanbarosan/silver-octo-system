@@ -2,6 +2,7 @@ import {LEVEL} from './level.js';
 import {TUTORIAL_IDS} from './tutorial.js';
 import {normalizeStairSave,stairHeight} from './stairwell.js';
 import {normalizeStreetSave} from './street.js';
+import {normalizeHomeSave,homeHeight} from './home.js';
 
 export const DEFAULT_SETTINGS=Object.freeze({hints:false,sound:true,volume:.65,brightness:1});
 const SETTINGS_KEY='runaway.settings.v1',SAVE_KEY='runaway.save.v1';
@@ -12,7 +13,7 @@ const pipe=Object.freeze({x:16.725,w:.55,y:1.65});
 const guard=Object.freeze({x:-1.04,w:.18,y:1.32});
 const record=value=>value!==null&&typeof value==='object'&&!Array.isArray(value);
 const inRange=(value,min,max)=>typeof value==='number'&&Number.isFinite(value)&&value>=min&&value<=max;
-const copySave=value=>value?{...value,player:{...value.player},learnedMechanics:[...value.learnedMechanics],...(value.stairwell?{stairwell:{...value.stairwell}}:{}),...(value.street?{street:{...value.street}}:{})}:null;
+const copySave=value=>value?{...value,player:{...value.player},learnedMechanics:[...value.learnedMechanics],...(value.stairwell?{stairwell:{...value.stairwell}}:{}),...(value.street?{street:{...value.street}}:{}),...(value.home?{home:{...value.home}}:{})}:null;
 const learnedFrom=value=>Array.isArray(value)?[...new Set(value.filter(id=>typeof id==='string'&&TUTORIAL_IDS.includes(id)))]:[];
 
 function settingsFrom(value,base=DEFAULT_SETTINGS){
@@ -31,7 +32,15 @@ function normalizeSave(value,requireGrounded=false){
   if(!inRange(crateX,10.5,16)||typeof bridgeBroken!=='boolean'||typeof slipPlayed!=='boolean'||typeof awakened!=='boolean')return null;
   if(!Number.isFinite(player.x)||!Number.isFinite(player.y)||(player.face!==1&&player.face!==-1))return null;
   if(requireGrounded&&player.grounded!==true)return null;
-  if(value.chapter!==undefined&&value.chapter!=='rooftop'&&value.chapter!=='stairwell'&&value.chapter!=='street')return null;
+  if(value.chapter!==undefined&&value.chapter!=='rooftop'&&value.chapter!=='stairwell'&&value.chapter!=='street'&&value.chapter!=='home')return null;
+
+  if(value.chapter==='home') {
+    const home=normalizeHomeSave(value.home);
+    if(!home||!awakened)return null;
+    const y=homeHeight(home.flight,home.x);
+    if(Math.abs(player.x-home.x)>EPSILON||Math.abs(player.y-y)>SURFACE_TOLERANCE+EPSILON||player.face!==home.face)return null;
+    return {version:1,chapter:'home',home,checkpoint,player:{x:home.x,y,face:home.face},crateX,bridgeBroken,slipPlayed,awakened,learnedMechanics:learnedFrom(value.learnedMechanics)};
+  }
 
   if(value.chapter==='street') {
     const street=normalizeStreetSave(value.street);
