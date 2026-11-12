@@ -60,6 +60,11 @@ export function createHome(){
   if(direction&&(Math.sign(player.vx)===direction||Math.abs(player.vx)<.18))player.face=direction;
   state.heading=nearAngle(player.face*Math.PI/2,state.heading);player.z=homeLane(state.flight);player.vz=0;
   const x=player.x+travel,d=homeDirection(state.flight);
+  // The top landing reconnects to the same physical flight. Clamping it at
+  // the stair edge used to trap the child upstairs behind an invisible wall.
+  if(state.flight===HOME.floors&&x<HOME.right&&player.vx<0){
+   state.flight=HOME.floors-1;player.x=x;player.z=homeLane(state.flight);sync(player);return 'stairs';
+  }
   if(state.flight<HOME.floors&&(d>0&&x>=HOME.right-1e-8||d<0&&x<=HOME.left+1e-8)){beginTurn(player);return null;}
   const [lo,hi]=limits(state.flight);player.x=clamp(x,lo,hi);if(player.x!==x)player.vx=0;sync(player);return null;
  }

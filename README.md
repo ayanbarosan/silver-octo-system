@@ -187,3 +187,10 @@ While running, press **Ctrl** or **C** (tap the crouching icon on a phone) to sl
 At the worn wooden entrance, press **E** or the nearby hand icon. The door swings inward before the boy walks through the supported passage. Inside is a three-floor apartment block with upward switchback stairs, exposed brick, worn plaster and warm wall lamps. The child's apartment is on the **second floor**, on the left landing; the third floor remains above it. Continue remembers supported positions inside this building.
 
 The children's playground is scenery behind the block for a later stage: faded swings, a metal slide, a seesaw, sandpit and benches sit in the rainy rear courtyard. It is visible in the background and is not the destination of the entrance door.
+
+
+## Home landing fixes — v0.24
+
+The third-floor landing reconnects to its staircase: walk left to descend the last flight and return to the child's second-floor apartment. Reversing on the staircase can go back upstairs. Existing top-floor saves and Continue during the descent remain supported.
+
+The child's wooden apartment door now sits in the left side wall of the second-floor landing, with its taped drawing and warm light. The ground entrance keeps its position.

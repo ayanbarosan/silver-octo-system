@@ -38,3 +38,20 @@ test('real trouser and shin vertices clear every ascending riser, including appr
  }
  assert.equal(home.state.flight,3);assert(samples>10000);
 });
+
+test('returning from the top floor keeps the rendered legs clear and supported down to the apartment',()=>{
+ const home=createHome(),p={},boy=createBoy(THREE);home.begin(p,{flight:3,x:HOME.maxX,face:-1});let time=0,old={...p},contacts=0;
+ const boxes=[];for(let f=0;f<3;f++)for(let i=0;i<20;i++){const dir=homeDirection(f),x=(dir>0?HOME.left:HOME.right)+dir*(i+.5)*.41,y=(f+(i+1)/20)*3.2,z=HOME.lanes[f%2];boxes.push({minX:x-.211,maxX:x+.211,minY:y-.19,maxY:y+.0045,minZ:z-.5175,maxZ:z+.5175});}
+ const v=new THREE.Vector3();
+ for(let n=0;n<1800;n++){
+  home.update(1/90,{direction:-1},p);time+=1/90;boy.group.position.set(p.x,p.y,p.z);boy.group.rotation.y=home.state.heading;
+  boy.animate({time,dt:1/90,speed:Math.hypot(p.vx,p.vz),travel:Math.hypot(p.x-old.x,p.z-old.z),grounded:true,wake:1,stairs:home.state});boy.group.updateWorldMatrix(true,true);
+  const a=boy.group.userData.animation;
+  for(let i=0;i<2;i++)if(a.feet[i].stance&&a.feet[i].contactWeight>.98){const sole=boy.group.getObjectByName(i?'rightSole':'leftSole').getWorldPosition(new THREE.Vector3());assert(Math.abs(sole.y-tread(home.state.flight,sole.x))<.045,'A loaded shoe must follow the actual descending treads.');contacts++;}
+  if(n%3===0)boy.group.traverse(object=>{
+   if(!object.isMesh)return;let parent=object,leg=false,shoe=false;while(parent){leg||=parent.name.endsWith('Hip');shoe||=parent.name.endsWith('Ankle');parent=parent.parent;}if(!leg||shoe)return;
+   const data=object.geometry.getAttribute('position');for(let i=0;i<data.count;i+=2){v.fromBufferAttribute(data,i).applyMatrix4(object.matrixWorld);for(const b of boxes)if(v.x>b.minX+.005&&v.x<b.maxX-.005&&v.y>b.minY+.005&&v.y<b.maxY-.015&&v.z>b.minZ+.005&&v.z<b.maxZ-.005)assert.fail(`A descending shin crossed a stair at ${v.toArray()}.`);}
+  });old={...p};if(home.state.nearApartment&&p.x<2.3)break;
+ }
+ assert.equal(home.state.flight,2);assert(home.state.nearApartment);assert(contacts>350);
+});

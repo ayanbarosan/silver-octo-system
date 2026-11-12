@@ -36,3 +36,32 @@ test('home Continue rejects unsupported or impossible positions and returns inde
  for(const value of [null,[],{}, {flight:4,x:13,face:1},{flight:1,x:2.2,face:-1},{flight:0,x:14,face:1},{flight:3,x:2.2,face:1},{flight:2,x:NaN,face:1}])assert.equal(normalizeHomeSave(value),null);
  const r=setup({flight:2,x:2.2,face:-1}),s=r.home.snapshot();s.flight=0;s.x=9;assert.equal(r.home.state.flight,2);assert.equal(r.p.x,2.2);
 });
+
+test('the third-floor landing reconnects to the last staircase and returns to the second-floor apartment',()=>{
+ const r=setup({flight:2,x:HOME.apartmentX,face:1});
+ for(let i=0;i<2200;i++){const e=r.home.update(1/120,{direction:1},r.p);if(e==='floor')break;}
+ assert.equal(r.home.state.flight,3);walk(r,1,400);assert.equal(r.p.x,HOME.maxX);
+ const top=r.p.y;let previousY=top,entered=false;
+ for(let i=0;i<2200;i++){
+  const e=r.home.update(1/120,{direction:-1},r.p);entered||=e==='stairs';
+  assert(r.p.y<=previousY+1e-8,'Returning down the staircase must never teleport upstairs.');previousY=r.p.y;
+  assert.equal(r.p.z,homeLane(2));assert(r.p.grounded);
+  if(r.home.state.nearApartment&&r.p.x<=HOME.apartmentX)break;
+ }
+ assert(entered,'Left input must cross the former invisible wall.');assert.equal(r.home.state.flight,2);assert(r.home.state.nearApartment);assert(Math.abs(r.p.y-6.4)<1e-8);
+});
+test('legacy top-floor saves and mid-descent Continue retain a usable return path',()=>{
+ for(const x of [HOME.right,12.32,HOME.maxX]){
+  const r=setup({flight:3,x,face:-1});
+  while(r.p.x>8)r.home.update(1/120,{direction:-1},r.p);
+  assert.equal(r.home.state.flight,2);const saved=r.home.snapshot();assert.equal(saved.face,-1);
+  const restored=setup(saved);assert.deepEqual(restored.home.snapshot(),saved);assert.equal(restored.p.vx,0);
+  const paused=structuredClone({s:restored.home.state,p:restored.p});for(const dt of [0,-1,NaN,Infinity])restored.home.update(dt,{direction:-1},restored.p);assert.deepEqual({s:restored.home.state,p:restored.p},paused);
+  walk(restored,-1,650);assert(restored.home.state.nearApartment);assert(Math.abs(restored.p.y-6.4)<1e-8);
+ }
+});
+test('reversing halfway down the last flight can climb back to the third-floor landing',()=>{
+ const r=setup({flight:3,x:12.32,face:-1});walk(r,-1,480);assert.equal(r.home.state.flight,2);assert(r.p.y<9.6&&r.p.y>6.4);
+ const before=r.p.x;walk(r,1,1);assert(r.p.x<before,'A reversal must retain normal deceleration.');
+ walk(r,1,1000);assert.equal(r.home.state.flight,3);assert.equal(r.p.x,HOME.maxX);assert(Math.abs(r.p.y-9.6)<1e-8);
+});

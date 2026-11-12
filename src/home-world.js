@@ -112,10 +112,15 @@ export function createHomeWorld(THREE,scene) {
       normal:[onRight?-1:1,0,0],x,y,z,width:1.04,height:2.21,rotationY:rotation,
       bounds:{min:[onRight?x-.20:x-.09,y,z-.625],max:[onRight?x+.09:x+.20,y+2.44,z+.625]}});
   }
-  function backDoor(x,y,kind){
-    const z=back+.27,apartment=kind==='apartment';
+  function woodenDoor(x,y,kind,wall='back'){
+    const side=wall==='left',worldY=y,worldX=side?roomLeft+.045:x,worldZ=side?.15:back+.27;
+    if(side){
+      placement=new THREE.Matrix4().makeRotationY(Math.PI/2);placement.setPosition(worldX,worldY,worldZ);
+      x=0;y=0;
+    }
+    const z=side?0:worldZ,apartment=kind==='apartment';
     const doorWood=apartment?mat('#765a3e',.93,{map:lowerMap,bumpMap:relief,bumpScale:.015}):wood;
-    box(1.22,2.4,.16,x,y+1.19,back+.15,shadowConcrete);
+    box(1.22,2.4,.16,x,y+1.19,side?-.12:back+.15,shadowConcrete);
     box(1.04,2.21,.07,x,y+1.105,z,doorWood);
     for(const dx of [-.59,.59])box(.07,2.43,.12,x+dx,y+1.20,z,apartment?doorWood:zinc);
     box(1.25,.075,.12,x,y+2.40,z,apartment?doorWood:zinc);box(1.25,.04,.24,x,y+.025,z+.07,concrete);
@@ -136,10 +141,15 @@ export function createHomeWorld(THREE,scene) {
       // Warm light leaks from the inhabited flat, with no sign or floor number.
       const leak=mat('#d4a970',.8,{emissive:'#e7b678',emissiveIntensity:.55});
       box(.91,.018,.018,x,y+.016,z+.066,leak,false);
-      const light=new THREE.PointLight('#e5b578',3.6,3.7,2);light.position.set(x,y+.35,z+.34);group.add(light);
+      const light=new THREE.PointLight('#e5b578',3.6,3.7,2);light.position.set(x,y+.35,z+.34);
+      if(placement)light.position.applyMatrix4(placement);
+      group.add(light);
     }
-    const door={floor:apartment?C.apartmentFloor:0,kind,interactive:false,wall:'back',normal:[0,0,1],x,y,z,width:1.04,height:2.21,
-      bounds:{min:[x-.625,y,z-.16],max:[x+.625,y+2.44,z+.13]}};
+    placement=null;
+    const bounds=side?{min:[worldX-.09,worldY,worldZ-.625],max:[worldX+.20,worldY+2.44,worldZ+.625]}:
+      {min:[worldX-.625,worldY,worldZ-.16],max:[worldX+.625,worldY+2.44,worldZ+.13]};
+    const door={floor:apartment?C.apartmentFloor:0,kind,interactive:false,wall,normal:side?[1,0,0]:[0,0,1],
+      x:worldX,y:worldY,z:worldZ,width:1.04,height:2.21,rotationY:side?Math.PI/2:0,bounds};
     doors.push(door);return door;
   }
   // The two-tone paint is repeated per storey, with narrow chipped trim and
@@ -198,8 +208,8 @@ export function createHomeWorld(THREE,scene) {
     for(const [x,y]of[[start,low],[end,low+C.rise]])for(const z of [lane-.58,lane+.58])rod([x,y+.82,z],[x+(x===left?-.10:.10),y+.82,z],.03,metal);
     flightMetadata.push({index:f,direction:dir,z:lane,width:stairWidth,start:{x:start,y:low,z:lane},end:{x:end,y:low+C.rise,z:lane},steps:C.steps,tread:run,riser:rise,treads,rails:{minZ:lane-.61,maxZ:lane+.61},bounds:{minX:left,maxX:right,minY:low-.23,maxY:low+C.rise+.85,minZ:lane-.61,maxZ:lane+.61}});
   }
-  const entryDoor=backDoor(C.groundDoorX,0,'entry');
-  const apartmentDoor=backDoor(C.apartmentX,C.apartmentFloor*C.rise,'apartment');
+  const entryDoor=woodenDoor(C.groundDoorX,0,'entry');
+  const apartmentDoor=woodenDoor(C.apartmentX,C.apartmentFloor*C.rise,'apartment','left');
   // Broken plaster exposes old masonry without opening the sealed room.
   const brickPatches=[];
   for(const [px,py,w,h,seed]of[[8.4,1.75,1.65,1.10,29],[6.35,7.9,2.05,1.28,109],[11.3,10.9,1.4,.75,213]]){
