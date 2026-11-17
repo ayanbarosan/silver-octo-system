@@ -7,7 +7,7 @@ import {HOME,homeHeight} from '../src/home.js';
 import {APARTMENT} from '../src/apartment.js';
 
 const settingsKey='runaway.settings.v1',saveKey='runaway.save.v1';
-const defaults={hints:false,sound:true,volume:.65,brightness:1};
+const defaults={hints:false,sound:true,volume:.65,brightness:1,graphics:'high'};
 function memoryStorage(initial={}) {
   const values=new Map(Object.entries(initial));
   return {
@@ -35,7 +35,7 @@ test('fresh sessions start with no hints and return independent default settings
 test('settings patches preserve other preferences, accept valid endpoints and ignore invalid values',()=>{
   const storage=memoryStorage(),session=createSession(storage);
   session.setSettings({hints:true,volume:.25});session.setSettings({sound:false,brightness:1.15});
-  const valid={hints:true,sound:false,volume:.25,brightness:1.15};assert.deepEqual(session.getSettings(),valid);
+  const valid={hints:true,sound:false,volume:.25,brightness:1.15,graphics:'high'};assert.deepEqual(session.getSettings(),valid);
   for(const patch of [
     {hints:'false',sound:1,volume:'0.8',brightness:null},
     {volume:-.01,brightness:.69},{volume:1.01,brightness:1.31},
@@ -47,7 +47,7 @@ test('settings patches preserve other preferences, accept valid endpoints and ig
     session.setSettings({volume,brightness});assert.equal(session.getSettings().volume,volume);assert.equal(session.getSettings().brightness,brightness);
   }
   const persisted=JSON.parse(storage.getItem(settingsKey));
-  assert.deepEqual(persisted,{version:1,hints:true,sound:false,volume:1,brightness:1.3});
+  assert.deepEqual(persisted,{version:1,hints:true,sound:false,volume:1,brightness:1.3,graphics:'high'});
   assert.deepEqual(createSession(storage).getSettings(),session.getSettings(),'A new page session must recover the valid preferences.');
 });
 

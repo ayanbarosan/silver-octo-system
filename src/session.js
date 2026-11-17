@@ -3,9 +3,9 @@ import {TUTORIAL_IDS} from './tutorial.js';
 import {normalizeStairSave,stairHeight} from './stairwell.js';
 import {normalizeStreetSave} from './street.js';
 import {normalizeHomeSave,homeHeight} from './home.js';
-import {APARTMENT,normalizeApartmentSave} from './apartment.js';
+import {APARTMENT,normalizeApartmentSave,apartmentHeight} from './apartment.js';
 
-export const DEFAULT_SETTINGS=Object.freeze({hints:false,sound:true,volume:.65,brightness:1});
+export const DEFAULT_SETTINGS=Object.freeze({hints:false,sound:true,volume:.65,brightness:1,graphics:'high'});
 const SETTINGS_KEY='runaway.settings.v1',SAVE_KEY='runaway.save.v1';
 const EDGE_INSET=.23,BODY_RADIUS=.21,SURFACE_TOLERANCE=.025,EPSILON=1e-7;
 const mattress=Object.freeze({x:-.9,w:2.2,y:.12});
@@ -23,6 +23,7 @@ function settingsFrom(value,base=DEFAULT_SETTINGS){
   for(const key of ['hints','sound'])if(typeof value[key]==='boolean')settings[key]=value[key];
   if(inRange(value.volume,0,1))settings.volume=value.volume;
   if(inRange(value.brightness,.7,1.3))settings.brightness=value.brightness;
+  if(value.graphics==='high'||value.graphics==='balanced')settings.graphics=value.graphics;
   return settings;
 }
 
@@ -38,8 +39,9 @@ function normalizeSave(value,requireGrounded=false){
   if(value.chapter==='apartment') {
     const apartment=normalizeApartmentSave(value.apartment);
     if(!apartment||!awakened)return null;
-    if(Math.abs(player.x-apartment.x)>EPSILON||Math.abs(player.y-APARTMENT.floorY)>SURFACE_TOLERANCE+EPSILON||player.face!==apartment.face)return null;
-    return {version:1,chapter:'apartment',apartment,checkpoint,player:{x:apartment.x,y:APARTMENT.floorY,face:apartment.face},crateX,bridgeBroken,slipPlayed,awakened,learnedMechanics:learnedFrom(value.learnedMechanics)};
+    const y=apartmentHeight(apartment);
+    if(Math.abs(player.x-apartment.x)>EPSILON||Math.abs(player.y-y)>SURFACE_TOLERANCE+EPSILON||player.face!==apartment.face)return null;
+    return {version:1,chapter:'apartment',apartment,checkpoint,player:{x:apartment.x,y,face:apartment.face},crateX,bridgeBroken,slipPlayed,awakened,learnedMechanics:learnedFrom(value.learnedMechanics)};
   }
 
   if(value.chapter==='home') {

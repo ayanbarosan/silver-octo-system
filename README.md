@@ -212,3 +212,15 @@ The kitchen is immediately visible from the entrance. His father sits slumped at
 Walk right into the living room, with its worn sofa, rug, books and flickering CRT television, then continue right into the child's bedroom. An iron bed, teddy bear, football, taped drawings and a desk lamp sit beside a cold courtyard window. Furniture stays behind a continuous supported walking lane; the passages pass beside the room partitions.
 
 Continue remembers a safe position in any of the three rooms. Pausing freezes the door, character and father. At the apartment entrance, a fresh **E** press returns to the second-floor landing. New Game still begins on the rooftop. All apartment models, textures and animation are included in the offline HTML.
+
+## Apartment pursuit and courtyard escape — v0.27
+
+The father now uses continuous skinned clothing, a sculpted head and fitted brown-and-grey hair. He rises from his chair with the tumbler when the boy enters the living room, then follows him into the apartment. The kitchen has a large original family portrait showing the boy and both parents.
+
+The apartment windows look onto actual 3D buildings, with recessed windows, sills and balconies. The bedroom's escape window is set into the right side wall beside the bed. **High detail**, enabled by default in Settings, preserves the chosen render resolution; **Balanced** enables automatic resolution reduction on slower devices.
+
+Run into the bedroom and press **E** near its door to pull it closed. Hold **E + a direction** beside the bedside cabinet to push or pull it across the door. **Space / W / Up** jumps onto or over the cabinet. The father throws his tumbler against the closed wooden door, retrieves it and tries to force entry. The barricade gives the boy time to reach the window.
+
+Press **E** at the window after securing the door. The boy opens the casement, braces on the sill and climbs onto the fire escape. Follow the metal stairs using left/right movement, turning at each landing to descend the next flight. The father forces his way into the bedroom and climbs out after him. On reaching the playground below, the boy can see his father standing motionless on the upper fire escape, looking down into the courtyard.
+
+Being caught plays a brief, non-graphic impact and loose falling animation before restoring the preceding safe checkpoint. Continue preserves safe bedroom, fire-escape and playground positions; unfinished jumps, door actions and falls cannot overwrite them. Earlier apartment saves remain supported. Phone controls provide the same interaction, object movement and jumping actions. All geometry, textures, character surfaces and audio remain available offline.
