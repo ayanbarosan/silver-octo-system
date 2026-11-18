@@ -30,6 +30,7 @@ export function createFireEscapeWorld(THREE,scene){
   const concrete=material('#64726d',.96,{map:groundMap,bumpMap:groundBump,bumpScale:.012});
   const paving=material('#7b8980',.78,{map:groundMap,bumpMap:groundBump,bumpScale:.009});
   const metal=material('#354c50',.56,{metalness:.63}),zinc=material('#9aa9a5',.36,{metalness:.77});
+  const iron=material('#273535',.72,{metalness:.62}),ironEdge=material('#53605a',.57,{metalness:.66});
   const rust=material('#795339',.98),dark=material('#16272c',.99),wood=material('#716750',.98,{map:wallMap});
   const teal=material('#53766d',.88,{metalness:.19}),red=material('#875e4c',.92,{metalness:.13}),ochre=material('#9c8d59',.90,{metalness:.17}),blue=material('#607985',.85,{metalness:.16});
   const sand=material('#b1a37e',1,{map:sandMap}),soil=material('#526151',1,{map:groundMap}),grass=material('#505c43',1);
@@ -52,10 +53,44 @@ export function createFireEscapeWorld(THREE,scene){
     for(let n=0;n<=posts;n++){const p=n/posts;capPost(a[0]+(b[0]-a[0])*p,a[1]+(b[1]-a[1])*p,z,.94,parent);}
     rod([a[0],a[1]+.94,z],[b[0],b[1]+.94,z],.033,metal,false,parent);rod([a[0],a[1]+.47,z],[b[0],b[1]+.47,z],.019,metal,false,parent);
   }
+  const decks=[],anchors=[],railRuns=[];
   function deck(minX,maxX,y,minZ,maxZ){
-    for(let z=minZ+.025;z<maxZ;z+=.085)box(maxX-minX,.035,.043,(minX+maxX)/2,y-.0175,z,zinc);
-    for(const x of [minX+.04,maxX-.04])box(.085,.13,maxZ-minZ,x,y-.10,(minZ+maxZ)/2,metal);
-    for(const z of [minZ+.025,maxZ-.025])box(maxX-minX,.13,.085,(minX+maxX)/2,y-.10,z,metal);
+    for(let z=minZ+.025;z<maxZ;z+=.085)box(maxX-minX,.030,.037,(minX+maxX)/2,y-.015,z,ironEdge);
+    for(const x of [minX+.04,maxX-.04])box(.072,.105,maxZ-minZ,x,y-.08,(minZ+maxZ)/2,iron);
+    for(const z of [minZ+.025,maxZ-.025])box(maxX-minX,.105,.072,(minX+maxX)/2,y-.08,z,iron);
+    decks.push({min:[minX,y-.133,minZ],max:[maxX,y+.002,maxZ]});
+  }
+  function fireRail(a,b,z){
+    const count=Math.max(1,Math.ceil(Math.abs(b[0]-a[0])/.16));
+    for(let n=0;n<=count;n++){
+      const p=n/count,x=a[0]+(b[0]-a[0])*p,y=a[1]+(b[1]-a[1])*p;
+      box(.017,.87,.021,x,y+.495,z,iron);
+    }
+    const posts=Math.max(1,Math.ceil(Math.abs(b[0]-a[0])/1.45));
+    for(let n=0;n<=posts;n++){
+      const p=n/posts,x=a[0]+(b[0]-a[0])*p,y=a[1]+(b[1]-a[1])*p;
+      box(.033,.965,.038,x,y+.4825,z,iron);box(.064,.016,.074,x,y+.972,z,ironEdge);
+      box(.095,.018,.10,x,y+.009,z,iron);
+    }
+    beam([a[0],a[1]+.965,z],[b[0],b[1]+.965,z],.043,.061,iron);
+    beam([a[0],a[1]+.061,z],[b[0],b[1]+.061,z],.026,.030,iron);
+    railRuns.push({from:[a[0],a[1],z],to:[b[0],b[1],z],height:.98,pickets:count+1});
+  }
+  function endRail(x,y,minZ,maxZ){
+    const count=Math.ceil((maxZ-minZ)/.16);
+    for(let n=0;n<=count;n++)box(.021,.87,.017,x,y+.495,minZ+(maxZ-minZ)*n/count,iron);
+    box(.061,.043,maxZ-minZ,x,y+.965,(minZ+maxZ)/2,iron);
+    box(.030,.026,maxZ-minZ,x,y+.061,(minZ+maxZ)/2,iron);
+    for(const z of [minZ,maxZ]){box(.038,.965,.033,x,y+.4825,z,iron);box(.074,.016,.064,x,y+.972,z,ironEdge);}
+    railRuns.push({from:[x,y,minZ],to:[x,y,maxZ],height:.98,pickets:count+1});
+  }
+  function cantilever(x,y,outerZ){
+    // Knee braces carry the balcony back to masonry; nothing rests on yard poles.
+    box(.21,1.04,.075,x,y-.52,.345,iron);
+    for(const yy of [y-.10,y-.91])for(const dx of [-.067,.067])box(.038,.038,.025,x+dx,yy,.398,zinc);
+    beam([x,y-.12,.36],[x,y-.12,outerZ],.105,.075,iron);
+    beam([x,y-.94,.37],[x,y-.16,outerZ-.13],.067,.060,iron);
+    anchors.push({wall:[x,y-.52,.345],outer:[x,y-.16,outerZ],bounds:{min:[x-.11,y-1.04,.3075],max:[x+.11,y-.067,outerZ+.04]}});
   }
   // The lower exterior of the same block. Its top is the bedroom's floor;
   // the upper facade is shown only after the interior cut-away leaves view.
@@ -88,44 +123,80 @@ export function createFireEscapeWorld(THREE,scene){
     if(warm)for(const dx of [-w*.33,w*.33])box(w*.19,h-.02,.008,x+dx,y,z+.073,curtain,false,parent);
     nearWindows.push({x,y,z,w,h});
   }
+  // The stair balconies belong to a real masonry wing, not a scaffold set
+  // beside an empty gap. Brick courses, stone lintels and recessed windows give
+  // the wall the scale of the tenement fire escapes used in American cities.
+  const brickCanvas=document.createElement('canvas');brickCanvas.width=brickCanvas.height=512;
+  const bc=brickCanvas.getContext('2d');bc.fillStyle='#73756a';bc.fillRect(0,0,512,512);
+  for(let row=0;row<16;row++)for(let col=-1;col<9;col++){
+    const x=col*64+(row%2?32:0),y=row*32,n=row*37+col*11+331,shade=rand(n);
+    bc.fillStyle=`rgb(${126+shade*36},${66+shade*27},${45+shade*20})`;bc.fillRect(x+1.7,y+1.8,60.6,28.4);
+    bc.strokeStyle='rgba(207,166,125,.17)';bc.lineWidth=.8;bc.strokeRect(x+2.8,y+2.8,58.4,26.2);
+    for(let j=0;j<12;j++){bc.fillStyle=j%3?'rgba(45,39,31,.14)':'rgba(215,165,117,.12)';bc.fillRect(x+4+rand(n+j*17)*53,y+4+rand(n+j*43)*23,.8+rand(n+j*13)*4,.6+rand(n+j*19)*1.7);}
+  }
+  for(let n=0;n<26;n++){
+    const x=rand(n+71)*512,y=rand(n+491)*512,w=3+rand(n+113)*24,h=40+rand(n+519)*190;
+    const g=bc.createLinearGradient(x,y,x,y+h);g.addColorStop(0,'rgba(32,44,40,.18)');g.addColorStop(1,'rgba(32,44,40,0)');bc.fillStyle=g;bc.fillRect(x,y,w,h);
+  }
+  const brickMap=new THREE.CanvasTexture(brickCanvas);brickMap.colorSpace=THREE.SRGBColorSpace;brickMap.wrapS=brickMap.wrapT=THREE.RepeatWrapping;brickMap.repeat.set(3,4);brickMap.anisotropy=4;
+  const brickRelief=brickMap.clone();brickRelief.colorSpace=THREE.NoColorSpace;
+  const brick=material('#c9a58e',.96,{map:brickMap,bumpMap:brickRelief,bumpScale:.014});
+  const masonryTrim=material('#9b9a85',.97,{map:wallMap});
+  const facadeBounds={min:[25.76,-6.4,-.02],max:[35.18,4.32,.30]};
+  box(9.42,10.72,.32,30.47,-1.04,.14,brick);
+  box(9.58,.12,.43,30.47,4.30,.10,masonryTrim);
+  box(9.50,.17,.45,30.47,groundY+.095,.12,masonryTrim);
+  for(const x of [27.10,29.45,31.80,34.05])for(const [floor,y]of[[0,1.88],[1,-1.32],[2,-4.52]]){
+    const lit=rand(x*19+floor*71)>.83;
+    facadeWindow(x,y,.316,1.02,1.63,group,lit);
+    box(1.28,.14,.23,x,y+.93,.355,masonryTrim);
+    box(1.36,.095,.30,x,y-.96,.37,masonryTrim);
+    for(const dx of [-.40,.40])box(.13,.16,.14,x+dx,y-.84,.38,masonryTrim);
+  }
+  // The continuous wall directly supports the balcony anchor plates.
+  for(const x of [26.02,34.95]){
+    rod([x,groundY,.38],[x,4.1,.38],.029,iron);
+    for(const y of [-5.8,-3.0,-.3,2.5])box(.105,.045,.11,x,y,.38,ironEdge);
+  }
   for(const x of [21.5,23.8])for(const y of [-1.65,-4.45])facadeWindow(x,y,2.59,.9,1.45,group,rand(x*11+y)>.75);
   for(const x of [21.5,23.8])facadeWindow(x,2.0,2.80,.9,1.45,upperFacade,rand(x*13)>.6);
   // Drainpipe and rain-scarred wall seams give the attachment a real scale.
   for(const x of [20.49,25.52]){rod([x,-6.38,2.72],[x,-.15,2.72],.045,metal);for(const y of [-5.6,-3.1,-.7])box(.16,.035,.14,x,y,2.71,zinc);}
   for(let i=0;i<18;i++)box(.027,.32+rand(i+31)*.66,.008,20.6+rand(i+91)*4.75,-.55-rand(i+119)*5.3,2.704,rust);
-  // Bolted brackets and corner columns support the landings. The structure
-  // follows their actual footprint instead of placing long horizontal bars
-  // across the open view of the descending flights.
-  for(const z of [.70,2.10]){
-    beam([25.88,-.16,z],[28,-.16,z],.15,.13);
-    box(.15,.42,.42,25.88,-.22,z,metal);for(const dy of [-.14,.14])for(const dz of [-.14,.14])box(.065,.035,.035,25.97,-.16+dy,z+dz,zinc);
-  }
-  for(const z of [.70,3.69])beam([33,-3.37,z],[34.50,-3.37,z],.15,.13);
-  for(const [x,z,top]of[[27.82,.70,0],[27.82,2.10,0],[33.85,.70,-3.2],[33.85,3.69,-3.2]]){
-    beam([x,groundY,z],[x,top,z],.14,.14);box(.35,.05,.35,x,groundY+.025,z,metal);
-    box(.145,.22,.145,x,groundY+.55,z,rust);
-  }
-  beam([27.82,-6.27,.70],[33.85,-3.39,.70],.060,.06);beam([33.85,-6.27,.70],[27.82,-3.39,.70],.060,.06);
-  deck(25.82,28,0,.73,2.07);rail([25.94,0],[27.98,0],2.10,3);rail([25.94,0],[27.98,0],.70,3);
-  deck(33,34.50,-3.2,.73,3.66);
-  rail([33,-3.2],[34.46,-3.2],.70,2);rail([33,-3.2],[34.46,-3.2],3.69,2);
-  for(const z of [.73,2.16,3.66])capPost(34.46,-3.2,z);
-  for(const y of [-2.73,-2.26])rod([34.46,y,.73],[34.46,y,3.66],.024);
+  // American courtyard fire escapes sit against the wall on iron brackets.
+  // Long balcony fronts and dense flat-bar pickets replace the old free-standing
+  // tower. Each floor retains a generous opening above the actual stair lane.
+  deck(25.82,28,0,.73,2.07);
+  deck(25.82,27.82,0,2.07,4.05);
+  deck(27.82,34.70,0,3.79,4.05);
+  deck(28,34.70,0,.47,.64);
+  fireRail([25.94,0],[27.98,0],.70);
+  fireRail([25.94,0],[34.66,0],4.08);
+  endRail(34.66,0,.47,4.08);
+  deck(33,34.70,-3.2,.73,3.66);
+  deck(25.82,33,-3.2,.47,.64);
+  deck(25.82,34.70,-3.2,3.79,4.05);
+  fireRail([25.94,-3.2],[34.66,-3.2],4.08);
+  fireRail([33,-3.2],[34.66,-3.2],.70);
+  endRail(34.66,-3.2,.47,4.08);
+  // Brackets are outside the stair run, so their diagonals never intersect a
+  // descending head or knee. Their plates and bolt heads remain visible.
+  for(const y of [0,-3.2])for(const x of [26.20,27.55,33.65,34.45])cantilever(x,y,4.04);
   const flightMetadata=[];
   for(let flight=0;flight<2;flight++){
     const dir=flight===0?1:-1,start=flight===0?28:33,lane=flight===0?1.4:3.0,startY=-flight*3.2,treads=[];
     for(let i=0;i<20;i++){
       const x=start+dir*(i+.5)*.25,y=startY-(i+1)*.16;
       // Real open steel grating, with narrow enough gaps for a child's soles.
-      for(let n=0;n<5;n++)box(.035,.029,1.13,x-.1075+n*.05375,y-.0145,lane,zinc);
-      for(const z of [lane-.565,lane+.565])box(.255,.060,.035,x,y-.042,z,metal);
-      box(.034,.042,1.17,x+dir*.111,y-.019,lane,metal);
+      for(let n=0;n<5;n++)box(.035,.029,1.13,x-.1075+n*.05375,y-.0145,lane,ironEdge);
+      for(const z of [lane-.565,lane+.565])box(.255,.060,.035,x,y-.042,z,iron);
+      box(.034,.042,1.17,x+dir*.111,y-.019,lane,iron);
       if(i%7===3)box(.018,.005,.34,x,y+.002,lane-.15,rust);
       treads.push({minX:x-.130,maxX:x+.130,minY:y-.063,maxY:y+.002,minZ:lane-.585,maxZ:lane+.585});
     }
     for(const z of [lane-.63,lane+.63]){
-      beam([start,startY-.15,z],[start+dir*5,startY-3.2-.15,z],.12,.075);
-      rail([start,startY],[start+dir*5,startY-3.2],z,10);
+      beam([start,startY-.12,z],[start+dir*5,startY-3.2-.12,z],.085,.055,iron);
+      fireRail([start,startY],[start+dir*5,startY-3.2],z);
     }
     flightMetadata.push({index:flight,startX:start,endX:start+dir*5,startY,endY:startY-3.2,lane,direction:dir,left:28,right:33,rise:3.2,steps:20,treads});
   }
@@ -165,7 +236,7 @@ export function createFireEscapeWorld(THREE,scene){
   }
   const equipment=[],swingPivots=[];
   function prop(id,min,max){equipment.push({id,bounds:{min,max}});}
-  const swingX=34.7,swingZ=.0,swingTop=groundY+3.25;
+  const swingX=38.0,swingZ=2.60,swingTop=groundY+3.25;
   for(const x of [swingX-2.5,swingX+2.5]){
     for(const z of [swingZ-1.12,swingZ+1.12]){rod([x,groundY,z],[x,swingTop,swingZ],.059,teal);box(.27,.08,.25,x,groundY+.04,z,concrete);}
     rod([x,groundY+.9,swingZ-.8],[x,groundY+.9,swingZ+.8],.026,metal);
@@ -179,7 +250,7 @@ export function createFireEscapeWorld(THREE,scene){
     }
     box(.79,.068,.39,0,-2.42,0,index?ochre:red,true,pivot);for(const dx of [-.365,.365])box(.03,.08,.40,dx,-2.43,0,metal,false,pivot);
   }
-  prop('swings',[32.05,groundY,-1.2],[37.35,swingTop+.1,1.2]);
+  prop('swings',[35.35,groundY,1.40],[40.65,swingTop+.1,3.80]);
   // Low sandpit and a forgotten bucket beneath the rainy blocks.
   box(3.5,.12,2.15,39.5,groundY+.01,-.1,sand);
   for(const dx of [-1.82,1.82])box(.16,.20,2.42,39.5+dx,groundY+.1,-.1,teal);
@@ -230,10 +301,12 @@ export function createFireEscapeWorld(THREE,scene){
   const rainGeo=new THREE.BufferGeometry();rainGeo.setAttribute('position',new THREE.BufferAttribute(rainData,3).setUsage(THREE.DynamicDrawUsage));
   const rain=new THREE.LineSegments(rainGeo,new THREE.LineBasicMaterial({color:'#b0c9d4',transparent:true,opacity:.18,depthWrite:false,fog:true}));rain.frustumCulled=false;group.add(rain);
   const metadata={
+    style:'american-wall-mounted',facade:facadeBounds,decks,anchors,railRuns,freestandingPosts:0,
+    solids:[{id:'fire-escape-brick-wing',bounds:facadeBounds},...decks.map((bounds,index)=>({id:`balcony-deck-${index}`,bounds})),...anchors.map((anchor,index)=>({id:`wall-bracket-${index}`,bounds:anchor.bounds}))],
     bounds:{min:[20.35,groundY-.3,-33.6],max:[67.6,16.3,7.5]},
     layout:{left:28,right:33,rise:3.2,steps:20,totalFlights:2,lanes:[1.4,3.0],groundY,groundZ:4.5,turnOutside:.8},
     topPlatform:{min:[25.82,-.15,.73],max:[28,.002,2.07],y:0},
-    middleLanding:{min:[33,-3.35,.73],max:[34.50,-3.198,3.66],y:-3.2},
+    middleLanding:{min:[33,-3.35,.73],max:[34.70,-3.198,3.66],y:-3.2},
     flights:flightMetadata,ground:{minX:25.6,maxX:56,y:groundY,z:4.5,minZ:3.2,maxZ:5.8},
     watch:{x:27.1,y:0,z:1.4},equipment,windows:nearWindows.length,lights:lamps.length,drawBatches:batches.size,rainDrops:rainCount
   };

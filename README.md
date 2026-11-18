@@ -224,3 +224,13 @@ Run into the bedroom and press **E** near its door to pull it closed. Hold **E +
 Press **E** at the window after securing the door. The boy opens the casement, braces on the sill and climbs onto the fire escape. Follow the metal stairs using left/right movement, turning at each landing to descend the next flight. The father forces his way into the bedroom and climbs out after him. On reaching the playground below, the boy can see his father standing motionless on the upper fire escape, looking down into the courtyard.
 
 Being caught plays a brief, non-graphic impact and loose falling animation before restoring the preceding safe checkpoint. Continue preserves safe bedroom, fire-escape and playground positions; unfinished jumps, door actions and falls cannot overwrite them. Earlier apartment saves remain supported. Phone controls provide the same interaction, object movement and jumping actions. All geometry, textures, character surfaces and audio remain available offline.
+
+## American fire escape and developer tools — v0.28
+
+The exterior escape now resembles a traditional American iron fire escape: long picket-railed balconies, open metal grating, alternating flights and bolted cantilever brackets mounted directly to an aged brick courtyard facade. The previous freestanding columns and cross-bracing have been replaced with wall anchors. The supported stair route and the father's final watch point keep their existing positions.
+
+A concealed Settings sequence and the owner's password reveal a session-only developer panel. Once unlocked, **F2** or the small **DEV** button opens its tools. It includes supported stage selection, capture and restoration of test checkpoints, pursuit freezing and free movement through geometry. **A/D** move horizontally, **W/S** rise or descend, **Q/E** change depth, and **Shift** increases travel speed. Touch devices receive separate rise, descend and depth controls.
+
+Developer actions preserve the normal saved game. A captured test checkpoint remains available when changing stages; turning free movement off restores a supported test position. Returning to the saved game or locking the mode restores normal progress. Closing or reloading the page requires the unlock procedure again.
+
+Access is checked locally in the downloadable web build, whose client code can be inspected or modified. The password verifier uses a salted SHA-256 digest, and authentication is kept in memory for the current page.

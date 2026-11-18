@@ -1,0 +1,31 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {developerLocation,moveDeveloperCamera} from '../src/developer-tools.js';
+import {createSession} from '../src/session.js';
+test('every developer location is a valid independent supported Continue snapshot',()=>{
+ const session=createSession(null);
+ for(const id of['roof','stairwell','street','home','apartment','bedroom','fireescape','playground']){
+  const seed=developerLocation(id);assert(seed,`${id} must be supported`);assert(session.save(seed));assert.deepEqual(session.getSave(),seed);
+  seed.player.x=1000;assert.notEqual(developerLocation(id).player.x,1000);
+ }
+ assert.equal(developerLocation('unknown'),null);
+});
+test('free movement crosses all three axes with diagonal speed bounded and independent of update rate',()=>{
+ const move=hz=>{const p={x:0,y:0,z:0,vx:0,vy:0,vz:0,face:1};for(let i=0;i<hz;i++)moveDeveloperCamera(p,1/hz,{x:1,y:1,z:-1});return p;};
+ const reference=move(120);assert(reference.x>1&&reference.y>1&&reference.z<-1);assert(Math.hypot(reference.vx,reference.vy,reference.vz)<=3.8+1e-8);assert(!reference.grounded);
+ for(const hz of[30,60,240]){const p=move(hz);assert(Math.abs(p.x-reference.x)<1e-7);assert(Math.abs(p.y-reference.y)<1e-7);assert(Math.abs(p.z-reference.z)<1e-7);}
+});
+test('paused or invalid free movement freezes and boost remains finite within the scene bounds',()=>{
+ const p={x:0,y:0,z:0,vx:0,vy:0,vz:0,face:1},before={...p};for(const dt of[0,-1,NaN,Infinity])moveDeveloperCamera(p,dt,{x:1});assert.deepEqual(p,before);
+ for(let i=0;i<10000;i++)moveDeveloperCamera(p,1/60,{x:1,y:1,z:1,fast:true});assert(p.x<=180&&p.y<=65&&p.z<=90);assert(Object.values(p).every(v=>typeof v!=='number'||Number.isFinite(v)));
+});
+
+test('freezing pursuit holds the father while the player can still move, and release resumes him',async()=>{
+ const {createApartment}=await import('../src/apartment.js');
+ const apartment=createApartment(),player={};apartment.begin(player,{x:10,face:1});
+ const before={x:apartment.state.fatherX,z:apartment.state.fatherZ,time:apartment.state.fatherPhaseTime};
+ for(let n=0;n<90;n++)apartment.update(1/90,{direction:1,freezeFather:true},player);
+ assert(player.x>11);assert.equal(apartment.state.fatherX,before.x);assert.equal(apartment.state.fatherZ,before.z);assert.equal(apartment.state.fatherPhaseTime,before.time);
+ for(let n=0;n<270;n++)apartment.update(1/90,{direction:1,running:true},player);
+ assert(apartment.state.fatherX>before.x);assert.notEqual(apartment.state.fatherPhase,'rising');
+});

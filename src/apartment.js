@@ -211,7 +211,7 @@ export function createApartment(){
    if(t>=1){state.phase='walk';state.area='fireescape';state.story='escaping';state.windowClimb=null;state.escapeFlight=0;player.x=27.1;player.y=0;fatherPhase('breach');event('escape-start');}
   }else if(state.area!=='interior')updateEscape(dt,input,player);
   else updateInterior(dt,input??{},player,pressed,jumpPressed);
-  updateFather(dt,player);sync(player);return state.events[0]??null;
+  if(!input?.freezeFather)updateFather(dt,player);sync(player);return state.events[0]??null;
  }
  function snapshot(){
   if(!state||state.phase!=='walk'||!lastPlayer||lastPlayer.grounded!==true||![lastPlayer.x,lastPlayer.y,lastPlayer.z].every(Number.isFinite))return null;
