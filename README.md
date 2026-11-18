@@ -240,3 +240,9 @@ Access is checked locally in the downloadable web build, whose client code can b
 When the father catches the boy, the guarded reaction now releases into an articulated ragdoll at the moment the tumbler connects. The impulse travels away from the father, with separate motion for the head, arms and legs, a delayed backpack swing, a small contact bounce and a weighted settle. Floor and furniture contacts constrain the fall. The reaction also works when caught during a jump, without moving the character origin twice.
 
 The fall uses fixed physics steps and interpolated poses for consistent motion across display refresh rates. Pause freezes the reaction, and retry clears the simulated body before restoring the preceding safe checkpoint. The impact and first body contact have separate muted sounds. The sequence remains non-graphic.
+
+## The father's appearance — v0.30
+
+The father now has a drawn, weathered face, tired eyes, short greying stubble and tousled brown-and-grey hair. His slimmer silhouette wears a worn brown patterned cardigan over an aged grey shirt, loose trousers and checked house slippers. The face and garments are smooth three-dimensional surfaces; knitted patterns and fabric relief follow the animated clothing. Sculpted fingers preserve his grip on the tumbler.
+
+The existing seated, rising, pursuit, strike, retrieval and window escape actions use the new model. The family portrait has matching brown clothing. All model geometry and fabric textures are generated locally and remain available in the downloadable offline game.

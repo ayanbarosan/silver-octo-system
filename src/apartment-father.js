@@ -1,5 +1,7 @@
 import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
 import {createFatherSurface,createFatherHead} from './father-mesh.js';
+import {createFatherMaterials} from './father-materials.js';
+import {createFatherHands,createFatherSlippers} from './father-details.js';
 
 // A reusable original skeletal actor. The group stays rooted at the kitchen
 // table; the articulated rig moves through the apartment independently of it.
@@ -9,12 +11,7 @@ export function createApartmentFather(THREE){
  const clamp=(v,a=0,b=1)=>Math.max(a,Math.min(b,v)),smooth=v=>{v=clamp(v);return v*v*(3-2*v);},mix=(a,b,t)=>a+(b-a)*t;
  const v=(x=0,y=0,z=0)=>new THREE.Vector3(x,y,z),lerp=(a,b,t)=>a.clone().lerp(b,t);
  const material=(color,roughness=.94,extra={})=>new THREE.MeshStandardMaterial({color,roughness,...extra});
- const cloth=material('#ffffff',.93,{vertexColors:true}),skin=material('#b2947f',.85),dark=material('#343a35',.91),wood=material('#74634d',.96),metal=material('#677069',.63,{metalness:.35});
- if(typeof document!=='undefined'){
-  const canvas=document.createElement('canvas');canvas.width=canvas.height=128;const c=canvas.getContext('2d'),im=c.createImageData(128,128);
-  for(let y=0;y<128;y++)for(let x=0;x<128;x++){const i=(y*128+x)*4,n=Math.sin(x*127.1+y*311.7)*43758.54,g=n-Math.floor(n),b=126+(g-.5)*13+(x%3===0?-4:0)+(y%4===0?3:0);for(let k=0;k<3;k++)im.data[i+k]=b;im.data[i+3]=255;}
-  c.putImageData(im,0,0);const map=new THREE.CanvasTexture(canvas);map.wrapS=map.wrapT=THREE.RepeatWrapping;map.repeat.set(2,2);cloth.bumpMap=map;cloth.bumpScale=.0028;
- }
+ const fabrics=createFatherMaterials(THREE),skin=material('#a9907c',.88),wood=material('#74634d',.96),metal=material('#677069',.63,{metalness:.35});
  const segments={
   pelvis:[[0,.995,0],[0,1.10,0]],torso:[[0,.995,0],[0,1.620,0]],
   leftUpper:[[-.282,1.565,0],[-.495,1.270,.015]],leftLower:[[-.495,1.270,.015],[-.610,.948,.035]],
@@ -26,21 +23,29 @@ export function createApartmentFather(THREE){
  for(const [name,segment]of Object.entries(segments)){const bone=new THREE.Bone();bone.name=`father-${name}`;bone.position.fromArray(segment[0]);rig.add(bone);boneIds[name]=bones.length;bones.push(bone);boneMap[name]=bone;}
  rig.updateMatrixWorld(true);const skeleton=new THREE.Skeleton(bones);skeleton.calculateInverses();
  const surfaces=[];
- for(const kind of ['trousers','coat']){const geometry=createFatherSurface(THREE,{kind,segments,boneIds}),mesh=new THREE.SkinnedMesh(geometry,cloth);mesh.name=`father-continuous-${kind}`;mesh.castShadow=true;mesh.receiveShadow=true;mesh.frustumCulled=false;rig.add(mesh);mesh.bind(skeleton);surfaces.push(mesh);}
+ for(const kind of ['trousers','coat']){const geometry=createFatherSurface(THREE,{kind,segments,boneIds}),mesh=new THREE.SkinnedMesh(geometry,kind==='coat'?[fabrics.cardigan,fabrics.shirt]:fabrics.trousers);mesh.name=`father-continuous-${kind}`;mesh.castShadow=true;mesh.receiveShadow=true;mesh.frustumCulled=false;rig.add(mesh);mesh.bind(skeleton);surfaces.push(mesh);}
  const head=createFatherHead(THREE);rig.add(head.group);
  const neck=new THREE.Mesh(new THREE.CylinderGeometry(.065,.078,.15,32),skin);neck.name='father-neck';head.group.add(neck);neck.position.y=.02;
  // The cardigan's actual collar folds follow the chest bone.
- const collarMat=material('#7d7e70');
- function collar(side){const shape=new THREE.Shape();shape.moveTo(side*.070,0);shape.lineTo(side*.133,-.025);shape.lineTo(side*.090,-.145);shape.lineTo(side*.026,-.060);const geo=new THREE.ShapeGeometry(shape,8);geo.translate(0,.68,.133);const mesh=new THREE.Mesh(geo,collarMat);mesh.material.side=THREE.DoubleSide;boneMap.torso.add(mesh);}
+ const collarMat=fabrics.shirt.clone();collarMat.vertexColors=false;collarMat.side=THREE.DoubleSide;collarMat.color.set('#b4ada0');
+ function collar(side){const shape=new THREE.Shape();shape.moveTo(side*.065,0);shape.lineTo(side*.121,-.025);shape.lineTo(side*.091,-.132);shape.lineTo(side*.027,-.053);const geo=new THREE.ShapeGeometry(shape,8);geo.translate(0,.67,.125);const mesh=new THREE.Mesh(geo,collarMat);mesh.name='father-worn-shirt-collar';mesh.castShadow=true;boneMap.torso.add(mesh);}
  collar(-1);collar(1);
- const buttons=new THREE.InstancedMesh(new THREE.SphereGeometry(.008,10,8),metal,4),dummy=new THREE.Object3D();
- for(let i=0;i<4;i++){dummy.position.set(.036,.19+i*.086,.168);dummy.scale.set(1,1,.5);dummy.updateMatrix();buttons.setMatrixAt(i,dummy.matrix);}boneMap.torso.add(buttons);
- function handGeometry(){const g=new THREE.SphereGeometry(1,36,28),p=g.attributes.position,colors=[];const base=new THREE.Color('#b2947e'),crease=new THREE.Color('#8c7563');
-  for(let i=0;i<p.count;i++){let x=p.getX(i)*.052,y=p.getY(i)*.082,z=p.getZ(i)*.037;const front=Math.max(0,z/.037);z+=front*.0045*Math.cos((y+.085)*138);x-=.012*Math.exp(-(((y-.028)/.030)**2))*Math.max(0,-x/.052);p.setXYZ(i,x,y-.045,z);const c=base.clone().lerp(crease,front*.10*(.5+.5*Math.cos(y*138)));colors.push(c.r,c.g,c.b);}g.setAttribute('color',new THREE.Float32BufferAttribute(colors,3));g.computeVertexNormals();return g;}
- const handMat=material('#ffffff',.87,{vertexColors:true}),hands={};
- for(const side of ['left','right']){const h=new THREE.Group();h.name=`father-${side}-hand`;const mesh=new THREE.Mesh(handGeometry(),handMat);mesh.castShadow=true;h.add(mesh);rig.add(h);hands[side]=h;}
- function shoeGeometry(){const g=new THREE.SphereGeometry(1,36,24),p=g.attributes.position,colors=[],base=new THREE.Color('#4c4b40'),sole=new THREE.Color('#292f2c');for(let i=0;i<p.count;i++){let x=p.getX(i)*.092,y=p.getY(i)*.075,z=p.getZ(i)*.178+.045;y=Math.max(-.055,y);x*=1-.12*Math.max(0,z/.22);p.setXYZ(i,x,y,z);const c=base.clone().lerp(sole,smooth((-.023-y)/.025));colors.push(c.r,c.g,c.b);}g.setAttribute('color',new THREE.Float32BufferAttribute(colors,3));g.computeVertexNormals();return g;}
- const shoes={};for(const side of ['left','right']){const shoe=new THREE.Mesh(shoeGeometry(),material('#ffffff',.89,{vertexColors:true}));shoe.name=`father-${side}-shoe`;shoe.castShadow=true;rig.add(shoe);shoes[side]=shoe;}
+ const buttons=new THREE.InstancedMesh(new THREE.SphereGeometry(.010,12,8),material('#342c25',.92),5),dummy=new THREE.Object3D();buttons.name='father-cardigan-buttons';
+ for(let i=0;i<5;i++){const y=.115+i*.093,x=.067+.052*clamp((y+.995-1.10)/.47);dummy.position.set(x,y,.148);dummy.scale.set(1,1,.42);dummy.updateMatrix();buttons.setMatrixAt(i,dummy.matrix);}boneMap.torso.add(buttons);
+ const trim=material('#57483d',.99,{bumpMap:fabrics.cardigan.bumpMap,bumpScale:.0016});
+ for(const side of ['left','right']){
+  const s=segments[side+'Lower'],direction=v(...s[1]).sub(v(...s[0])),cuff=new THREE.Mesh(new THREE.CylinderGeometry(.068,.070,.055,32,4,true),trim);
+  cuff.name='father-'+side+'-ribbed-cuff';const p=cuff.geometry.attributes.position;
+  for(let i=0;i<p.count;i++){const a=Math.atan2(p.getZ(i),p.getX(i)),r=1+.016*Math.cos(a*24);p.setXYZ(i,p.getX(i)*r,p.getY(i),p.getZ(i)*r);}cuff.geometry.computeVertexNormals();
+  cuff.position.copy(direction).addScaledVector(direction.clone().normalize(),-.020);cuff.quaternion.setFromUnitVectors(v(0,1,0),direction.clone().normalize());cuff.castShadow=true;boneMap[side+'Lower'].add(cuff);
+ }
+ const seams=[];
+ for(const side of[-1,1]){
+  const points=[v(side*.085,.115,.139),v(side*.145,.101,.140),v(side*.194,.111,.121)],g=new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points),16,.0032,6,false);seams.push(g);
+ }
+ const pocketSeams=new THREE.Mesh(mergeGeometries(seams),trim);pocketSeams.name='father-cardigan-pocket-lips';boneMap.torso.add(pocketSeams);for(const g of seams)g.dispose();
+ const hands=createFatherHands(THREE);for(const hand of Object.values(hands))rig.add(hand);
+ const shoes=createFatherSlippers(THREE);for(const shoe of Object.values(shoes))rig.add(shoe);
  const glass=new THREE.Group();glass.name='father-drink-glass';hands.left.add(glass);glass.position.set(.026,-.032,.060);
  const glassMat=new THREE.MeshPhysicalMaterial({color:'#c1c3b3',roughness:.13,metalness:.03,transparent:true,opacity:.27,depthWrite:false,clearcoat:1,clearcoatRoughness:.08});
  const cup=new THREE.Mesh(new THREE.CylinderGeometry(.062,.054,.17,36,1,true),glassMat);cup.position.y=.025;glass.add(cup);
@@ -61,7 +66,7 @@ export function createApartmentFather(THREE){
  function ik(a,target,l1,l2,pole){const d=target.clone().sub(a),distance=Math.min(l1+l2-.001,Math.max(.025,d.length())),axis=d.normalize(),along=(l1*l1-l2*l2+distance*distance)/(2*distance),height=Math.sqrt(Math.max(0,l1*l1-along*along)),bend=pole.clone().sub(a);bend.addScaledVector(axis,-bend.dot(axis));if(bend.lengthSq()<.0001)bend.set(0,0,1).addScaledVector(axis,-axis.z);bend.normalize();return a.clone().addScaledVector(axis,along).addScaledVector(bend,height);}
  const lengths={upper:v(...segments.leftUpper[1]).distanceTo(v(...segments.leftUpper[0])),lower:v(...segments.leftLower[1]).distanceTo(v(...segments.leftLower[0])),thigh:v(...segments.leftThigh[1]).distanceTo(v(...segments.leftThigh[0])),shin:v(...segments.leftShin[1]).distanceTo(v(...segments.leftShin[0]))};
  let lastTime=0,lastX=6.6,lastZ=-.80,gait=0,lastPhase='sleep';
- const metadata={tableSpace:true,model:'continuous-skinned-surfaces',standingHeight:2.18,hair:'brown-and-grey',chair:{x:.60,seatY:.67,z:-.60},tableSurfaceY:1.12,headRest:{x:.20,y:1.18,z:.12},glass:{height:.17,radius:.062},pose:'sleep',drawSurfaces:surfaces.length,triangles:surfaces.reduce((s,m)=>s+m.geometry.index.count/3,0)};
+ const metadata={tableSpace:true,model:'weathered-cardigan-father',appearance:{cardigan:'worn-patterned-brown',shirt:'aged-grey',hair:'tousled-brown-grey',beard:'short-grey-stubble',footwear:'plaid-slippers'},standingHeight:2.18,hair:'brown-and-grey',chair:{x:.60,seatY:.67,z:-.60},tableSurfaceY:1.12,headRest:{x:.20,y:1.18,z:.12},glass:{height:.17,radius:.062},pose:'sleep',drawSurfaces:surfaces.length,triangles:surfaces.reduce((s,m)=>s+m.geometry.index.count/3,0)};
  function update(time=0,state=null){
   const t=Number.isFinite(time)?time:0,phase=state?.fatherPhase??(state?.phase&&state.phase!=='walk'?state.phase:'sleep')??'sleep',phaseTime=Math.max(0,state?.fatherPhaseTime??state?.phaseTime??0),dt=Math.min(.1,Math.max(0,t-lastTime));
   const x=Number.isFinite(state?.fatherX)?state.fatherX:6.6,y=Number.isFinite(state?.fatherY)?state.fatherY:0,z=Number.isFinite(state?.fatherZ)?state.fatherZ:-.80,face=state?.fatherFace===-1?-1:1;
@@ -74,7 +79,7 @@ export function createApartmentFather(THREE){
   else if(phase==='rising')heading=phaseTime<1.7?smooth((phaseTime-.85)/.35)*Math.PI/2:(1-smooth((phaseTime-1.7)/.22))*Math.PI/2+smooth((phaseTime-2.2)/.30)*Math.PI/2;
   rig.position.set(x-6,y,z+.2);rig.rotation.y=heading;
   const breath=phase==='watch'?0:Math.sin(t*.93)*.006,bob=walking?Math.sin(gait*2)*.012*weight:0;
-  const pelvis=lerp(v(0,.82,0),v(0,.965+bob,0),rise),shoulder=lerp(v(-.27,1.30,.40),v(0,1.59+bob+breath,walking?.060:.015),rise),torsoQ=new THREE.Quaternion().setFromUnitVectors(v(0,1,0),shoulder.clone().sub(pelvis).normalize());
+  const pelvis=lerp(v(0,.82,0),v(0,.965+bob,0),rise),shoulder=lerp(v(-.27,1.30,.40),v(0,1.57+bob+breath,walking?.105:.075),rise),torsoQ=new THREE.Quaternion().setFromUnitVectors(v(0,1,0),shoulder.clone().sub(pelvis).normalize());
   const pickup=phase==='retrieve'?smooth(phaseTime/.35)*(1-smooth((phaseTime-.55)/.20)):0;
   if(pickup>0){pelvis.y-=.47*pickup;const lean=.92*pickup;shoulder.copy(pelvis).add(v(0,.625*Math.cos(lean),.625*Math.sin(lean)));torsoQ.setFromUnitVectors(v(0,1,0),shoulder.clone().sub(pelvis).normalize());}
   if(phase==='window'){const p=clamp(state?.fatherWindowProgress??phaseTime/1.35),brace=Math.sin(p*Math.PI);shoulder.add(v(0,-.10*brace,.22*brace));torsoQ.setFromUnitVectors(v(0,1,0),shoulder.clone().sub(pelvis).normalize());}
@@ -89,10 +94,10 @@ export function createApartmentFather(THREE){
    const armShoulder=shoulder.clone().add(v(sign*.282,-.025,0).applyQuaternion(torsoQ));
    let target;
    if(side==='left')target=lerp(v(-.90,1.245,.80),v(-.300,1.23+bob,.245),rise);
-   else target=lerp(v(-.42,1.21,.72),v(.32,1.015+bob,.020-swing*.10*weight),rise);
+   else target=lerp(v(-.42,1.21,.72),v(.30,.91+bob,.020-swing*.10*weight),rise);
    let pole=side==='left'?v(-.85,1.18,.53):v(.30,1.18,.70);
-   pole.lerp(v(sign*.56,1.27,.10),rise);
-   if(phase==='watch'){target=v(sign*.32,1.00,.020);pole=v(sign*.55,1.30,.12);}
+   pole.lerp(side==='left'?v(-.34,1.15,-.12):v(.38,1.18,.15),rise);
+   if(phase==='watch'){target=v(sign*.30,.925,.045);pole=v(sign*.38,1.19,.13);}
    if(phase==='retrieve'){
     target.lerp(side==='left'?v(-.05,.13,.35):v(.30,.65,.35),pickup);
     pole.lerp(v(sign*.43,.61,.50),pickup);
@@ -108,10 +113,10 @@ export function createApartmentFather(THREE){
    const elbow=ik(armShoulder,target,lengths.upper,lengths.lower,pole);poseBone(`${side}Upper`,armShoulder,elbow);poseBone(`${side}Lower`,elbow,target);
    hands[side].position.copy(target);hands[side].rotation.set(phase==='throw'&&side==='left'?-.7*smooth((state?.throwProgress??phaseTime/.95)-.15):0,0,side==='left'?.08:-.06);
   }
-  head.group.position.copy(lerp(v(-.45,1.235,.58),v(0,1.675+bob+breath,.010+(walking?.055:0)),rise));
+  head.group.position.copy(lerp(v(-.45,1.235,.58),v(0,1.665+bob+breath,phase==='retrieve'?.010:.075+(walking?.025:0)),rise));
   if(pickup>0)head.group.position.add(v(0,-.71*pickup,.32*pickup));
   if(phase==='window'){const p=clamp(state?.fatherWindowProgress??phaseTime/1.35);head.group.position.add(v(0,-.12*Math.sin(p*Math.PI),.19*Math.sin(p*Math.PI)));}
-  head.group.rotation.set(mix(1.02,phase==='watch'?.85:phase==='retrieve'?.035+.82*pickup:phase==='window'?.24:walking?.08:.035,rise),mix(-.35,0,rise),mix(-.14,0,rise));head.eyeGroup.visible=awake&&rise>.45;
+  head.group.rotation.set(mix(1.02,phase==='watch'?.85:phase==='retrieve'?.035+.82*pickup:phase==='window'?.24:walking?.16:.12,rise),mix(-.35,0,rise),mix(-.14,0,rise));head.eyeGroup.visible=awake&&rise>.45;
   glass.visible=(!state?.glassThrown||!!state?.glassRetrieved)&&!(phase==='throw'&&(state?.throwProgress??phaseTime/.95)>.53);
   group.updateWorldMatrix(true,true);metadata.pose=phase;metadata.glassHeld=glass.visible;metadata.height=phase==='sleep'?1.6:2.18;metadata.animation={gait,heading,rise,walking};metadata.contacts={leftHand:hands.left.position.toArray(),rightHand:hands.right.position.toArray(),head:head.group.position.toArray()};
   metadata.probes=Object.fromEntries([['root',rig],['head',head.group],['leftHand',hands.left],['rightHand',hands.right],['leftFoot',shoes.left],['rightFoot',shoes.right],['chest',boneMap.torso],['glass',glass]].map(([name,obj])=>[name,obj.getWorldPosition(v()).toArray()]));
