@@ -1,5 +1,6 @@
 import {MOVEMENT} from './movement.js';
 import {STAIRWELL,stairHeight,stairDirection} from './stairwell.js';
+import {createImpactRagdoll} from './impact-ragdoll.js';
 
 /** A small, fully rigged child. Local forward is +Z and the soles rest on Y=0. */
 export function createBoy(THREE) {
@@ -176,7 +177,7 @@ export function createBoy(THREE) {
   const legTargets=legs.map(()=>new THREE.Vector3());
   const handTargets=arms.map(()=>new THREE.Vector3());
   const noHands=[0,0],stanceScratch=[true,true],weightScratch=[1,1],forwardScratch=[0,0];
-  const stepResult={footstep:false,intensity:0};
+  const stepResult={footstep:false,intensity:0,bodyImpact:0,bodyImpactPosition:{x:0,y:0,z:0}};
   const climbEdge=new THREE.Vector3(),climbFeet=legs.map(()=>new THREE.Vector3()),climbAnchors=arms.map(()=>new THREE.Vector3()),climbRest=arms.map(()=>new THREE.Vector3());
   const climbContacts={hands:[0,0],stances:[false,false],weights:[0,0]};
   const wakeChannels=new Float64Array(12),flightChannels=new Float64Array(14);
@@ -196,6 +197,7 @@ export function createBoy(THREE) {
     interactionWeight=pullWeight=0;lastInteraction=null;interactionWasApplied=false;interactionHands.fill(0);slideWasActive=false;storyWasApplied=false;
     landing=landingVelocity=0;previousGrounded=true;previousTime=0;initialized=false;internalAirTime=previousPrep=launchCrouch=0;launchLead=takeoffSpeed=takeoffRun=landingReach=landingFoot=bagVelocity=0;landingAge=Infinity;
     pose.position.set(0,0,0);pose.rotation.set(0,0,0);
+    caughtRig=null;animation.ragdoll=null;
     torso.position.set(0,.64,0);torso.rotation.set(0,0,0);torso.scale.set(1,1,1);
     head.position.set(0,.679,.026);head.rotation.set(.045,0,0);
     bag.position.set(0,.263,-.195);bag.rotation.set(0,0,0);
@@ -253,8 +255,10 @@ export function createBoy(THREE) {
   const wakeObjects=[pose,torso,head,bag,...legs.flatMap(l=>[l.hip,l.knee,l.foot]),...arms.flatMap(a=>[a.shoulder,a.elbow,a.wrist])];
   const awakePose=wakeObjects.map(()=>({position:new THREE.Vector3(),quaternion:new THREE.Quaternion(),scale:new THREE.Vector3()}));
   const storyRest=wakeObjects.map(()=>({position:new THREE.Vector3(),quaternion:new THREE.Quaternion(),scale:new THREE.Vector3()}));
-  const caughtGuardPose=wakeObjects.map(()=>({position:new THREE.Vector3(),quaternion:new THREE.Quaternion(),scale:new THREE.Vector3()}));
-  const caughtRestHands=[new THREE.Vector3(),new THREE.Vector3()],caughtFallHands=[new THREE.Vector3(),new THREE.Vector3()];
+  const caughtRestHands=[new THREE.Vector3(),new THREE.Vector3()];
+  let caughtRig=null;
+  const caughtMatrix=new THREE.Matrix4(),caughtX=new THREE.Vector3(),caughtY=new THREE.Vector3(),caughtZ=new THREE.Vector3(),caughtV=new THREE.Vector3();
+  const caughtQ=new THREE.Quaternion(),caughtQ2=new THREE.Quaternion(),caughtInverse=new THREE.Quaternion(),caughtEuler=new THREE.Euler();
   const slideEntry=wakeObjects.map(()=>({position:new THREE.Vector3(),quaternion:new THREE.Quaternion(),scale:new THREE.Vector3()}));
   const slideEntryFeet=legs.map(()=>new THREE.Vector3()),slideBaseFeet=legs.map(()=>new THREE.Vector3()),slideLowFeet=legs.map(()=>new THREE.Vector3());
   const slideContacts={hands:[0,0],stances:[false,false],weights:[0,0]};
@@ -797,39 +801,95 @@ export function createBoy(THREE) {
         storyContacts.hands[i]=0;storyContacts.stances[i]=true;storyContacts.weights[i]=1;
       }
   }
+  function makeCaughtRig(caught) {
+    group.updateWorldMatrix(true,true);
+    const at=object=>{const p=new THREE.Vector3();object.getWorldPosition(p);return group.worldToLocal(p);};
+    const onBody=(x,y,z)=>new THREE.Vector3(x,y,z).applyQuaternion(torso.quaternion).add(torso.position);
+    const nodes=[
+      {name:'pelvis',position:torso.position.clone(),radius:.195,mass:6,body:true},
+      {name:'belly',position:onBody(0,.25,0),radius:.26,mass:6,body:true},
+      {name:'neck',position:onBody(0,.53,.011),radius:.105,mass:2.8,body:true},
+      {name:'head',position:at(head),radius:.275,mass:2.5,body:true},
+      {name:'backpack',position:onBody(0,.263,-.265),radius:.25,mass:1.2,body:true},
+    ];
+    const links=[{a:'neck',b:'head'},{a:'pelvis',b:'head',min:.615,max:.715,stiffness:.7}];
+    const bones=[];
+    for(let i=0;i<2;i++) {
+      const side=i===0?'left':'right',leg=legs[i],arm=arms[i];
+      nodes.push({name:side+'Hip',position:at(leg.hip),radius:.09,mass:1.7},
+        {name:side+'Knee',position:at(leg.knee),radius:.085,mass:1.25},
+        {name:side+'Ankle',position:at(leg.foot),radius:.175,mass:.65},
+        {name:side+'Shoulder',position:at(arm.shoulder),radius:.095,mass:1.1},
+        {name:side+'Elbow',position:at(arm.elbow),radius:.075,mass:.65},
+        {name:side+'Wrist',position:at(arm.wrist),radius:.085,mass:.40});
+      links.push({a:side+'Hip',b:side+'Knee',length:THIGH},{a:side+'Knee',b:side+'Ankle',length:SHIN},
+        {a:side+'Hip',b:side+'Ankle',min:.20,max:.608,stiffness:.7},
+        {a:side+'Shoulder',b:side+'Elbow',length:.192},{a:side+'Elbow',b:side+'Wrist',length:.22},
+        {a:side+'Shoulder',b:side+'Wrist',min:.10,max:.405,stiffness:.8});
+      for(const [object,a,b] of [[leg.hip,side+'Hip',side+'Knee'],[leg.knee,side+'Knee',side+'Ankle'],[arm.shoulder,side+'Shoulder',side+'Elbow'],[arm.elbow,side+'Elbow',side+'Wrist']]) {
+        const worldQuaternion=new THREE.Quaternion();object.getWorldQuaternion(worldQuaternion);caughtQ.copy(group.quaternion).invert();worldQuaternion.premultiply(caughtQ);
+        bones.push({object,a,b,initialDirection:nodes.find(n=>n.name===b).position.clone().sub(nodes.find(n=>n.name===a).position).normalize(),initialQuaternion:worldQuaternion});
+      }
+    }
+    const cluster=['pelvis','belly','neck','backpack','leftHip','rightHip','leftShoulder','rightShoulder'];
+    const solver=createImpactRagdoll(THREE,{nodes,links,cluster,floorY:-(caught.startY??group.position.y),colliders:caught.colliders,direction:caught.impactDirection===-1?-1:1});
+    const position=name=>solver.particles[solver.byName[name]].render;
+    function bodyFrame(out) {
+      caughtX.copy(position('rightShoulder')).sub(position('leftShoulder')).normalize();
+      caughtY.copy(position('neck')).sub(position('pelvis'));caughtY.addScaledVector(caughtX,-caughtY.dot(caughtX)).normalize();
+      caughtZ.crossVectors(caughtX,caughtY).normalize();caughtY.crossVectors(caughtZ,caughtX).normalize();
+      return out.setFromRotationMatrix(caughtMatrix.makeBasis(caughtX,caughtY,caughtZ));
+    }
+    const frameOffset=bodyFrame(new THREE.Quaternion()).invert().multiply(torso.quaternion);
+    return {solver,position,bodyFrame,frameOffset,bones,lastElapsed:0,reportedHit:false,
+      headQuaternion:head.getWorldQuaternion(new THREE.Quaternion()).premultiply(group.quaternion.clone().invert()),
+      neckDirection:position('head').clone().sub(position('neck')).normalize(),
+      footRotations:legs.map(l=>l.foot.quaternion.clone()),wristRotations:arms.map(a=>a.wrist.quaternion.clone())};
+  }
   function applyCaught(caught) {
-    const elapsed=Math.max(0,Number.isFinite(caught.elapsed)?caught.elapsed:0),impactAt=.48;
+    const elapsed=Math.max(0,Number.isFinite(caught.elapsed)?caught.elapsed:0),impactAt=caught.impactAt??.48;
     applyCaughtGuard(Math.min(elapsed,impactAt));
-    if(elapsed<impactAt) {
+    if(elapsed<=impactAt) {
+      caughtRig=null;animation.ragdoll=null;
       animation.mode='caught';animation.storyStage='caught-brace';animation.jumpStage='grounded';return storyContacts;
     }
-    // The fall starts from the actual raised guard. applySlip captures its own
-    // base pose, so retain this separate transition pose before it overwrites
-    // the shared scratch buffer used by other contact animations.
-    for(let i=0;i<wakeObjects.length;i++){
-      const object=wakeObjects[i],base=caughtGuardPose[i];base.position.copy(object.position);base.quaternion.copy(object.quaternion);base.scale.copy(object.scale);
+    const age=elapsed-impactAt;
+    if(!caughtRig||age<caughtRig.lastElapsed-1e-6)caughtRig=makeCaughtRig(caught);
+    const rig=caughtRig;rig.lastElapsed=age;rig.solver.advanceTo(age);
+    pose.position.set(0,0,0);pose.rotation.set(0,0,0);
+    torso.position.copy(rig.position('pelvis'));torso.quaternion.copy(rig.bodyFrame(caughtQ)).multiply(rig.frameOffset);torso.scale.set(1,1,1);
+    caughtInverse.copy(torso.quaternion).invert();
+    head.position.copy(rig.position('head')).sub(torso.position).applyQuaternion(caughtInverse);
+    caughtV.copy(rig.position('head')).sub(rig.position('neck')).normalize();
+    caughtQ.setFromUnitVectors(rig.neckDirection,caughtV).multiply(rig.headQuaternion);
+    head.quaternion.copy(caughtInverse).multiply(caughtQ);
+    const hit=rig.solver.bodyHit,afterHit=hit?Math.max(0,age-hit.time):0;
+    // The loaded canvas bag catches up after the torso, then gives one small
+    // damped swing when the body reaches the floor.
+    const bagSwing=(caught.impactDirection===-1?-1:1)*.20*Math.sin(age*13)*Math.exp(-age*2.5)+(hit?.13*Math.sin(afterHit*18)*Math.exp(-afterHit*5):0);
+    bag.position.set(0,.263,-.195);bag.rotation.set(bagSwing,.018*Math.sin(age*10)*Math.exp(-age*2),bagSwing*.28);
+    for(const bone of rig.bones) {
+      caughtV.copy(rig.position(bone.b)).sub(rig.position(bone.a)).normalize();
+      caughtQ.setFromUnitVectors(bone.initialDirection,caughtV).multiply(bone.initialQuaternion);
+      if(bone.object===legs[0].hip||bone.object===legs[1].hip){bone.object.position.copy(rig.position(bone.a));bone.object.quaternion.copy(caughtQ);}
+      else {
+        bone.object.parent.getWorldQuaternion(caughtQ2);caughtQ2.premultiply(group.quaternion.clone().invert()).invert();bone.object.quaternion.copy(caughtQ2).multiply(caughtQ);
+      }
     }
-    const fall=clamp(Number.isFinite(caught.fallProgress)?caught.fallProgress:(elapsed-impactAt)/.85,0,1),looseTime=Math.max(0,elapsed-impactAt-.48);
-    const impulse=Math.exp(-looseTime*4.1)*smooth(fall,.28,.57);
-    const wobble={hips:Math.sin(looseTime*16)*.08*impulse,torso:Math.sin(looseTime*18+.35)*.10*impulse,head:Math.sin(looseTime*21+.7)*.12*impulse,
-      leftLeg:Math.sin(looseTime*13+.4)*.12*impulse,rightLeg:Math.sin(looseTime*15+1.5)*.11*impulse,leftArm:Math.sin(looseTime*17+.6)*.10*impulse,rightArm:Math.sin(looseTime*14+1.9)*.12*impulse};
-    const contacts=applySlip({phase:fall<1?'fall':'ragdoll',progress:fall<1?fall:clamp((elapsed-1.33)/.47,0,1),wobble,impact:0});
-    for(let i=0;i<2;i++)caughtFallHands[i].copy(handTargets[i]);
-    animation.mode='caught';animation.storyStage=fall<.18?'caught-recoil':fall<1?'caught-fall':'caught-settle';animation.slipStage='none';
-    // The reaction eases into the existing contact-safe fall instead of
-    // snapping from the upright guard to the first falling keyframe.
-    const weight=smooth(elapsed,impactAt,impactAt+.18);
-    if(weight<1)for(let i=0;i<wakeObjects.length;i++){
-      const object=wakeObjects[i],base=caughtGuardPose[i];object.position.lerp(base.position,1-weight);object.quaternion.slerp(base.quaternion,1-weight);object.scale.lerp(base.scale,1-weight);
+    for(let i=0;i<2;i++) {
+      legs[i].foot.quaternion.copy(rig.footRotations[i]);
+      legs[i].foot.rotation.x+=.22*Math.sin(age*(i?10.3:11.7)+i*.6)*Math.exp(-age*2.2);
+      arms[i].wrist.quaternion.copy(rig.wristRotations[i]);
+      arms[i].wrist.rotation.x+=.34*Math.sin(age*(i?12.1:10.2))*Math.exp(-age*1.9);
+      storyContacts.hands[i]=0;storyContacts.stances[i]=false;storyContacts.weights[i]=0;
     }
-    // Solve the moving palm targets after the torso blend. Interpolating the
-    // two elbow quaternions directly can choose opposite IK branches while
-    // the shoulder recoils, sending a wrist across the body for one frame.
-    for(let i=0;i<2;i++){
-      const target=handTargets[i].set(arms[i].side*.205,1.05+i*.055,.18).lerp(caughtFallHands[i],weight);
-      solveSpatialArm(arms[i],target,lerp(-.15,Math.PI/2,weight),arms[i].side);
+    if(hit&&!rig.reportedHit){
+      rig.reportedHit=true;stepResult.bodyImpact=hit.intensity;caughtV.copy(hit.position);group.localToWorld(caughtV);
+      Object.assign(stepResult.bodyImpactPosition,{x:caughtV.x,y:caughtV.y,z:caughtV.z});
     }
-    return contacts;
+    animation.ragdoll={...rig.solver.metrics,impactDirection:caught.impactDirection===-1?-1:1};
+    animation.mode='caught';animation.storyStage=age<.15?'caught-recoil':age<1.10?'caught-fall':'caught-settle';animation.slipStage='none';animation.jumpStage='grounded';
+    return storyContacts;
   }
 
   /**
@@ -844,7 +904,7 @@ export function createBoy(THREE) {
     if(climb||ladder||slip||sliding||storyAction){grounded=true;speed=0;travel=0;jumpPrep=0;airTime=0;takeoff=0;}
     const delta=clamp(Number.isFinite(dt)?dt:(initialized?time-previousTime:1/60),0,.1);
     previousTime=time;
-    stepResult.footstep=false;stepResult.intensity=0;
+    stepResult.footstep=false;stepResult.intensity=0;stepResult.bodyImpact=0;
     if(initialized&&delta===0)return stepResult;
     initialized=true;
     if(storyWasApplied){
@@ -852,7 +912,7 @@ export function createBoy(THREE) {
       // Feeding an IK guard or crouched window pose back into the free arm
       // filters would change Euler branches and visibly jerk an elbow.
       for(let i=0;i<wakeObjects.length;i++){const object=wakeObjects[i],base=storyRest[i];object.position.copy(base.position);object.quaternion.copy(base.quaternion);object.scale.copy(base.scale);}
-      if(!storyAction){pose.position.set(0,0,0);pose.rotation.set(0,0,0);for(const foot of footState){foot.hasAnchor=false;foot.wasStance=false;foot.landingPlant=false;}}
+      if(!storyAction){caughtRig=null;animation.ragdoll=null;pose.position.set(0,0,0);pose.rotation.set(0,0,0);for(const foot of footState){foot.hasAnchor=false;foot.wasStance=false;foot.landingPlant=false;}}
     }
     storyWasApplied=storyAction;
     if(sliding&&!slideWasActive)captureSlideEntry();

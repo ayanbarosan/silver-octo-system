@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {APARTMENT,ESCAPE,apartmentRoom,apartmentHeight,escapeHeight,createApartment,normalizeApartmentSave} from '../src/apartment.js';
+import {APARTMENT,ESCAPE,CAUGHT,apartmentRoom,apartmentHeight,escapeHeight,createApartment,normalizeApartmentSave} from '../src/apartment.js';
 const setup=saved=>{const apartment=createApartment(),player={};assert(apartment.begin(player,saved));return{apartment,player,events:[]};};
 function step(r,input={},frames=1,hz=90){for(let i=0;i<frames;i++){const e=r.apartment.update(1/hz,input,r.player);r.events.push(...r.apartment.state.events);assert([r.player.x,r.player.y,r.player.z,r.player.vx,r.player.vy,r.player.vz].every(Number.isFinite));assert(r.player.y>=-6.4-1e-6);}}
 function moveTo(r,x,d=1){for(let i=0;i<3000;i++){step(r,{direction:d,running:true});if(d>0?r.player.x>=x-1e-7:r.player.x<=x+1e-7)break;}step(r,{},40);}
@@ -75,19 +75,36 @@ test('being caught has a bounded non-graphic impact/fall and retries a reachable
  step(r,{direction:1,running:true},20);assert(r.player.x>8.7);
 });
 
-test('an airborne catch lowers the root continuously onto the apartment floor before retry',()=>{
+test('an airborne catch keeps a stable ragdoll origin and retries only after its settling interval',()=>{
  const r=setup({x:12,face:1});
  for(let i=0;i<1200&&!(r.apartment.state.fatherPhase==='chase'&&r.player.x-r.apartment.state.fatherX<.75);i++)step(r);
  step(r,{jump:true});
  for(let i=0;i<90&&r.apartment.state.phase!=='caught';i++)step(r);
  assert.equal(r.apartment.state.phase,'caught');assert(r.apartment.state.caught.startY>.1);
- const start=r.player.y;let previous=start,maxDrop=0;
- for(let i=0;i<170;i++){
-  step(r);assert(r.player.y<=previous+1e-8);maxDrop=Math.max(maxDrop,previous-r.player.y);previous=r.player.y;
+ const start=r.player.y;
+ for(let i=0;i<Math.ceil(CAUGHT.duration*90)+2;i++){
+  step(r,{direction:1,running:true,jump:true,interact:true});assert.equal(r.player.y,start);
   if(r.apartment.state.caught.impact)assert(r.apartment.state.attackProgress>=.5,'The glass swing must reach the child when the fall reacts to impact.');
  }
- assert.equal(r.player.y,0);assert(maxDrop<.05,'A captured airborne root must settle instead of teleporting to the floor.');
+ assert.equal(r.events.filter(e=>e==='caught-impact').length,1);
+ assert.equal(r.events.filter(e=>e==='retry').length,1);
+ assert.equal(r.apartment.state.caught.duration,CAUGHT.duration);
  assert(r.events.includes('retry'));assert(r.apartment.retry(r.player));assert.equal(r.player.y,0);
+});
+
+test('catch impulses point away from the father and carry mirrored local furniture bounds',()=>{
+ for(const face of[-1,1]){
+  const r=setup({x:12,face});
+  for(let i=0;i<700&&r.apartment.state.phase!=='caught';i++)step(r);
+  const c=r.apartment.state.caught;assert(c);assert.equal(c.impactDirection,face);
+  assert.equal(c.impactAt,CAUGHT.impactAt);assert.equal(c.colliders.length,3);
+  const cabinet=c.colliders[0];
+  assert(cabinet.min.x<cabinet.max.x&&cabinet.min.z<cabinet.max.z);
+  assert(Math.abs(cabinet.min.y+c.startY)<1e-8);assert.equal(cabinet.max.y,.8-c.startY);
+  const center=(cabinet.min.z+cabinet.max.z)/2;
+  assert(Math.abs(center-face*(r.apartment.state.nightstandX-r.player.x))<1e-8);
+  const before=structuredClone(c);step(r,{},0);r.apartment.update(0,{},r.player);assert.deepEqual(r.apartment.state.caught,before);
+ }
 });
 
 test('the father retrieves the same intact thrown glass before battering or catching again',()=>{

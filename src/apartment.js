@@ -3,6 +3,7 @@ const smooth=v=>{const t=clamp(v,0,1);return t*t*(3-2*t);};
 const nearAngle=(angle,reference)=>reference+Math.atan2(Math.sin(angle-reference),Math.cos(angle-reference));
 const validFace=face=>face===1||face===-1;
 const BODY=.21,CABINET_BODY=.40,EPS=1e-7;
+export const CAUGHT=Object.freeze({impactAt:.48,fallDuration:.85,duration:2.8});
 export const ESCAPE=Object.freeze({left:28,right:33,rise:3.2,steps:20,flights:2,topMinX:26.4,turnX:34,bottomTurnX:27.2,groundY:-6.4,groundZ:4.5,maxX:48,lanes:Object.freeze([1.4,3.0])});
 export const APARTMENT=Object.freeze({
  width:25.8,minX:.9,maxX:25,floorY:0,lane:1.4,walkSpeed:1.5,runSpeed:2.6,entry:Object.freeze({x:1.4,face:1}),
@@ -73,7 +74,19 @@ export function createApartment(){
  }
  function startCatch(player){
   if(state.caught||state.area!=='interior')return;
-  state.story='caught';state.phase='caught';state.interaction=null;state.caught={elapsed:0,progress:0,duration:1.8,impact:false,fallProgress:0,startY:Math.max(0,player.y)};
+  const startY=Math.max(0,player.y),face=player.face;
+  // The articulated body owns its fall; its origin stays at the captured
+  // height. Lowering both the origin and the joints would double the drop.
+  // These static solids use the same local frame as the boy's forward axis.
+  const localBox=(min,max)=>({
+   min:{x:Math.min(-face*(min[2]-player.z),-face*(max[2]-player.z)),y:min[1]-startY,z:Math.min(face*(min[0]-player.x),face*(max[0]-player.x))},
+   max:{x:Math.max(-face*(min[2]-player.z),-face*(max[2]-player.z)),y:max[1]-startY,z:Math.max(face*(min[0]-player.x),face*(max[0]-player.x))}
+  });
+  const colliders=[localBox([state.nightstandX-.39,0,state.nightstandZ-.33],[state.nightstandX+.39,.8,state.nightstandZ+.35]),
+   localBox([-.3,0,-2.3],[0,4.1,2.6]),localBox([25.8,0,-2.3],[26.1,4.1,2.6])];
+  if(state.doorProgress>.85)colliders.push(localBox([17.09,0,.46],[17.24,2.64,2.42]));
+  state.story='caught';state.phase='caught';state.interaction=null;
+  state.caught={elapsed:0,progress:0,duration:CAUGHT.duration,impactAt:CAUGHT.impactAt,impact:false,fallProgress:0,startY,impactDirection:state.fatherFace*face,colliders};
   player.vx=player.vy=player.vz=0;player.grounded=true;fatherPhase('catch');state.fatherSpeed=0;state.fatherX=player.x-state.fatherFace*.60;event('caught');
  }
  function updateFather(dt,player){
@@ -190,8 +203,10 @@ export function createApartment(){
   const interact=!!input?.interact,pressed=interact&&!interactHeld,jump=!!input?.jump,jumpPressed=jump&&!jumpHeld;interactHeld=interact;jumpHeld=jump;
   state.doorImpact=Math.max(0,state.doorImpact-dt*3);
   if(state.phase==='caught'){
-   const c=state.caught;c.elapsed+=dt;c.progress=clamp(c.elapsed/c.duration,0,1);c.impact=c.elapsed>=.48;c.fallProgress=clamp((c.elapsed-.48)/.85,0,1);state.attackProgress=clamp(c.elapsed/.95,0,1);state.fatherPhaseTime=c.elapsed;
-   player.y=c.startY*(1-smooth(c.fallProgress));player.vx=player.vy=player.vz=0;
+   const c=state.caught;c.elapsed=Math.min(c.duration,c.elapsed+dt);c.progress=clamp(c.elapsed/c.duration,0,1);
+   if(!c.impact&&c.elapsed>=c.impactAt){c.impact=true;event('caught-impact');}
+   c.fallProgress=clamp((c.elapsed-c.impactAt)/CAUGHT.fallDuration,0,1);state.attackProgress=clamp(c.elapsed/.95,0,1);state.fatherPhaseTime=c.elapsed;
+   player.y=c.startY;player.vx=player.vy=player.vz=0;
    if(c.progress>=1&&!state.retryIssued){state.retryIssued=true;event('retry');}sync(player);return state.events[0]??null;
   }
   if(state.phase==='door'){

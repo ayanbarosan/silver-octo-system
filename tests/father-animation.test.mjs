@@ -3,21 +3,22 @@ import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import {createApartmentFather} from '../src/apartment-father.js';
 import {createBoy} from '../src/character.js';
+import {CAUGHT} from '../src/apartment.js';
 const dt=1/120;
 function father(){const model=createApartmentFather(THREE);model.group.position.set(6,0,-.2);return model;}
 
 test('the held tumbler reaches the guarded head at impact on the floor and above it in both directions',()=>{
  const adult=father(),boy=createBoy(THREE);
- for(const startY of[0,.8,1.05])for(const face of[-1,1]){
+ for(const startY of[0,.8,1.05])for(const face of[-1,1])for(const fatherFace of[-1,1]){
   boy.reset();boy.group.rotation.y=face*Math.PI/2;let closest=Infinity;
   for(let n=0;n<=64;n++){
-   const elapsed=n*dt,fallProgress=THREE.MathUtils.clamp((elapsed-.48)/.85,0,1),caught={elapsed,progress:elapsed/1.8,duration:1.8,fallProgress,startY};
-   boy.group.position.set(15,startY*(1-THREE.MathUtils.smoothstep(fallProgress,0,1)),1.4);
+   const elapsed=n*dt,fallProgress=THREE.MathUtils.clamp((elapsed-CAUGHT.impactAt)/CAUGHT.fallDuration,0,1),caught={elapsed,progress:elapsed/CAUGHT.duration,duration:CAUGHT.duration,impactAt:CAUGHT.impactAt,fallProgress,startY,impactDirection:fatherFace*face};
+   boy.group.position.set(15,startY,1.4);
    boy.animate({time:elapsed,dt,grounded:true,story:{caught}});
-   adult.update(elapsed,{fatherPhase:'catch',fatherPhaseTime:elapsed,fatherX:15-face*.6,fatherY:0,fatherZ:1.4,fatherFace:face,attackProgress:Math.min(1,elapsed/.95),glassThrown:false,caught});
+   adult.update(elapsed,{fatherPhase:'catch',fatherPhaseTime:elapsed,fatherX:15-fatherFace*.6,fatherY:0,fatherZ:1.4,fatherFace,attackProgress:Math.min(1,elapsed/.95),glassThrown:false,caught});
    if(elapsed>=.43&&elapsed<=.52){const head=boy.group.getObjectByName('head').getWorldPosition(new THREE.Vector3()),glass=new THREE.Vector3(...adult.metadata.probes.glass);closest=Math.min(closest,head.distanceTo(glass));}
   }
-  assert(closest<.25,`The ${face} strike must contact a head at support ${startY}, measured gap ${closest}.`);
+  assert(closest<.25,`The ${fatherFace} strike must contact a head facing ${face} at support ${startY}, measured gap ${closest}.`);
  }
 });
 

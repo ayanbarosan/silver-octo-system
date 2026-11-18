@@ -234,3 +234,9 @@ A concealed Settings sequence and the owner's password reveal a session-only dev
 Developer actions preserve the normal saved game. A captured test checkpoint remains available when changing stages; turning free movement off restores a supported test position. Returning to the saved game or locking the mode restores normal progress. Closing or reloading the page requires the unlock procedure again.
 
 Access is checked locally in the downloadable web build, whose client code can be inspected or modified. The password verifier uses a salted SHA-256 digest, and authentication is kept in memory for the current page.
+
+## Physical impact reaction — v0.29
+
+When the father catches the boy, the guarded reaction now releases into an articulated ragdoll at the moment the tumbler connects. The impulse travels away from the father, with separate motion for the head, arms and legs, a delayed backpack swing, a small contact bounce and a weighted settle. Floor and furniture contacts constrain the fall. The reaction also works when caught during a jump, without moving the character origin twice.
+
+The fall uses fixed physics steps and interpolated poses for consistent motion across display refresh rates. Pause freezes the reaction, and retry clears the simulated body before restoring the preceding safe checkpoint. The impact and first body contact have separate muted sounds. The sequence remains non-graphic.
