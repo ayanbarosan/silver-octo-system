@@ -245,6 +245,14 @@ export function createStreetWorld(THREE,scene){
   flatPatch(homeDoorX,.1,1.48,1.25,reflection,.006,8411);
   for(let i=0;i<23;i++){const x=65.7+random(i+6721)*12.3,z=-1.45+random(i+7631)*.4;box(.045+random(i+321)*.12,.035,.035+random(i+811)*.08,x,.003,z,i%3===0?brickMats[i%brickMats.length]:darkConcrete,false);}
   const home={x:homeConfig.x,bounds:{min:[homeConfig.x-homeWidth/2,0,homeZ-3.8],max:[homeConfig.x+homeWidth/2,13.6,homeZ+.2]},door:{x:homeDoorX,y:0,z:homeDoorZ+.15,kind:'hinged-weathered-wood',interactive:true,hinge:[homeLeaf.position.x,homeLeaf.position.y,homeLeaf.position.z],aperture:{min:[homeDoorX-.62,0,homeZ-3.4],max:[homeDoorX+.62,2.47,homeDoorZ+.11]}},brickPatches};
+  // The street-facing access is closed. The later escape reaches this same
+  // courtyard through its open side passage around the building instead.
+  const frontParkGateX=STREET.maxX+.25;
+  for(const z of [-2.30,.84]){box(.095,2.15,.095,frontParkGateX,1.075,z,metal);box(.14,.045,.14,frontParkGateX,2.17,z,trim);}
+  for(const y of [.12,.96,2.07])rod([frontParkGateX,y,-2.30],[frontParkGateX,y,.84],.025,metal);
+  for(let z=-2.14;z<.78;z+=.18)rod([frontParkGateX,.13,z],[frontParkGateX,2.06,z],.012,metal);
+  box(.09,.14,.10,frontParkGateX+.024,1.03,-.035,rust);box(.055,.06,.072,frontParkGateX+.024,1.13,-.035,trim);
+  const frontParkGate={closed:true,interactive:false,bounds:{min:[frontParkGateX-.05,0,-2.35],max:[frontParkGateX+.06,2.20,.89]}};
   // Beyond the entry block, a parking court opens in front of layered blocks.
   for(const spec of [[15,16,17,-13.5,431],[33,15,21,-17,731],[51,18,18,-13,1103]])facade(spec[0],spec[1],-.1,spec[2],spec[3],distantWall,spec[4],true);
   for(const spec of [[23,13,26,-29,1765],[44,20,29,-36,2031],[66,16,24,-30,2701]])facade(spec[0],spec[1],-.1,spec[2],spec[3],farWall,spec[4]);
@@ -444,7 +452,7 @@ export function createStreetWorld(THREE,scene){
     const object=new THREE.InstancedMesh(geometries[batch.type],batch.material,batch.matrices.length);batch.matrices.forEach((m,i)=>object.setMatrixAt(i,m));object.instanceMatrix.needsUpdate=true;object.castShadow=batch.shadow;object.receiveShadow=true;group.add(object);
   }
   const metadata={entryDoor:{x:doorX,y:0,z:doorZ,kind:'building-exit'},route:{minX:STREET.minX,maxX:STREET.maxX,y:0,z:0,clearHalfWidth:.5},cars,props,lamps,endGate,fence:endGate,crawlGate,home,dumpster:dumpsterMetadata,
-    neighbouringBuilding:{minX:-22,maxX:-8.2,z:-2.12},graffiti:{x:-3.45,y:1.20,z:-1.924,width:4.65,height:1.48},lights:lightList.length,drawBatches:batches.size};
+    frontParkGate,neighbouringBuilding:{minX:-22,maxX:-8.2,z:-2.12},graffiti:{x:-3.45,y:1.20,z:-1.924,width:4.65,height:1.48},lights:lightList.length,drawBatches:batches.size};
   group.userData.street=metadata;let enteredAt=null;
   const entryDoor={reset(){enteredAt=null;entryLeaf.rotation.y=1.05;},get angle(){return entryLeaf.rotation.y;}};
   return {group,metadata,entryDoor,homeDoor,dumpster,update(time,playerX,streetState){

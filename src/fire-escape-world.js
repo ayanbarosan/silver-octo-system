@@ -22,7 +22,7 @@ export function createFireEscapeWorld(THREE,scene){
     }
     const map=new THREE.CanvasTexture(canvas);map.colorSpace=THREE.SRGBColorSpace;map.wrapS=map.wrapT=THREE.RepeatWrapping;map.anisotropy=4;return map;
   }
-  const wallMap=surfaceTexture('plaster'),groundMap=surfaceTexture('paving'),sandMap=surfaceTexture('sand');
+  const wallMap=surfaceTexture('plaster'),groundMap=surfaceTexture('paving');
   const wallBump=wallMap.clone();wallBump.colorSpace=THREE.NoColorSpace;
   const groundBump=groundMap.clone();groundBump.colorSpace=THREE.NoColorSpace;
   const plaster=material('#a0a698',.98,{map:wallMap,bumpMap:wallBump,bumpScale:.025});
@@ -31,9 +31,7 @@ export function createFireEscapeWorld(THREE,scene){
   const paving=material('#7b8980',.78,{map:groundMap,bumpMap:groundBump,bumpScale:.009});
   const metal=material('#354c50',.56,{metalness:.63}),zinc=material('#9aa9a5',.36,{metalness:.77});
   const iron=material('#273535',.72,{metalness:.62}),ironEdge=material('#53605a',.57,{metalness:.66});
-  const rust=material('#795339',.98),dark=material('#16272c',.99),wood=material('#716750',.98,{map:wallMap});
-  const teal=material('#53766d',.88,{metalness:.19}),red=material('#875e4c',.92,{metalness:.13}),ochre=material('#9c8d59',.90,{metalness:.17}),blue=material('#607985',.85,{metalness:.16});
-  const sand=material('#b1a37e',1,{map:sandMap}),soil=material('#526151',1,{map:groundMap}),grass=material('#505c43',1);
+  const rust=material('#795339',.98),dark=material('#16272c',.99);
   const coldGlass=material('#263e49',.29,{metalness:.16}),warmGlass=material('#b8a477',.67,{emissive:'#d6ab67',emissiveIntensity:.48});
   const curtain=material('#aaa993',1),lampGlass=material('#f1d0a0',.45,{emissive:'#ffd59b',emissiveIntensity:2.5});
   const wet=material('#385962',.13,{metalness:.38,transparent:true,opacity:.38,depthWrite:false});
@@ -48,11 +46,6 @@ export function createFireEscapeWorld(THREE,scene){
   function rod(a,b,r=.026,m=metal,shadow=false,parent=group){const d=new THREE.Vector3(...b).sub(new THREE.Vector3(...a));instance('cylinder',m,a.map((v,i)=>(v+b[i])/2),[r,d.length(),r],new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,1,0),d.normalize()),shadow,parent);}
   function mesh(geometry,mat,parent=group,shadow=false){const object=new THREE.Mesh(geometry,mat);object.castShadow=shadow;object.receiveShadow=true;parent.add(object);return object;}
   function beam(a,b,w=.12,d=.10,m=metal,parent=group){const delta=new THREE.Vector3(...b).sub(new THREE.Vector3(...a));instance('box',m,a.map((v,i)=>(v+b[i])/2),[w,delta.length(),d],new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,1,0),delta.normalize()),false,parent);}
-  function capPost(x,y,z,h=.94,parent=group){rod([x,y,z],[x,y+h,z],.027,metal,false,parent);box(.11,.022,.11,x,y+.011,z,zinc,false,parent);box(.068,.012,.068,x,y+h+.006,z,metal,false,parent);}
-  function rail(a,b,z,posts=6,parent=group){
-    for(let n=0;n<=posts;n++){const p=n/posts;capPost(a[0]+(b[0]-a[0])*p,a[1]+(b[1]-a[1])*p,z,.94,parent);}
-    rod([a[0],a[1]+.94,z],[b[0],b[1]+.94,z],.033,metal,false,parent);rod([a[0],a[1]+.47,z],[b[0],b[1]+.47,z],.019,metal,false,parent);
-  }
   const decks=[],anchors=[],railRuns=[];
   function deck(minX,maxX,y,minZ,maxZ){
     for(let z=minZ+.025;z<maxZ;z+=.085)box(maxX-minX,.030,.037,(minX+maxX)/2,y-.015,z,ironEdge);
@@ -200,14 +193,70 @@ export function createFireEscapeWorld(THREE,scene){
     }
     flightMetadata.push({index:flight,startX:start,endX:start+dir*5,startY,endY:startY-3.2,lane,direction:dir,left:28,right:33,rise:3.2,steps:20,treads});
   }
-  // A continuous yard supports the turn around the last flight, then the path
-  // in front of the equipment. Furniture never occupies the z=4.5 player lane.
-  box(80,1.2,80,40,groundY-.60,-5,concrete);box(28,.055,2.6,39.2,groundY-.0275,4.5,paving);
-  for(let x=26.0;x<53;x+=1.15){box(.014,.003,2.55,x,groundY+.003,4.5,concrete);box(1.12,.10,.17,x,groundY-.012,5.88,concrete);}
+  // The stairs reach a service passage beside the building. The shared park
+  // belongs to its front-right courtyard, beyond the return wall and side gate.
+  // Its own paving starts at x=35.8; the two surfaces meet instead of overlapping.
+  box(80,1.2,80,40,groundY-.75,-5,concrete);
+  box(1.7,.12,2.85,27.15,groundY-.06,3.925,paving);
+  box(5.4,.12,1.6,30.7,groundY-.06,4.5,paving);
+  const serviceSupports=[
+    {id:'escape-bottom-landing',bounds:{min:[26.3,groundY-.12,2.5],max:[28,groundY,5.35]}},
+    {id:'side-service-paving',bounds:{min:[28,groundY-.12,3.7],max:[33.4,groundY,5.3]}}
+  ];
+  const cornerStart=33.4,cornerEnd=35.8,cornerPath=[],cornerVertices=[],cornerUV=[],cornerIndices=[];
+  const pathZ=x=>{const t=Math.max(0,Math.min(1,(x-cornerStart)/(cornerEnd-cornerStart)));return 4.5+1.7*t*t*(3-2*t);};
+  for(let n=0;n<=48;n++){
+    const x=cornerStart+(cornerEnd-cornerStart)*n/48,z=pathZ(x);cornerPath.push([x,groundY,z]);
+    cornerVertices.push(x,groundY,z-.8,x,groundY,z+.8);cornerUV.push((x-cornerStart)/1.1,0,(x-cornerStart)/1.1,1);
+    if(n<48){const i=n*2;cornerIndices.push(i,i+1,i+2,i+1,i+3,i+2);}
+  }
+  const cornerGeo=new THREE.BufferGeometry();cornerGeo.setAttribute('position',new THREE.Float32BufferAttribute(cornerVertices,3));cornerGeo.setAttribute('uv',new THREE.Float32BufferAttribute(cornerUV,2));cornerGeo.setIndex(cornerIndices);cornerGeo.computeVertexNormals();
+  const cornerFloor=mesh(cornerGeo,paving);cornerFloor.name='service-passage-around-building-corner';
+  rod([28,groundY+.018,5.38],[33.4,groundY+.018,5.38],.045,concrete);
+  for(let n=0;n<cornerPath.length-1;n++){
+    const a=cornerPath[n],b=cornerPath[n+1];rod([a[0],groundY+.018,a[2]+.88],[b[0],groundY+.018,b[2]+.88],.045,concrete);
+  }
+  for(let x=28.3;x<33.4;x+=1.12)box(.014,.002,1.58,x,groundY+.001,4.5,concrete);
+  // A few shallow wet patches keep the bare lane distinct from play equipment.
   const puddleCanvas=document.createElement('canvas');puddleCanvas.width=puddleCanvas.height=128;const pc=puddleCanvas.getContext('2d');
   const pg=pc.createRadialGradient(64,64,0,64,64,63);pg.addColorStop(0,'rgba(255,255,255,.9)');pg.addColorStop(.65,'rgba(255,255,255,.8)');pg.addColorStop(1,'rgba(255,255,255,0)');pc.fillStyle=pg;pc.fillRect(0,0,128,128);
   wet.alphaMap=new THREE.CanvasTexture(puddleCanvas);
-  for(let i=0;i<25;i++)instance('plane',wet,[28+rand(i+19)*25,groundY+.009,3.8+rand(i+91)*1.45],[.6+rand(i+131)*2.1,.22+rand(i+191)*.7,1],floorQ);
+  for(let i=0;i<7;i++)instance('plane',wet,[28.6+rand(i+19)*4.2,groundY+.004,4.2+rand(i+91)*.58],[.45+rand(i+131)*.75,.18+rand(i+191)*.26,1],floorQ);
+  // This visible return makes the depth change legible: the boy walks around
+  // its front end, then enters the same park seen beside the street entrance.
+  const returnWallBounds={min:[35.07,groundY,.32],max:[35.29,3.2,5.15]};
+  box(.22,9.6,4.83,35.18,-1.60,2.735,brick);
+  box(.34,.12,4.97,35.18,3.23,2.735,masonryTrim);
+  box(.31,.24,4.90,35.18,groundY+.12,2.735,masonryTrim);
+  for(const [y,z,w,h,seed]of[[groundY+1.12,3.9,1.6,1.45,71],[groundY+5.1,2.15,2.0,1.9,89]]){
+    const shape=new THREE.Shape();for(let n=0;n<=10;n++){const a=n/10*Math.PI*2,r=.78+rand(seed+n)*.22,xx=Math.cos(a)*w*.5*r,yy=Math.sin(a)*h*.5*r;if(n)shape.lineTo(xx,yy);else shape.moveTo(xx,yy);}shape.closePath();
+    const patch=mesh(new THREE.ShapeGeometry(shape),plaster);patch.rotation.y=Math.PI/2;patch.position.set(35.302,y,z);
+  }
+  for(const y of [groundY+1.88,groundY+5.08]){
+    box(.038,1.54,1.16,35.304,y,2.72,dark);box(.026,1.38,1.01,35.332,y,2.72,coldGlass);
+    for(const z of [2.18,3.26])box(.067,1.55,.045,35.352,y,z,metal);
+    for(const yy of [y-.73,y+.73])box(.067,.045,1.18,35.352,yy,2.72,metal);
+    box(.072,1.43,.028,35.361,y,2.72,zinc);box(.18,.075,1.30,35.36,y-.81,2.72,masonryTrim);
+  }
+  rod([35.34,groundY+.12,4.83],[35.34,2.97,4.83],.035,iron);
+  for(const y of [groundY+.5,groundY+3.1,.5])box(.13,.045,.12,35.34,y,4.83,ironEdge);
+  // The side access stays open. Its leaf rests alongside the fence rather
+  // than across the walking lane, so there is no new interaction or obstacle.
+  const gatePosts=[];
+  for(const z of [5.22,7.18]){
+    box(.13,1.96,.13,35.8,groundY+.98,z,iron);box(.23,.09,.23,35.8,groundY+.045,z,masonryTrim);box(.17,.05,.17,35.8,groundY+2.005,z,ironEdge);
+    gatePosts.push({id:z<6?'side-gate-inner-post':'side-gate-outer-post',bounds:{min:[35.685,groundY,z-.115],max:[35.915,groundY+2.03,z+.115]}});
+  }
+  beam([35.8,groundY+1.98,5.22],[35.8,groundY+1.98,7.18],.055,.055,iron);
+  for(const y of [groundY+.13,groundY+1.77])beam([35.8,y,5.22],[37.53,y,5.22],.036,.036,iron);
+  for(let x=35.84;x<37.53;x+=.135)box(.015,1.62,.020,x,groundY+.95,5.22,iron);
+  for(const x of [35.8,37.53])box(.034,1.71,.038,x,groundY+.95,5.22,iron);
+  const sideGate={x:35.8,y:groundY,z:6.2,state:'open',clearHalfWidth:.865,clearHeight:1.95,opening:{min:[35.69,groundY,5.335],max:[35.91,groundY+1.95,7.065]},leaf:{min:[35.78,groundY+.095,5.201],max:[37.55,groundY+1.805,5.239]}};
+  const lamps=[];
+  for(const [x,z,y]of[[29.3,.62,-3.45],[35.38,4.3,groundY+2.45]]){
+    box(.20,.30,.12,x,y,z,iron);box(.12,.19,.025,x,y,z+.075,lampGlass);
+    const light=new THREE.PointLight('#d2af7b',7.5,7,2);light.position.set(x,y,z+.32);group.add(light);lamps.push(light);
+  }
   // Distant apartment blocks remain three-dimensional as the camera follows
   // the child down from the fire escape and into the yard.
   function apartmentBlock(x,w,top,z,seed,m){
@@ -222,76 +271,9 @@ export function createFireEscapeWorld(THREE,scene){
     rod([x+w*.29,top,z-1],[x+w*.29,top+1.7,z-1],.02);for(let n=0;n<3;n++)rod([x+w*.29-.46,top+.60+n*.28,z-1],[x+w*.29+.46,top+.60+n*.28,z-1],.011);
   }
   apartmentBlock(35,12,10.5,-10,101,farPlaster);apartmentBlock(48,11,13.0,-17,211,fartherPlaster);apartmentBlock(23,10,12.5,-24,337,fartherPlaster);apartmentBlock(61,13,16,-29,413,fartherPlaster);
-  // Rear boundary and sparse trees frame the playable courtyard.
-  box(33,.32,.26,40,groundY+.16,-5.7,concrete);
-  for(let x=24.5;x<57;x+=2.4)capPost(x,groundY+.32,-5.7,1.72);
-  for(const y of [groundY+.48,groundY+1.98])rod([24.5,y,-5.7],[56.9,y,-5.7],.024);
-  for(let x=24.65;x<57;x+=.24)rod([x,groundY+.45,-5.7],[x,groundY+1.98,-5.7],.009,metal);
-  for(const [x,z,seed]of[[35.4,-4.4,51],[49.1,-4.1,91]]){
-    rod([x,groundY,z],[x+.11,groundY+5.3,z-.12],.093,wood);
-    for(let i=0;i<12;i++){
-      const y=groundY+1.8+i*.25,side=i%2?1:-1,xx=x+side*(.65+rand(seed+i)*1.5),zz=z+(rand(seed+i+77)-.5)*1.1;
-      rod([x+.05,y,z],[xx,y+.8,zz],.028,wood);rod([xx,y+.8,zz],[xx+side*.45,y+1.3,zz-.12],.012,wood);
-    }
-  }
-  const equipment=[],swingPivots=[];
-  function prop(id,min,max){equipment.push({id,bounds:{min,max}});}
-  const swingX=38.0,swingZ=2.60,swingTop=groundY+3.25;
-  for(const x of [swingX-2.5,swingX+2.5]){
-    for(const z of [swingZ-1.12,swingZ+1.12]){rod([x,groundY,z],[x,swingTop,swingZ],.059,teal);box(.27,.08,.25,x,groundY+.04,z,concrete);}
-    rod([x,groundY+.9,swingZ-.8],[x,groundY+.9,swingZ+.8],.026,metal);
-  }
-  rod([swingX-2.55,swingTop,swingZ],[swingX+2.55,swingTop,swingZ],.065,red);
-  for(const [index,x]of[[0,swingX-1.10],[1,swingX+1.10]]){
-    const pivot=new THREE.Group();pivot.position.set(x,swingTop-.025,swingZ);group.add(pivot);swingPivots.push(pivot);
-    for(const dx of [-.33,.33]){
-      rod([dx,0,0],[dx,-2.40,0],.013,zinc,false,pivot);
-      for(let n=0;n<7;n++)box(.030,.042,.022,dx,-.18-n*.32,0,metal,false,pivot);
-    }
-    box(.79,.068,.39,0,-2.42,0,index?ochre:red,true,pivot);for(const dx of [-.365,.365])box(.03,.08,.40,dx,-2.43,0,metal,false,pivot);
-  }
-  prop('swings',[35.35,groundY,1.40],[40.65,swingTop+.1,3.80]);
-  // Low sandpit and a forgotten bucket beneath the rainy blocks.
-  box(3.5,.12,2.15,39.5,groundY+.01,-.1,sand);
-  for(const dx of [-1.82,1.82])box(.16,.20,2.42,39.5+dx,groundY+.1,-.1,teal);
-  for(const dz of [-1.15,1.15])box(3.80,.20,.16,39.5,groundY+.1,-.1,ochre);
-  const bucket=mesh(new THREE.CylinderGeometry(.13,.10,.22,12),blue);bucket.position.set(40.0,groundY+.23,.1);bucket.rotation.z=.12;
-  rod([39.90,groundY+.32,.1],[40.0,groundY+.45,.1],.01,metal);rod([40.0,groundY+.45,.1],[40.10,groundY+.32,.1],.01,metal);
-  prop('sandpit',[37.55,groundY-.05,-1.4],[41.45,groundY+.48,1.25]);
-  // Original metal slide, built as a continuous curved sheet with real rails.
-  const slideX=44.2,slideZ=-.45;
-  for(const x of [slideX-.49,slideX+.49])for(const z of [slideZ-.45,slideZ+.45])rod([x,groundY,z],[x,groundY+2.15,z],.042,teal);
-  box(1.15,.10,1.05,slideX,groundY+2.08,slideZ,ochre);
-  for(const z of [slideZ-.52,slideZ+.52]){rail([slideX-.53,groundY+2.1],[slideX+.53,groundY+2.1],z,2);}
-  for(const z of [slideZ-.38,slideZ+.38])rod([slideX-1.3,groundY+.1,z],[slideX-.55,groundY+2.13,z],.038,teal);
-  for(let n=0;n<8;n++){const p=(n+.5)/8;rod([slideX-1.3+.75*p,groundY+.1+2.03*p,slideZ-.38],[slideX-1.3+.75*p,groundY+.1+2.03*p,slideZ+.38],.025,ochre);}
-  const path=[[.45,2.12],[.76,2.04],[1.12,1.62],[1.52,1.10],[1.98,.61],[2.40,.30],[2.85,.21]],positions=[],indices=[];
-  path.forEach(([dx,dy],i)=>{positions.push(slideX+dx,groundY+dy,slideZ-.40,slideX+dx,groundY+dy,slideZ+.40);if(i<path.length-1)indices.push(i*2,i*2+1,i*2+2,i*2+1,i*2+3,i*2+2);});
-  const slideGeo=new THREE.BufferGeometry();slideGeo.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));slideGeo.setIndex(indices);slideGeo.computeVertexNormals();mesh(slideGeo,new THREE.MeshStandardMaterial({color:'#8ba5a6',roughness:.36,metalness:.74,side:THREE.DoubleSide}));
-  for(const z of [slideZ-.42,slideZ+.42])for(let i=0;i<path.length-1;i++)rod([slideX+path[i][0],groundY+path[i][1]+.11,z],[slideX+path[i+1][0],groundY+path[i+1][1]+.11,z],.032,red);
-  prop('slide',[42.84,groundY,-1.05],[47.2,groundY+3.12,.15]);
-  // Benches and a small seesaw sit well behind the clear foreground route.
-  for(const x of [30.2,49.6]){
-    for(const dx of [-.88,.88]){rod([x+dx,groundY,.95],[x+dx,groundY+.5,.95],.04);rod([x+dx,groundY,1.35],[x+dx,groundY+.5,1.35],.04);rod([x+dx,groundY+.4,1.0],[x+dx,groundY+1.14,.83],.031);}
-    for(let n=0;n<4;n++)box(2.1,.07,.10,x,groundY+.53,.98+n*.115,wood);
-    for(let n=0;n<3;n++)box(2.1,.12,.055,x,groundY+.82+n*.15,.85,wood);
-    prop(`bench-${x}`,[x-1.1,groundY,.7],[x+1.1,groundY+1.21,1.5]);
-  }
-  const seeX=51.5,seeZ=-.3;
-  for(const z of [seeZ-.25,seeZ+.25]){rod([seeX-.4,groundY,z],[seeX,groundY+.64,z],.045,teal);rod([seeX+.4,groundY,z],[seeX,groundY+.64,z],.045,teal);}
-  instance('box',ochre,[seeX,groundY+.67,seeZ],[3.5,.12,.36],new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,0,1),-.09));
-  for(const side of [-1,1]){const x=seeX+side*1.48,y=groundY+.67-side*.13;box(.50,.08,.55,x,y+.1,seeZ,side<0?red:blue);rod([x-side*.3,y+.1,seeZ-.15],[x-side*.3,y+.5,seeZ-.15],.022);rod([x-side*.3,y+.5,seeZ-.15],[x-side*.3,y+.5,seeZ+.15],.022);rod([x-side*.3,y+.5,seeZ+.15],[x-side*.3,y+.1,seeZ+.15],.022);}
-  prop('seesaw',[49.6,groundY,-.7],[53.4,groundY+1.4,.1]);
-  for(let i=0;i<75;i++){
-    const x=28+rand(i+919)*27,z=-4.9+rand(i+1129)*7.3,h=.05+rand(i+1491)*.15;
-    for(let n=0;n<3;n++)rod([x,groundY+.005,z],[x+(rand(i*3+n)-.5)*.15,groundY+h,z+(rand(i*7+n+91)-.5)*.10],.005,grass);
-  }
-  const lamps=[];
-  for(const [x,z]of[[38.0,2.1],[49.2,2.0]]){
-    rod([x,groundY,z],[x,groundY+4.3,z],.052);rod([x,groundY+4.26,z],[x+.42,groundY+4.4,z+.12],.029);
-    box(.56,.11,.30,x+.53,groundY+4.39,z+.13,metal);box(.44,.024,.22,x+.53,groundY+4.325,z+.13,lampGlass);
-    const light=new THREE.PointLight('#e9c391',17,10,2);light.position.set(x+.53,groundY+4.25,z+.15);group.add(light);lamps.push(light);
-  }
+  // Play equipment is provided by the shared front-right park asset.
+  // No duplicate playground is built beneath the fire escape.
+  const equipment=[];
   for(const batch of batches.values()){
     const object=new THREE.InstancedMesh(geometries[batch.type],batch.mat,batch.matrices.length);batch.matrices.forEach((matrix,i)=>object.setMatrixAt(i,matrix));object.instanceMatrix.needsUpdate=true;object.castShadow=batch.shadow;object.receiveShadow=true;batch.parent.add(object);
   }
@@ -302,12 +284,15 @@ export function createFireEscapeWorld(THREE,scene){
   const rain=new THREE.LineSegments(rainGeo,new THREE.LineBasicMaterial({color:'#b0c9d4',transparent:true,opacity:.18,depthWrite:false,fog:true}));rain.frustumCulled=false;group.add(rain);
   const metadata={
     style:'american-wall-mounted',facade:facadeBounds,decks,anchors,railRuns,freestandingPosts:0,
-    solids:[{id:'fire-escape-brick-wing',bounds:facadeBounds},...decks.map((bounds,index)=>({id:`balcony-deck-${index}`,bounds})),...anchors.map((anchor,index)=>({id:`wall-bracket-${index}`,bounds:anchor.bounds}))],
+    solids:[{id:'fire-escape-brick-wing',bounds:facadeBounds},{id:'home-building-return-wall',bounds:returnWallBounds},...gatePosts,{id:'open-side-gate-leaf',bounds:sideGate.leaf},...decks.map((bounds,index)=>({id:`balcony-deck-${index}`,bounds})),...anchors.map((anchor,index)=>({id:`wall-bracket-${index}`,bounds:anchor.bounds}))],
     bounds:{min:[20.35,groundY-.3,-33.6],max:[67.6,16.3,7.5]},
+    sharedPark:{id:'home-front-right-park',providedBy:'playground-world',translation:[-50,groundY,6.2]},
+    servicePassage:{from:[27.2,groundY,4.5],to:[33.4,groundY,4.5],clearHalfWidth:.8,supports:serviceSupports},
+    corner:{wall:returnWallBounds,path:cornerPath,fromZ:4.5,toZ:6.2,halfWidth:.8},parkEntry:sideGate,
     layout:{left:28,right:33,rise:3.2,steps:20,totalFlights:2,lanes:[1.4,3.0],groundY,groundZ:4.5,turnOutside:.8},
     topPlatform:{min:[25.82,-.15,.73],max:[28,.002,2.07],y:0},
     middleLanding:{min:[33,-3.35,.73],max:[34.70,-3.198,3.66],y:-3.2},
-    flights:flightMetadata,ground:{minX:25.6,maxX:56,y:groundY,z:4.5,minZ:3.2,maxZ:5.8},
+    flights:flightMetadata,ground:{minX:26.3,maxX:62,y:groundY,z:4.5,minZ:2.5,maxZ:7.05,parkZ:6.2,cornerStartX:33.4,parkEntryX:35.8},
     watch:{x:27.1,y:0,z:1.4},equipment,windows:nearWindows.length,lights:lamps.length,drawBatches:batches.size,rainDrops:rainCount
   };
   group.userData.fireEscape=metadata;let lastTime=null;
@@ -316,7 +301,6 @@ export function createFireEscapeWorld(THREE,scene){
     upperFacade.visible=state?.area==='playground';
     const dt=lastTime===null?0:Math.min(.05,Math.max(0,time-lastTime));lastTime=time;
     for(let i=0;i<rainCount;i++){const o=i*6;rainData[o]-=dt*.9;rainData[o+1]-=rainSpeed[i]*dt;if(rainData[o+1]<groundY-.5||Math.abs(rainData[o]-playerX)>30){rainData[o]=playerX-22+rand(i+time*.13)*44;rainData[o+1]=7+rand(i+917)*5;}rainData[o+3]=rainData[o]-.025;rainData[o+4]=rainData[o+1]-(.16+rand(i+71)*.28);rainData[o+5]=rainData[o+2];}rainGeo.attributes.position.needsUpdate=true;
-    swingPivots.forEach((pivot,i)=>{pivot.rotation.x=Math.sin(time*.61+i*1.9)*(.032+i*.009);});
-    lamps.forEach((light,i)=>{light.intensity=17*(.994+.004*Math.sin(time*.9+i));});
+    lamps.forEach((light,i)=>{light.intensity=7.5*(.994+.004*Math.sin(time*.9+i));});
   }};
 }

@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {APARTMENT,ESCAPE,CAUGHT,apartmentRoom,apartmentHeight,escapeHeight,createApartment,normalizeApartmentSave} from '../src/apartment.js';
+import {COURTYARD,courtyardZ,courtyardSlope} from '../src/courtyard-layout.js';
 const setup=saved=>{const apartment=createApartment(),player={};assert(apartment.begin(player,saved));return{apartment,player,events:[]};};
 function step(r,input={},frames=1,hz=90){for(let i=0;i<frames;i++){const e=r.apartment.update(1/hz,input,r.player);r.events.push(...r.apartment.state.events);assert([r.player.x,r.player.y,r.player.z,r.player.vx,r.player.vy,r.player.vz].every(Number.isFinite));assert(r.player.y>=-6.4-1e-6);}}
 function moveTo(r,x,d=1){for(let i=0;i<3000;i++){step(r,{direction:d,running:true});if(d>0?r.player.x>=x-1e-7:r.player.x<=x+1e-7)break;}step(r,{},40);}
@@ -144,6 +145,35 @@ test('pause and invalid time freeze character, door, father, object, window and 
  const before=structuredClone({player:r.player,state:r.apartment.state});
  for(const dt of[0,-1,NaN,Infinity,undefined])r.apartment.update(dt,{direction:-1,interact:true,jump:true},r.player);
  assert.deepEqual({player:r.player,state:r.apartment.state},before);
+});
+
+test('the escape ground route rounds the building at a steady pace and can be walked back',()=>{
+ const positions=[];
+ for(const hz of[30,60,120]){
+  const r=setup({stage:'playground',x:32,face:1});let previous={...r.player},peak=0,turn=false;
+  for(let i=0;i<Math.round(5*hz);i++){
+   step(r,{direction:1,running:true},1,hz);const p=r.player;
+   assert.equal(p.y,ESCAPE.groundY);assert(Math.abs(p.z-courtyardZ(p.x))<1e-9);
+   peak=Math.max(peak,Math.hypot(p.x-previous.x,p.z-previous.z)*hz);
+   assert(Math.abs(Math.sin(r.apartment.state.heading-Math.atan2(1,courtyardSlope(p.x))))<1e-8);
+   if(p.x>COURTYARD.corner.startX&&p.x<COURTYARD.corner.endX){turn=true;assert.equal(r.apartment.state.groundSection,'building-corner');}
+   previous={...p};
+  }
+  assert(turn);assert(peak<2.63,'The depth turn must not accelerate the boy along the path.');
+  assert.equal(r.apartment.state.groundSection,'park');assert.equal(r.events.filter(e=>e==='park-entered').length,1);
+  positions.push(r.player.x);moveTo(r,29,-1);assert.equal(r.player.z,4.5);assert.equal(r.apartment.state.groundSection,'service-passage');
+  assert.equal(r.events.filter(e=>e==='park-entered').length,1);
+ }
+ assert(Math.max(...positions)-Math.min(...positions)<.015,'The corner traversal must be consistent across refresh rates.');
+});
+
+test('old ground saves and new corner/park saves restore to the supported path',()=>{
+ for(const x of[27.2,29,34.6,42,48,62]){
+  const saved={stage:'playground',x,face:1},r=setup(saved);
+  assert.equal(r.player.z,courtyardZ(x));assert.equal(r.player.y,-6.4);assert.deepEqual(r.apartment.snapshot(),saved);
+  r.player.z+=.2;assert.equal(r.apartment.snapshot(),null,'Unsupported depth must not overwrite Continue.');
+ }
+ assert.equal(normalizeApartmentSave({stage:'playground',x:62.1,face:1}),null);
 });
 
 test('legacy and story saves restore safe supports and reject embedded or malformed checkpoints',()=>{

@@ -22,6 +22,7 @@ import {createStairwellWorld} from './stairwell-world.js';
 import {createStreet,STREET} from './street.js';
 import {createStreetWorld} from './street-world.js';
 import {createPlaygroundWorld} from './playground-world.js';
+import {COURTYARD,courtyardPoint} from './courtyard-layout.js';
 import {createHome,HOME} from './home.js';
 import {createHomeWorld} from './home-world.js';
 import {createApartment,APARTMENT,CAUGHT} from './apartment.js';
@@ -93,8 +94,10 @@ const world=createWorld(THREE,scene),boy=createBoy(THREE);scene.add(boy.group);
 const interior=createStairwellWorld(THREE,scene);
 const streetWorld=createStreetWorld(THREE,scene);
 const playgroundWorld=createPlaygroundWorld(THREE,scene);
-// The future courtyard is visible beyond the block, behind the walking route.
-playgroundWorld.group.scale.setScalar(.75);playgroundWorld.group.position.set(14,-.04,-15);
+// The street glimpse and the escape use this one park, with chapter origins
+// translated around the same home block rather than a second set of props.
+playgroundWorld.group.scale.setScalar(COURTYARD.scale);playgroundWorld.group.position.copy(COURTYARD.street);
+let displayedPlaygroundView='street';
 const homeWorld=createHomeWorld(THREE,scene);
 const apartmentWorld=createApartmentWorld(THREE,scene);
 const father=createApartmentFather(THREE);father.group.position.set(6,0,-.2);scene.add(father.group);father.group.visible=false;
@@ -130,13 +133,20 @@ function refreshHint(){
 }
 function updateContinue(){ $('#continue').disabled=!session.getSave(); }
 function syncStreetArea(){
- streetWorld.group.visible=chapter==='street';playgroundWorld.group.visible=chapter==='street'&&player.x>56;homeWorld.group.visible=chapter==='home';apartmentWorld.group.visible=chapter==='apartment';
+ streetWorld.group.visible=chapter==='street';homeWorld.group.visible=chapter==='home';apartmentWorld.group.visible=chapter==='apartment';
  syncApartmentArea();
+}
+function syncPlaygroundArea(){
+ const onStreet=chapter==='street',outside=chapter==='apartment'&&((apartment.state?.area??'interior')!=='interior'||(apartment.state?.windowProgress??0)>.01);
+ playgroundWorld.group.visible=onStreet&&player.x>56||outside;
+ const view=onStreet?'street':'escape';
+ if(view!==displayedPlaygroundView){playgroundWorld.group.position.copy(COURTYARD[view]);displayedPlaygroundView=view;renderer.shadowMap.needsUpdate=true;}
 }
 function syncApartmentArea(){
  const active=chapter==='apartment',area=apartment.state?.area??'interior',outdoors=area!=='interior';
  apartmentWorld.group.visible=active&&area!=='playground';father.group.visible=active;
  fireEscapeWorld.group.visible=active&&(outdoors||(apartment.state?.windowProgress??0)>.01);
+ syncPlaygroundArea();
  document.body.classList.toggle('in-apartment-room',active&&!outdoors);
  document.body.classList.toggle('on-fire-escape',active&&outdoors);
  if(!active){displayedApartmentArea=null;return;}
@@ -610,7 +620,7 @@ function physics(dt){
    if(['wake-father','close-door','glass-impact','door-bang','door-breach','open-window','barricaded'].includes(event))storySound(event);
    if(event==='caught-impact')storySound(event);
    if(event==='land')landImpact=Math.max(landImpact,.3);
-   if(['floor','barricaded','escape-start','playground'].includes(event))persistProgress(true);
+   if(['floor','barricaded','escape-start','playground','park-entered'].includes(event))persistProgress(true);
    if(event==='retry'){
     apartment.retry(player);clearInput();boy.reset?.();water.reset();dust.reset();fade=.7;
     Object.assign(previousSim,{x:player.x,y:player.y,z:player.z,vx:0,vz:0,apartmentFatherPhase:null,apartmentAction:null});
@@ -921,7 +931,7 @@ function frame(now){
   else if(chapter==='home')homeWorld.update(time,home.state);
   else if(chapter==='apartment'){
    if(state==='play')apartmentTime+=dt;
-   syncApartmentArea();apartmentWorld.update(apartmentTime,renderedX,renderedApartment);father.update(apartmentTime,renderedApartment);fireEscapeWorld.update(apartmentTime,renderedX,renderedApartment);
+   syncApartmentArea();apartmentWorld.update(apartmentTime,renderedX,renderedApartment);father.update(apartmentTime,renderedApartment);fireEscapeWorld.update(apartmentTime,renderedX,renderedApartment);playgroundWorld.update(apartmentTime);
    if(!chapterTransition||chapterTransition.target==='apartment')apartmentWorld.entryDoor?.update(1-THREE.MathUtils.smoothstep(apartmentTime,.5,2.4));
   }
   else{
@@ -946,10 +956,15 @@ function frame(now){
   const zoom=Math.max(18.2,15.2/(2*Math.tan(THREE.MathUtils.degToRad(camera.fov/2))*camera.aspect));
   camera.position.set(cameraX,cameraY+1.2,zoom);camera.lookAt(cameraX,cameraY,-.2);
  }else if(chapter==='apartment'&&apartment.state?.area!=='interior'){
-  const zoom=Math.max(17.8,9/(2*Math.tan(THREE.MathUtils.degToRad(camera.fov/2))*camera.aspect));
   const park=apartment.state?.area==='playground';
-  cameraX=THREE.MathUtils.damp(cameraX,park?renderedX+1.4:THREE.MathUtils.clamp(renderedX+1,28.4,32.4),2.8,dt);
-  cameraY=THREE.MathUtils.damp(cameraY,park?-2.2:Math.max(-2.2,renderedY+.9),2.8,dt);
+  const lookBack=park?1-THREE.MathUtils.smoothstep(renderedX,37.2,41):0;
+  const bottomApproach=renderedApartment?.escapeFlight===1?THREE.MathUtils.smoothstep(-renderedY,5.3,6.2):0;
+  const reveal=park?lookBack:bottomApproach;
+  const zoom=Math.max(17.8+reveal*3.2,(9+reveal*3)/(2*Math.tan(THREE.MathUtils.degToRad(camera.fov/2))*camera.aspect));
+  const parkFocus=THREE.MathUtils.lerp(renderedX+1.4,(renderedX+27.1)/2+.6,lookBack);
+  cameraX=THREE.MathUtils.damp(cameraX,park?parkFocus:THREE.MathUtils.clamp(renderedX+1,28.4,32.4),2.8,dt);
+  const focusY=park?THREE.MathUtils.lerp(-4,-2.8,lookBack):THREE.MathUtils.lerp(Math.max(-2.2,renderedY+.9),-2.8,bottomApproach);
+  cameraY=THREE.MathUtils.damp(cameraY,focusY,2.8,dt);
   camera.position.set(cameraX,cameraY+2.3,THREE.MathUtils.damp(camera.position.z,zoom,3.5,dt));camera.lookAt(cameraX,cameraY,1.6);
  }else if(chapter==='apartment'){
   const rising=apartment.state?.fatherPhase==='rising';
@@ -958,10 +973,11 @@ function frame(now){
   cameraX=THREE.MathUtils.damp(cameraX,THREE.MathUtils.clamp(focus,4.8,22.7),3.2,dt);
   camera.position.set(cameraX,3.15,THREE.MathUtils.damp(camera.position.z,zoom,3.5,dt));camera.lookAt(cameraX,1.9,-.4);
  }else if(chapter==='street'){
-  cameraLead=THREE.MathUtils.damp(cameraLead,1.3+player.face*Math.min(.7,Math.abs(renderedSpeed)/4),2.3,dt);
+  const homeView=THREE.MathUtils.smoothstep(renderedX,62,68);
+  cameraLead=THREE.MathUtils.damp(cameraLead,1.3+homeView*.9+player.face*Math.min(.7,Math.abs(renderedSpeed)/4),2.3,dt);
   cameraX=THREE.MathUtils.damp(cameraX,renderedX,3.2,dt);
   const centerX=cameraX+cameraLead;
-  camera.position.set(centerX,3.1,16.8);camera.lookAt(centerX,1.8,-1.4);
+  camera.position.set(centerX,3.1,16.8+homeView*2.4);camera.lookAt(centerX,1.8,-1.4);
  }else{
  cameraLead=THREE.MathUtils.damp(cameraLead,1.3+player.face*Math.min(1,Math.abs(renderedSpeed)/3.35),2.3,dt);
  const wakingFocus=opening.state.active&&!opening.state.escaped?1-THREE.MathUtils.smoothstep(wake,.65,1):0;
@@ -985,4 +1001,13 @@ boy.group.position.set(restArea.spawnX,restArea.surfaceY,0);boy.group.rotation.y
 applySettings();updateContinue();showOverlay(intro);requestAnimationFrame(frame);
 canvas.addEventListener('webglcontextlost',e=>{e.preventDefault();state='pause';$('#error').hidden=false;$('#error').textContent='3D graphics were interrupted. Reload the page to continue.'});
 // Non-enumerable observation hook for repeatable browser smoke tests.
-Object.defineProperty(window,'__game',{value:{get state(){return state},get chapter(){return chapter},get transition(){return chapterTransition?{...chapterTransition}:null},get stairwell(){return stairwell.state?{...stairwell.state,turn:stairwell.state.turn?{...stairwell.state.turn}:undefined,snapshot:stairwell.snapshot()}:null},get interiorLayout(){return interior.metadata},get street(){return street.state?{...street.state,jump:{...street.state.jump},snapshot:street.snapshot()}:null},get streetLayout(){return streetWorld.metadata},get playgroundLayout(){return playgroundWorld.metadata},get homeDoor(){return {progress:streetWorld.homeDoor.progress,angle:streetWorld.homeDoor.angle}},get home(){return home.state?{...home.state,turn:home.state.turn?{...home.state.turn}:undefined,snapshot:home.snapshot()}:null},get homeLayout(){return homeWorld.metadata},get apartment(){return apartment.state?{...apartment.state,snapshot:apartment.snapshot()}:null},get apartmentLayout(){return apartmentWorld.metadata},get fireEscapeLayout(){return fireEscapeWorld.metadata},get bedroomDoor(){return {progress:apartment.state?.doorProgress??0,closed:!!apartment.state?.doorClosed,barricaded:!!apartment.state?.barricaded}},get bedroomWindow(){return {progress:apartment.state?.windowProgress??0}},get father(){return {time:apartmentTime,...father.metadata}},get apartmentDoor(){return {progress:homeWorld.apartmentDoor?.progress??0,angle:homeWorld.apartmentDoor?.angle??0}},get apartmentEntryDoor(){return {progress:apartmentWorld.entryDoor?.progress??0,angle:apartmentWorld.entryDoor?.angle??0}},get exitDoor(){return {progress:interior.exitDoor.progress,angle:interior.exitDoor.angle}},get actor(){const bounds=new THREE.Box3().setFromObject(boy.group,true);return {bounds:{min:bounds.min.toArray(),max:bounds.max.toArray()},position:{x:boy.group.position.x,y:boy.group.position.y,z:boy.group.position.z},heading:boy.group.rotation.y,probes:Object.fromEntries(['head','pelvis','leftKnee','rightKnee'].map(name=>[name,boy.group.getObjectByName(name).getWorldPosition(new THREE.Vector3()).toArray()]))}},get sceneVisibility(){return {outdoor:world.world.visible,interior:interior.group.visible,street:streetWorld.group.visible,playground:playgroundWorld.group.visible,home:homeWorld.group.visible,apartment:apartmentWorld.group.visible,fireEscape:fireEscapeWorld.group.visible,father:father.group.visible,rain:rain.visible||world.world.visible&&world.weather.group.visible||fireEscapeWorld.group.visible}},get wake(){return wake},get checkpoint(){return checkpoint},get tutorials(){return {current:tutorials.current,learned:tutorials.learned}},get roofRails(){return world.world.userData.roofRails??[]},get roofGraphics(){return {city:world.world.userData.roofCity,surface:world.world.userData.roofSurface,weather:world.world.userData.roofWeather}},get settings(){return {...preferences}},get developer(){return {revealed:developerAccess.revealed,unlocked:developerAccess.unlocked,enabled:developerEnabled,...developerOptions,testCheckpoint:!!developerCheckpoint,location:developerLocationId()}},get saved(){return session.getSave()},get exposure(){return renderer.toneMappingExposure},get audio(){return {muted,volume:master?.gain.value??0,state:audio?.state??'uninitialized'}},get slip(){return slip.state?{...slip.state,wobble:{...slip.state.wobble}}:null},get slipPlayed(){return slip.played},get slipsCompleted(){return slipsCompleted},get dust(){return {active:dust.activeCount,emitted:dust.emittedCount}},get ladder(){return ladder.state?{...ladder.state}:null},get laddersCompleted(){return laddersCompleted},get bridge(){return {...bridge.state,supported:bridge.supported}},get opening(){return {...opening.state}},get jump(){return {...(chapter==='street'?street.state.jump:chapter==='apartment'?apartment.state?.jump:jumpMotion)}},get animation(){return boy.group.userData.animation},get climb(){const c=chapter==='street'?street.state?.climb:mantle;return c?{...c}:null},get climbsCompleted(){return chapter==='street'?(street.state?.climbsCompleted??0):climbsCompleted},get splashes(){return {active:water.activeCount,emitted:water.emittedCount}},get software(){return software},player,get crateX(){return world.crate.position.x},get drawCalls(){return renderer.info.render.calls},get triangles(){return renderer.info.render.triangles}}});
+function courtyardDiagnostics(){
+ const view=displayedPlaygroundView,metadata=playgroundWorld.metadata;
+ camera.updateMatrixWorld(true);
+ const projected=object=>{const point=object.getWorldPosition(new THREE.Vector3()).project(camera);return point.toArray();};
+ return {id:metadata.id,view,visible:playgroundWorld.group.visible,section:apartment.state?.groundSection??'street-preview',
+  transform:{...COURTYARD[view],scale:COURTYARD.scale},entryX:COURTYARD.parkEntryX,path:{...COURTYARD.corner,minX:COURTYARD.minX,maxX:COURTYARD.maxX},
+  landmarks:metadata.landmarks.map(item=>({...item,bounds:{min:courtyardPoint(view,item.bounds.min),max:courtyardPoint(view,item.bounds.max)}})),
+  camera:{position:camera.position.toArray(),aspect:camera.aspect,fov:camera.fov},projection:{child:projected(boy.group.getObjectByName('head')),leftFoot:projected(boy.group.getObjectByName('leftSole')),rightFoot:projected(boy.group.getObjectByName('rightSole')),father:projected(father.group.getObjectByName('father-head'))}};
+}
+Object.defineProperty(window,'__game',{value:{get state(){return state},get chapter(){return chapter},get transition(){return chapterTransition?{...chapterTransition}:null},get stairwell(){return stairwell.state?{...stairwell.state,turn:stairwell.state.turn?{...stairwell.state.turn}:undefined,snapshot:stairwell.snapshot()}:null},get interiorLayout(){return interior.metadata},get street(){return street.state?{...street.state,jump:{...street.state.jump},snapshot:street.snapshot()}:null},get streetLayout(){return streetWorld.metadata},get playgroundLayout(){return playgroundWorld.metadata},get courtyard(){return courtyardDiagnostics()},get homeDoor(){return {progress:streetWorld.homeDoor.progress,angle:streetWorld.homeDoor.angle}},get home(){return home.state?{...home.state,turn:home.state.turn?{...home.state.turn}:undefined,snapshot:home.snapshot()}:null},get homeLayout(){return homeWorld.metadata},get apartment(){return apartment.state?{...apartment.state,snapshot:apartment.snapshot()}:null},get apartmentLayout(){return apartmentWorld.metadata},get fireEscapeLayout(){return fireEscapeWorld.metadata},get bedroomDoor(){return {progress:apartment.state?.doorProgress??0,closed:!!apartment.state?.doorClosed,barricaded:!!apartment.state?.barricaded}},get bedroomWindow(){return {progress:apartment.state?.windowProgress??0}},get father(){return {time:apartmentTime,...father.metadata}},get apartmentDoor(){return {progress:homeWorld.apartmentDoor?.progress??0,angle:homeWorld.apartmentDoor?.angle??0}},get apartmentEntryDoor(){return {progress:apartmentWorld.entryDoor?.progress??0,angle:apartmentWorld.entryDoor?.angle??0}},get exitDoor(){return {progress:interior.exitDoor.progress,angle:interior.exitDoor.angle}},get actor(){const bounds=new THREE.Box3().setFromObject(boy.group,true);return {bounds:{min:bounds.min.toArray(),max:bounds.max.toArray()},position:{x:boy.group.position.x,y:boy.group.position.y,z:boy.group.position.z},heading:boy.group.rotation.y,probes:Object.fromEntries(['head','pelvis','leftKnee','rightKnee'].map(name=>[name,boy.group.getObjectByName(name).getWorldPosition(new THREE.Vector3()).toArray()]))}},get sceneVisibility(){return {outdoor:world.world.visible,interior:interior.group.visible,street:streetWorld.group.visible,playground:playgroundWorld.group.visible,home:homeWorld.group.visible,apartment:apartmentWorld.group.visible,fireEscape:fireEscapeWorld.group.visible,father:father.group.visible,rain:rain.visible||world.world.visible&&world.weather.group.visible||fireEscapeWorld.group.visible}},get wake(){return wake},get checkpoint(){return checkpoint},get tutorials(){return {current:tutorials.current,learned:tutorials.learned}},get roofRails(){return world.world.userData.roofRails??[]},get roofGraphics(){return {city:world.world.userData.roofCity,surface:world.world.userData.roofSurface,weather:world.world.userData.roofWeather}},get settings(){return {...preferences}},get developer(){return {revealed:developerAccess.revealed,unlocked:developerAccess.unlocked,enabled:developerEnabled,...developerOptions,testCheckpoint:!!developerCheckpoint,location:developerLocationId()}},get saved(){return session.getSave()},get exposure(){return renderer.toneMappingExposure},get audio(){return {muted,volume:master?.gain.value??0,state:audio?.state??'uninitialized'}},get slip(){return slip.state?{...slip.state,wobble:{...slip.state.wobble}}:null},get slipPlayed(){return slip.played},get slipsCompleted(){return slipsCompleted},get dust(){return {active:dust.activeCount,emitted:dust.emittedCount}},get ladder(){return ladder.state?{...ladder.state}:null},get laddersCompleted(){return laddersCompleted},get bridge(){return {...bridge.state,supported:bridge.supported}},get opening(){return {...opening.state}},get jump(){return {...(chapter==='street'?street.state.jump:chapter==='apartment'?apartment.state?.jump:jumpMotion)}},get animation(){return boy.group.userData.animation},get climb(){const c=chapter==='street'?street.state?.climb:mantle;return c?{...c}:null},get climbsCompleted(){return chapter==='street'?(street.state?.climbsCompleted??0):climbsCompleted},get splashes(){return {active:water.activeCount,emitted:water.emittedCount}},get software(){return software},player,get crateX(){return world.crate.position.x},get drawCalls(){return renderer.info.render.calls},get triangles(){return renderer.info.render.triangles}}});

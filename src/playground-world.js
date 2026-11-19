@@ -1,6 +1,8 @@
-// The courtyard behind the boy's building. Equipment lives behind the side-on
-// walking lane: its faded colour and small movement remain scenery for now.
-export function createPlaygroundWorld(THREE,scene){
+import {COURTYARD} from './courtyard-layout.js';
+
+// One park to the front and right of the home block. The street glimpse and
+// the later escape use these same full-scale landmarks and the same geometry.
+export function createPlaygroundWorld(THREE,scene,{includeHome=false}={}){
   const group=new THREE.Group();group.name='home-playground';group.visible=false;scene.add(group);
   const rand=n=>{const v=Math.sin(n*129.71+31.37)*43758.5453;return v-Math.floor(v);};
   const mat=(color,roughness=.9,extra={})=>new THREE.MeshStandardMaterial({color,roughness,...extra});
@@ -55,12 +57,14 @@ export function createPlaygroundWorld(THREE,scene){
   const equipment=[],lights=[],swingPivots=[];
   function bounds(id,type,min,max){equipment.push({id,type,bounds:{min,max}});}
 
-  // Rain-darkened paving continues directly out of the rear entrance.
+  // The service passage supplies its own paving up to the park's side entry.
+  // Starting this strip at the entry avoids overlapping coplanar floor meshes.
+  const pavingStart=COURTYARD.gateNativeX,pavingEnd=119;
   box(90,.32,65,99,-.27,-24,concrete);box(54,.10,15,98,-.12,-4.8,soil);
-  box(42,.08,1.7,97,-.04,0,paving);
-  for(let x=77;x<119;x+=1.12){box(.018,.005,1.69,x,.003,0,concrete,false);box(1.10,.13,.21,x,-.025,.93,paving);}
-  for(let i=0;i<38;i++)patch(79+rand(i+15)*38,-.25+rand(i+77)*-6,.65+rand(i+135)*2.2,.25+rand(i+247)*.95,wet,rand(i+77)<.18?.006:-.058);
-  for(let x=84;x<115;x+=6.3){box(.56,.016,.26,x,-.032,1.24,metal);for(let n=0;n<8;n++)box(.026,.01,.24,x-.24+n*.067,-.02,1.24,dark,false);}
+  box(pavingEnd-pavingStart,.08,1.7,(pavingStart+pavingEnd)/2,-.04,0,paving);
+  for(let x=pavingStart;x<pavingEnd;x+=1.12){box(.018,.005,1.69,x,.003,0,concrete,false);box(Math.min(1.10,pavingEnd-x),.13,.21,x+Math.min(1.10,pavingEnd-x)/2,-.025,.93,paving);}
+  for(let i=0;i<38;i++)patch(pavingStart+1.2+rand(i+15)*29.4,-.25+rand(i+77)*-6,.65+rand(i+135)*2.2,.25+rand(i+247)*.95,wet,rand(i+77)<.18?.006:-.058);
+  for(let x=pavingStart+1.2;x<115;x+=6.3){box(.56,.016,.26,x,-.032,1.24,metal);for(let n=0;n<8;n++)box(.026,.01,.24,x-.24+n*.067,-.02,1.24,dark,false);}
   // A faded rubber play surface has settled into the muddy yard.
   for(let x=86;x<112;x+=1.0)for(let z=-6.9;z<-1.9;z+=1.0)box(.985,.028,.985,x,-.055,z,(Math.round(x-z)%7===0?teal:concrete),false);
   for(let i=0;i<120;i++){const x=82+rand(i+491)*33,z=-1.25-rand(i+523)*6.3;box(.025+rand(i+609)*.055,.01,.025,x,-.04,z,rand(i+749)>.5?rust:concrete,false);}
@@ -80,7 +84,10 @@ export function createPlaygroundWorld(THREE,scene){
     box(width+.18,.18,3.7,x,height+.04,z-1.61,concrete);
     for(const dx of [-width/2+.18,width/2-.18])rod([x+dx,.12,z+.14],[x+dx,height-.13,z+.14],.039,metal);
   }
-  // This close rear wall belongs to the same poor block as the wooden door.
+  // Chapter scenery already supplies the real home block. Keep the old
+  // standalone facade opt-in so it cannot create a second entrance or house.
+  const rearDoorX=81.8,rearDoorZ=-2.10;
+  if(includeHome){
   facade(77.3,12.0,13.4,-2.3,plaster,1021,true);
   box(12,.60,.13,77.3,.28,-2.24,concrete);
   for(const [px,py,ww,hh,seed]of[[78.0,1.15,2.4,1.7,1],[82.4,3.6,1.4,1.1,31],[74.2,5.0,2.1,1.25,67]]){
@@ -91,7 +98,6 @@ export function createPlaygroundWorld(THREE,scene){
       if((xx/(ww*.49))**2+(yy/(hh*.47))**2<.91)box(.306,.145,.026,px+xx,py+yy,-2.23,brick,false);
     }
   }
-  const rearDoorX=81.8,rearDoorZ=-2.10;
   box(1.47,2.65,.16,rearDoorX,1.30,rearDoorZ-.10,concrete);box(1.22,2.37,.04,rearDoorX,1.20,rearDoorZ+.01,dark);
   for(const dx of [-.68,.68])box(.085,2.56,.13,rearDoorX+dx,1.28,rearDoorZ+.06,wood);
   box(1.45,.09,.13,rearDoorX,2.56,rearDoorZ+.06,wood);box(1.52,.06,.34,rearDoorX,.025,rearDoorZ+.11,paving);
@@ -102,6 +108,7 @@ export function createPlaygroundWorld(THREE,scene){
   box(.29,.18,.16,rearDoorX,2.85,rearDoorZ+.10,metal);box(.20,.08,.14,rearDoorX,2.81,rearDoorZ+.18,lampGlass,false);
   const doorLight=new THREE.PointLight('#e2bd83',12,8,2);doorLight.position.set(rearDoorX,2.68,rearDoorZ+.6);group.add(doorLight);lights.push({light:doorLight,base:12});
   patch(rearDoorX,.05,1.5,.65,reflection);
+  }
   facade(98.5,24,18.8,-15.5,distant,1823);facade(118.5,17,23.5,-27,farWall,2211);facade(83,16,24.8,-31,farWall,3197);
   for(const [x,z,h]of[[93.7,-16.2,20.9],[107,-17,21.6],[119,-28,26]]){
     rod([x,h-2,z],[x,h,z],.017,metal);for(let n=0;n<4;n++)rod([x-.42+n*.07,h-1.2+n*.22,z-.15],[x+.42-n*.07,h-1.2+n*.22,z+.15],.009,metal);
@@ -180,12 +187,12 @@ export function createPlaygroundWorld(THREE,scene){
   bounds('wooden-seesaw','seesaw',[105.72,-.08,-4.05],[109.78,1.32,-3.35]);
 
   // Benches sit to the rear of the path, with capped feet and wet slats.
-  for(const [x,z]of[[85.1,-1.93],[112.3,-3.48]]){
+  for(const [x,z,id]of[[87.2,-1.93,'bench-85.1'],[112.3,-3.48,'bench-112.3']]){
     for(const dx of [-.88,.88]){rod([x+dx,0,z-.20],[x+dx,.52,z-.20],.040);rod([x+dx,0,z+.20],[x+dx,.52,z+.20],.040);rod([x+dx,.45,z-.20],[x+dx,1.17,z-.40],.035);}
     for(let n=0;n<4;n++)box(2.12,.07,.11,x,.53,z-.20+n*.13,wood);
     for(let n=0;n<3;n++)box(2.12,.12,.055,x,.82+n*.16,z-.33,wood);
     for(const dx of [-.96,.96])rod([x+dx,.58,z+.17],[x+dx,.78,z+.17],.024);
-    bounds(`bench-${x}`,'bench',[x-1.1,-.04,z-.48],[x+1.1,1.25,z+.28]);
+    bounds(id,'bench',[x-1.1,-.04,z-.48],[x+1.1,1.25,z+.28]);
   }
   // Sparse weeds, fallen leaves and a bare tree show the same neglected yard.
   for(let i=0;i<90;i++){
@@ -211,8 +218,12 @@ export function createPlaygroundWorld(THREE,scene){
     const object=new THREE.InstancedMesh(geometries[batch.type],batch.material,batch.matrices.length);batch.matrices.forEach((m,i)=>object.setMatrixAt(i,m));object.instanceMatrix.needsUpdate=true;object.castShadow=batch.shadow;object.receiveShadow=true;group.add(object);
   }
   const metadata={
-    route:{minX:82,maxX:112,y:0,z:0,clearHalfWidth:.60},
-    rearEntrance:{x:rearDoorX,y:0,z:rearDoorZ,building:'home',open:true},
+    id:'home-front-right-park',entryNativeX:COURTYARD.gateNativeX,
+    route:{minX:COURTYARD.gateNativeX,maxX:112,y:0,z:0,clearHalfWidth:.60},
+    paving:{minX:pavingStart,maxX:pavingEnd,y:0,minZ:-.85,maxZ:.85},
+    rearEntrance:includeHome?{x:rearDoorX,y:0,z:rearDoorZ,building:'home',open:true}:null,
+    legacyHomeIncluded:includeHome,
+    landmarks:equipment.filter(item=>['swings','sandpit','slide','seesaw'].includes(item.type)).map(({id,type,bounds})=>({id,type,bounds})),
     equipment,lights:lights.length,drawBatches:batches.size,area:'playground'
   };
   group.userData.playground=metadata;

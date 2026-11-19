@@ -12,7 +12,7 @@ export function developerLocation(id){
  else if(id==='apartment'){Object.assign(value,{chapter:'apartment',apartment:{x:1.4,face:1}});player.x=1.4;}
  else if(id==='bedroom'){Object.assign(value,{chapter:'apartment',apartment:{x:19.25,face:1,stage:'bedroom',nightstandX:21.2,doorClosed:true}});player.x=19.25;}
  else if(id==='fireescape'){Object.assign(value,{chapter:'apartment',apartment:{x:27.1,face:1,stage:'fireescape',flight:0}});player.x=27.1;}
- else if(id==='playground'){Object.assign(value,{chapter:'apartment',apartment:{x:29,face:1,stage:'playground'}});Object.assign(player,{x:29,y:-6.4});}
+ else if(id==='playground'){Object.assign(value,{chapter:'apartment',apartment:{x:40,face:1,stage:'playground'}});Object.assign(player,{x:40,y:-6.4});}
  else return null;
  return createSaveSnapshot(value);
 }

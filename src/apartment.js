@@ -1,10 +1,12 @@
+import {COURTYARD,courtyardZ,courtyardSlope} from './courtyard-layout.js';
+
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const smooth=v=>{const t=clamp(v,0,1);return t*t*(3-2*t);};
 const nearAngle=(angle,reference)=>reference+Math.atan2(Math.sin(angle-reference),Math.cos(angle-reference));
 const validFace=face=>face===1||face===-1;
 const BODY=.21,CABINET_BODY=.40,EPS=1e-7;
 export const CAUGHT=Object.freeze({impactAt:.48,fallDuration:.85,duration:2.8});
-export const ESCAPE=Object.freeze({left:28,right:33,rise:3.2,steps:20,flights:2,topMinX:26.4,turnX:34,bottomTurnX:27.2,groundY:-6.4,groundZ:4.5,maxX:48,lanes:Object.freeze([1.4,3.0])});
+export const ESCAPE=Object.freeze({left:28,right:33,rise:3.2,steps:20,flights:2,topMinX:26.4,turnX:34,bottomTurnX:27.2,groundY:-6.4,groundZ:4.5,maxX:COURTYARD.maxX,lanes:Object.freeze([1.4,3.0])});
 export const APARTMENT=Object.freeze({
  width:25.8,minX:.9,maxX:25,floorY:0,lane:1.4,walkSpeed:1.5,runSpeed:2.6,entry:Object.freeze({x:1.4,face:1}),
  doorX:17.3,livingTrigger:9.5,windowX:25.8,nightstand:Object.freeze({startX:21.2,minX:18.36,maxX:22.8,width:.72,height:.8,bodyRadius:CABINET_BODY,moveSpeed:1.0}),
@@ -39,12 +41,14 @@ export function createApartment(){
   fatherPhase:'sleep',fatherPhaseTime:0,fatherX:6.6,fatherY:0,fatherZ:-.80,fatherFace:1,fatherSpeed:0,
   glassThrown:false,glassRetrieved:false,retrieveProgress:0,throwProgress:0,doorProgress:0,doorClosed:false,doorPressure:0,doorImpact:0,barricaded:false,
   nightstandX:APARTMENT.nightstand.startX,nightstandZ:1.4,shoveProgress:0,fatherWindowProgress:0,interaction:null,nearNightstand:false,nearBedroomDoor:false,nearWindow:false,
-  windowProgress:0,windowOpening:false,windowAction:null,windowClimb:null,caught:null,escapeFlight:0,stairs:null,events:[],retryCheckpoint:{x:8.7,face:1},
+  windowProgress:0,windowOpening:false,windowAction:null,windowClimb:null,caught:null,escapeFlight:0,stairs:null,groundSpeed:0,groundSection:null,parkVisited:false,events:[],retryCheckpoint:{x:8.7,face:1},
   jump:{preparing:false,elapsed:0,duration:.12,airTime:0,launched:false,launchSpeed:0}};}
  function sync(player){
   state.room=state.area==='interior'?apartmentRoom(player.x):state.area;
   state.nearExit=state.area==='interior'&&state.story==='quiet'&&player.x<=2;
-  state.heading=state.phase==='turn'?state.heading:nearAngle(player.face*Math.PI/2,state.heading);
+  const ground=state.area==='playground',heading=ground?Math.atan2(player.face,player.face*courtyardSlope(player.x)):player.face*Math.PI/2;
+  state.heading=state.phase==='turn'?state.heading:nearAngle(heading,state.heading);
+  state.groundSection=ground?(player.x<COURTYARD.corner.startX?'service-passage':player.x<COURTYARD.parkEntryX?'building-corner':'park'):null;
   state.velocity=Math.hypot(player.vx,player.vz??0);
   state.nearNightstand=state.area==='interior'&&state.phase==='walk'&&player.grounded&&Math.abs(player.y)<.03&&state.nightstandZ>.8&&Math.abs(Math.abs(player.x-state.nightstandX)-(.36+CABINET_BODY))<.25;
   state.nearBedroomDoor=state.area==='interior'&&state.phase==='walk'&&player.x>17.6&&player.x<18.8&&!state.doorClosed&&state.doorProgress<.01;
@@ -68,7 +72,7 @@ export function createApartment(){
   }else if(r.stage==='fireescape'||r.stage==='playground'){
    state.story=r.stage==='playground'?'safe':'escaping';state.area=r.stage;state.escapeFlight=r.flight??2;
    state.doorProgress=0;state.glassThrown=true;state.glassRetrieved=true;state.retrieveProgress=1;state.barricaded=false;state.nightstandX=18.65;state.nightstandZ=.3;state.shoveProgress=1;state.windowProgress=1;
-   state.fatherX=27.1;state.fatherY=0;state.fatherZ=1.4;fatherPhase('watch');player.z=r.stage==='playground'?4.5:ESCAPE.lanes[r.flight];
+   state.fatherX=27.1;state.fatherY=0;state.fatherZ=1.4;fatherPhase('watch');player.z=r.stage==='playground'?courtyardZ(r.x):ESCAPE.lanes[r.flight];state.parkVisited=r.stage==='playground'&&r.x>=COURTYARD.parkEntryX;
   }else if(r.x>=9.5){state.story='pursuit';fatherPhase('rising');}
   sync(player);return true;
  }
@@ -161,7 +165,18 @@ export function createApartment(){
    }return;
   }
   const f=state.escapeFlight;
-  if(state.area==='playground'){move(dt,input,player,[27.2,48]);player.y=-6.4;player.z=4.5;return;}
+  if(state.area==='playground'){
+   const oldX=player.x,oldZ=player.z;
+   // Filter speed along the path, then convert its travel to a horizontal
+   // step. Otherwise the depth bend would make the boy accelerate sideways.
+   player.vx=state.groundSpeed;move(dt,input,player,[COURTYARD.minX,COURTYARD.maxX]);state.groundSpeed=player.vx;
+   const distance=player.x-oldX;let dx=distance;
+   for(let i=0;i<3;i++)dx=distance/Math.hypot(1,courtyardSlope(oldX+dx*.5));
+   player.x=clamp(oldX+dx,COURTYARD.minX,COURTYARD.maxX);player.y=ESCAPE.groundY;player.z=courtyardZ(player.x);
+   player.vx=(player.x-oldX)/dt;player.vz=(player.z-oldZ)/dt;player.vy=0;player.grounded=true;
+   if(!state.parkVisited&&player.x>=COURTYARD.parkEntryX){state.parkVisited=true;event('park-entered');}
+   return;
+  }
   move(dt,input,player,f===0?[26.4,33]:[28,34]);player.y=escapeHeight(f,player.x);player.z=ESCAPE.lanes[f];player.vy=0;player.grounded=true;
   if(f===0&&player.x>=33-EPS&&input?.direction>0)turn(player,'middle');
   if(f===1&&player.x<=28+EPS&&input?.direction<0)turn(player,'bottom');
@@ -231,7 +246,7 @@ export function createApartment(){
  function snapshot(){
   if(!state||state.phase!=='walk'||!lastPlayer||lastPlayer.grounded!==true||![lastPlayer.x,lastPlayer.y,lastPlayer.z].every(Number.isFinite))return null;
   if(state.area==='fireescape')return normalizeApartmentSave({stage:'fireescape',flight:state.escapeFlight,x:lastPlayer.x,face:lastPlayer.face});
-  if(state.area==='playground')return normalizeApartmentSave({stage:'playground',x:lastPlayer.x,face:lastPlayer.face});
+  if(state.area==='playground')return Math.abs(lastPlayer.y-ESCAPE.groundY)<.025&&Math.abs(lastPlayer.z-courtyardZ(lastPlayer.x))<.025?normalizeApartmentSave({stage:'playground',x:lastPlayer.x,face:lastPlayer.face}):null;
   if(Math.abs(lastPlayer.y)>.025||Math.abs(lastPlayer.z-1.4)>.025)return null;
   if(state.story==='quiet')return normalizeApartmentSave(lastPlayer);
   if(state.doorClosed&&lastPlayer.x>=17.53)return normalizeApartmentSave({x:lastPlayer.x,face:lastPlayer.face,stage:'bedroom',nightstandX:state.nightstandX,doorClosed:true});

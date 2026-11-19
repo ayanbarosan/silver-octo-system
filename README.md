@@ -246,3 +246,11 @@ The fall uses fixed physics steps and interpolated poses for consistent motion a
 The father now has a drawn, weathered face, tired eyes, short greying stubble and tousled brown-and-grey hair. His slimmer silhouette wears a worn brown patterned cardigan over an aged grey shirt, loose trousers and checked house slippers. The face and garments are smooth three-dimensional surfaces; knitted patterns and fabric relief follow the animated clothing. Sculpted fingers preserve his grip on the tumbler.
 
 The existing seated, rising, pursuit, strike, retrieval and window escape actions use the new model. The family portrait has matching brown clothing. All model geometry and fabric textures are generated locally and remain available in the downloadable offline game.
+
+## One park beside the home — v0.31
+
+The park visible to the right of the wooden street entrance is now the same park reached after escaping the apartment. Its swings, sandpit, slide, benches and seesaw retain their positions and scale in both views. The obsolete second park and duplicate rear entrance have been removed.
+
+The fire escape descends into a bare service passage beside the home. Walking right follows the paving around the visible building corner and through an open side gate into the park; the street-facing access remains closed. Left/right movement follows this bend continuously, keeping the same walking pace. The camera briefly frames the boy and his father at the park entrance before following the boy farther into the park.
+
+Existing courtyard saves restore onto the supported passage or park path. The developer park shortcut starts inside the actual park.
