@@ -4,7 +4,7 @@ import {developerLocation,moveDeveloperCamera} from '../src/developer-tools.js';
 import {createSession} from '../src/session.js';
 test('every developer location is a valid independent supported Continue snapshot',()=>{
  const session=createSession(null);
- for(const id of['roof','stairwell','street','home','apartment','bedroom','fireescape','playground']){
+ for(const id of['roof','stairwell','street','home','apartment','bedroom','fireescape','playground','alley','workshop','backyard']){
   const seed=developerLocation(id);assert(seed,`${id} must be supported`);assert(session.save(seed));assert.deepEqual(session.getSave(),seed);
   seed.player.x=1000;assert.notEqual(developerLocation(id).player.x,1000);
  }
@@ -17,7 +17,25 @@ test('free movement crosses all three axes with diagonal speed bounded and indep
 });
 test('paused or invalid free movement freezes and boost remains finite within the scene bounds',()=>{
  const p={x:0,y:0,z:0,vx:0,vy:0,vz:0,face:1},before={...p};for(const dt of[0,-1,NaN,Infinity])moveDeveloperCamera(p,dt,{x:1});assert.deepEqual(p,before);
- for(let i=0;i<10000;i++)moveDeveloperCamera(p,1/60,{x:1,y:1,z:1,fast:true});assert(p.x<=180&&p.y<=65&&p.z<=90);assert(Object.values(p).every(v=>typeof v!=='number'||Number.isFinite(v)));
+ for(let i=0;i<10000;i++)moveDeveloperCamera(p,1/60,{x:1,y:1,z:1,fast:true});assert(p.x<=220&&p.y<=65&&p.z<=90);assert(Object.values(p).every(v=>typeof v!=='number'||Number.isFinite(v)));
+});
+
+test('garage shortcuts restore independent playable puzzle checkpoints',async()=>{
+ const {createAlley}=await import('../src/alley.js');
+ for(const [id,area,x]of[['alley','alley',2],['workshop','garage',111.5],['backyard','yard',143]]){
+  const seed=developerLocation(id),controller=createAlley(),player={};controller.begin(player,seed.alley);
+  assert.equal(controller.state.area,area);assert.equal(player.x,x);assert.equal(player.y,0);assert(player.grounded);
+  assert.deepEqual(controller.snapshot(),seed.alley);
+  assert.equal(controller.state.jackStatus,area==='alley'?'ground':'raised');
+  if(area!=='alley'){assert.equal(controller.state.pumpProgress,1);assert.equal(controller.state.fencePassed,true);}
+  seed.alley.crateXs[0]=52;assert.deepEqual(developerLocation(id).alley.crateXs,[43,47,126]);
+ }
+});
+
+test('free movement can inspect the entire final courtyard past the former x180 limit',()=>{
+ const p={x:179,y:0,z:0,vx:0,vy:0,vz:0,face:1};
+ for(let i=0;i<180;i++)moveDeveloperCamera(p,1/60,{x:1,fast:true});
+ assert(p.x>194&&p.x<=220);
 });
 
 test('freezing pursuit holds the father while the player can still move, and release resumes him',async()=>{

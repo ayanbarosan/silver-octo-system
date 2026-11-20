@@ -214,6 +214,21 @@ export function createPlaygroundWorld(THREE,scene,{includeHome=false}={}){
     const light=new THREE.PointLight('#e3c18a',17,10,2);light.position.set(x+.56,4.30,z+.33);group.add(light);lights.push({light,base:17});
     patch(x+.55,-.02,1.7,.65,reflection);patch(x+.42,-2.0,1.1,1.3,reflection,-.044);
   }
+  // The far gate is already open: the park path continues into the garages.
+  const exitX=111.75;
+  for(const z of [-1.02,1.02]){
+    box(.13,2.32,.13,exitX,1.10,z,metal);
+    box(.18,.05,.18,exitX,2.28,z,trim);
+  }
+  // Hinged leaves fold along the path edge, with no bars across the walk lane.
+  for(const side of [-1,1]){
+    const z=side*1.02;
+    for(const y of [.14,1.03,2.13])rod([exitX,y,z],[exitX+1.06,y,z+side*.20],.023,metal);
+    for(let n=0;n<=5;n++){
+      const a=n/5;rod([exitX+a*1.06,.14,z+side*.20*a],[exitX+a*1.06,2.13,z+side*.20*a],.016,metal);
+    }
+  }
+  bounds('park-garage-exit','open-gateway',[exitX-.12,-.06,-1.18],[exitX+1.16,2.33,1.18]);
   for(const batch of batches.values()){
     const object=new THREE.InstancedMesh(geometries[batch.type],batch.material,batch.matrices.length);batch.matrices.forEach((m,i)=>object.setMatrixAt(i,m));object.instanceMatrix.needsUpdate=true;object.castShadow=batch.shadow;object.receiveShadow=true;group.add(object);
   }
@@ -222,7 +237,7 @@ export function createPlaygroundWorld(THREE,scene,{includeHome=false}={}){
     route:{minX:COURTYARD.gateNativeX,maxX:112,y:0,z:0,clearHalfWidth:.60},
     paving:{minX:pavingStart,maxX:pavingEnd,y:0,minZ:-.85,maxZ:.85},
     rearEntrance:includeHome?{x:rearDoorX,y:0,z:rearDoorZ,building:'home',open:true}:null,
-    legacyHomeIncluded:includeHome,
+    legacyHomeIncluded:includeHome,parkExit:{x:exitX,y:0,z:0,open:true,clearHalfWidth:.95,destination:'garage-alley'},
     landmarks:equipment.filter(item=>['swings','sandpit','slide','seesaw'].includes(item.type)).map(({id,type,bounds})=>({id,type,bounds})),
     equipment,lights:lights.length,drawBatches:batches.size,area:'playground'
   };

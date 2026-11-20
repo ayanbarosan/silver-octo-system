@@ -163,7 +163,7 @@ export function createBoy(THREE) {
   const cycle=x=>((x%1)+1)%1;
   const TAU=Math.PI*2,THIGH=.305,SHIN=.31;
   const footWorld=new THREE.Vector3(),temporary=new THREE.Vector3();
-  const animation={phase:0,mode:'idle',wakeStage:'awake',jumpStage:'grounded',climbStage:'none',ladderStage:'none',slipStage:'none',slideStage:'none',storyStage:'none',launchLead:0,launchSpeed:0,landingReach:0,feet:legs.map(()=>({stance:true,contactWeight:1,position:{x:0,y:0,z:0}})),hands:arms.map(()=>({contactWeight:0,position:{x:0,y:0,z:0}}))};
+  const animation={phase:0,mode:'idle',wakeStage:'awake',jumpStage:'grounded',climbStage:'none',ladderStage:'none',slipStage:'none',slideStage:'none',storyStage:'none',alleyStage:'none',launchLead:0,launchSpeed:0,landingReach:0,feet:legs.map(()=>({stance:true,contactWeight:1,position:{x:0,y:0,z:0}})),hands:arms.map(()=>({contactWeight:0,position:{x:0,y:0,z:0}}))};
   group.userData.animation=animation;
   let phase=0,moving=0,running=0,pushing=0,air=0,lean=0,headLean=0,bagLean=0,locomotionActive=false,stairWeight=0;
   let interactionWeight=0,pullWeight=0,lastInteraction=null,interactionWasApplied=false;
@@ -190,11 +190,17 @@ export function createBoy(THREE) {
   const slipInverse=new THREE.Quaternion(),slipDesired=new THREE.Quaternion(),slipUpperQ=new THREE.Quaternion(),slipForeQ=new THREE.Quaternion();
   const slipEuler=new THREE.Euler();
   const storyContacts={hands:[0,0],stances:[false,false],weights:[0,0]},storySill=new THREE.Vector3(),storyPalm=new THREE.Vector3();
+  const alleyContacts={hands:[0,0],stances:[true,true],weights:[1,1]},alleyFeet=legs.map(()=>new THREE.Vector3());
+  const alleyTarget=new THREE.Vector3();
+  const alleyRestArms=arms.map(()=>[0,1,2].map(()=>({quaternion:new THREE.Quaternion(),delta:new THREE.Quaternion(),previousDelta:new THREE.Quaternion(),hasDelta:false})));
+  let alleyWeight=0,lastAlleyAction=null,alleyTransitionTime=Infinity;
   let storyWasApplied=false;
 
   function reset() {
     phase=.04;moving=running=pushing=air=lean=headLean=bagLean=stairWeight=0;locomotionActive=false;
-    interactionWeight=pullWeight=0;lastInteraction=null;interactionWasApplied=false;interactionHands.fill(0);slideWasActive=false;storyWasApplied=false;
+    interactionWeight=pullWeight=0;lastInteraction=null;interactionWasApplied=false;interactionHands.fill(0);slideWasActive=false;storyWasApplied=false;alleyWeight=0;lastAlleyAction=null;
+    for(const arm of alleyRestArms)for(const joint of arm)joint.hasDelta=false;
+    alleyTransitionTime=Infinity;
     landing=landingVelocity=0;previousGrounded=true;previousTime=0;initialized=false;internalAirTime=previousPrep=launchCrouch=0;launchLead=takeoffSpeed=takeoffRun=landingReach=landingFoot=bagVelocity=0;landingAge=Infinity;
     pose.position.set(0,0,0);pose.rotation.set(0,0,0);
     caughtRig=null;animation.ragdoll=null;
@@ -206,7 +212,7 @@ export function createBoy(THREE) {
     // Initialization uses the same IK as moving poses, so restarting cannot
     // retain a knee angle, a contact anchor or a backpack spring from last time.
     legs.forEach((leg,i)=>solveLeg(leg,footState[i].target,0,.64));
-    animation.phase=phase;animation.mode='idle';animation.wakeStage='awake';animation.jumpStage='grounded';animation.climbStage='none';animation.ladderStage='none';animation.slipStage='none';animation.slideStage='none';animation.storyStage='none';animation.launchLead=0;animation.launchSpeed=0;animation.landingReach=0;
+    animation.phase=phase;animation.mode='idle';animation.wakeStage='awake';animation.jumpStage='grounded';animation.climbStage='none';animation.ladderStage='none';animation.slipStage='none';animation.slideStage='none';animation.storyStage='none';animation.alleyStage='none';animation.launchLead=0;animation.launchSpeed=0;animation.landingReach=0;
     updateDiagnostics([true,true],[1,1]);
   }
 
@@ -255,6 +261,8 @@ export function createBoy(THREE) {
   const wakeObjects=[pose,torso,head,bag,...legs.flatMap(l=>[l.hip,l.knee,l.foot]),...arms.flatMap(a=>[a.shoulder,a.elbow,a.wrist])];
   const awakePose=wakeObjects.map(()=>({position:new THREE.Vector3(),quaternion:new THREE.Quaternion(),scale:new THREE.Vector3()}));
   const storyRest=wakeObjects.map(()=>({position:new THREE.Vector3(),quaternion:new THREE.Quaternion(),scale:new THREE.Vector3()}));
+  const alleyTransitionPose=wakeObjects.map(()=>({position:new THREE.Vector3(),quaternion:new THREE.Quaternion(),scale:new THREE.Vector3(),delta:new THREE.Quaternion(),previousDelta:new THREE.Quaternion(),hasDelta:false}));
+  const alleyTransitionFeet=legs.map(()=>new THREE.Vector3());
   const caughtRestHands=[new THREE.Vector3(),new THREE.Vector3()];
   let caughtRig=null;
   const caughtMatrix=new THREE.Matrix4(),caughtX=new THREE.Vector3(),caughtY=new THREE.Vector3(),caughtZ=new THREE.Vector3(),caughtV=new THREE.Vector3();
@@ -645,7 +653,7 @@ export function createBoy(THREE) {
       // The contact belongs to the moving bin, rather than to the child's
       // swaying chest. The two palms keep their near/far sides when mirrored.
       const grip=lastInteraction.gripOffset??(Number.isFinite(lastInteraction.halfWidth)?lastInteraction.halfWidth+.04:.965);
-      interactionTarget.set(lastInteraction.objectX+lastInteraction.side*grip,(lastInteraction.topY??lastInteraction.objectY??1.05)-.23,(lastInteraction.objectZ??0)+arm.side*.16*lastInteraction.side);
+      interactionTarget.set(lastInteraction.objectX+lastInteraction.side*grip,lastInteraction.gripY??(lastInteraction.topY??lastInteraction.objectY??1.05)-.23,(lastInteraction.objectZ??0)+arm.side*.16*lastInteraction.side);
       group.worldToLocal(interactionTarget);
       solveSpatialArm(arm,interactionTarget,0);
       joints.forEach((joint,j)=>{joint.position.lerp(rest[j].position,1-weight);rest[j].solved.copy(joint.quaternion);joint.quaternion.slerpQuaternions(rest[j].quaternion,rest[j].solved,weight);});
@@ -750,6 +758,67 @@ export function createBoy(THREE) {
     }
     animation.mode='slide';animation.slideStage=stage;animation.jumpStage='grounded';
     return slideContacts;
+  }
+
+  function blendAlleyRotation(joint,rest,weight){
+    const q=rest.delta.copy(rest.quaternion).invert().multiply(joint.quaternion);
+    if((rest.hasDelta?q.dot(rest.previousDelta):q.w)<0)q.set(-q.x,-q.y,-q.z,-q.w);
+    rest.previousDelta.copy(q);rest.hasDelta=true;
+    if(weight<1){
+      const angle=Math.acos(clamp(q.w,-1,1)),s=Math.sin(angle),scale=Math.abs(s)>.00001?Math.sin(angle*weight)/s:weight;
+      q.set(q.x*scale,q.y*scale,q.z*scale,Math.cos(angle*weight)).normalize();
+      joint.quaternion.copy(rest.quaternion).multiply(q);
+    }
+  }
+
+  function applyAlleyAction(action,weight,speed) {
+    const type=action.type,p=clamp(Number.isFinite(action.progress)?action.progress:0,0,1),elapsed=Math.max(0,action.elapsed??0);
+    const carry=type==='carry',pickup=type==='pickup-jack',placing=type==='place-jack',crank=type==='crank',windowOpen=type==='open-window';
+    const cycleAngle=Number.isFinite(action.elapsed)?elapsed*TAU:(action.crankPhase??0)*TAU;
+    group.updateWorldMatrix(true,true);
+    for(let i=0;i<2;i++){
+      legs[i].sole.getWorldPosition(alleyFeet[i]);group.worldToLocal(alleyFeet[i]);
+      [arms[i].shoulder,arms[i].elbow,arms[i].wrist].forEach((joint,j)=>alleyRestArms[i][j].quaternion.copy(joint.quaternion));
+    }
+    // Reaching the floor begins with the knees. On lifting, the pelvis comes
+    // back underneath the load before the arms settle at carrying height.
+    let bend=0,carryBody=carry?1:0,grip=1,hip=.64,tilt=0,hipZ=0;
+    if(pickup){bend=smooth(p,0,.29)*(1-smooth(p,.35,.98));carryBody=smooth(p,.42,.99);grip=smooth(p,.14,.35);}
+    if(placing){bend=smooth(p,.55,.98);carryBody=1-bend;grip=1-smooth(p,.91,1);}
+    if(windowOpen)grip=smooth(p,0,.24);
+    if(crank){hip=.50+.012*Math.sin(cycleAngle);tilt=.42+.028*Math.sin(cycleAngle+.35);hipZ=.012;}
+    else{hip=lerp(torso.position.y,torso.position.y-.015,carryBody);hip=lerp(hip,.28,bend);tilt=lerp(torso.rotation.x+.10*carryBody,placing?1.08:.93,bend);hipZ=lerp(torso.position.z-.012*carryBody,-.025,bend);}
+    if(windowOpen){const reach=smooth(p,0,.24)*(1-smooth(p,.65,1));tilt+=.22*reach;hipZ+=.025*reach;}
+    const baseHip=torso.position.y,baseZ=torso.position.z;
+    torso.position.y=lerp(baseHip,hip,weight);torso.position.z=lerp(baseZ,hipZ,weight);
+    torso.rotation.x=lerp(torso.rotation.x,tilt,weight);torso.rotation.z*=1-weight*.55;
+    head.rotation.x+=weight*(crank?-.20:-.40*bend-.025*carryBody);
+    bag.rotation.x+=weight*(.035*carryBody+.035*bend+(crank?.025*Math.sin(cycleAngle+.65):0));
+    for(let i=0;i<2;i++)solveLeg(legs[i],alleyFeet[i],footState[i].roll,torso.position.y,torso.position.z);
+    const face=action.face===-1?-1:1;
+    for(let i=0;i<2;i++){
+      const arm=arms[i],handle=crank||windowOpen&&i===0?action.handle:null;
+      const handBlend=weight*grip*(windowOpen?1-smooth(p,i===0?.43:.84,i===0?.67:1):1);
+      if(handle&&[handle.x,handle.y,handle.z].every(Number.isFinite)){
+        alleyTarget.set(handle.x-(i===0?0:.025)*face,handle.y-(i===0?0:.012),handle.z-(windowOpen?0:face*arm.side*.11));
+      }else if(windowOpen){
+        alleyTarget.set(action.objectX,action.objectY-(i===0?0:.15),action.objectZ-(i===0?0:face*.17));
+      }else{
+        alleyTarget.set(action.objectX-(placing?.14*smooth(p,.55,.98)*face:0),action.objectY+.06,action.objectZ-face*arm.side*.15);
+      }
+      group.worldToLocal(alleyTarget);
+      const target=handTargets[i].copy(alleyTarget);
+      solveSpatialArm(arm,target,windowOpen?(i===0?.12+.30*Math.sin(p*Math.PI):.08):crank?.27:.15,arm.side);
+      // Keep the IK rotation on the same quaternion branch while acquiring a
+      // grip. A shortest-path slerp against the idle pose flips direction when
+      // a bent forearm passes 180 degrees, visibly snapping the palm sideways.
+      [arm.shoulder,arm.elbow,arm.wrist].forEach((joint,j)=>blendAlleyRotation(joint,alleyRestArms[i][j],handBlend));
+      group.updateWorldMatrix(true,true);arm.palm.getWorldPosition(interactionActual);group.worldToLocal(interactionActual);
+      alleyContacts.hands[i]=handBlend*(1-smooth(interactionActual.distanceTo(alleyTarget),.008,.065));
+    }
+    animation.alleyStage=carry?'carrying':pickup?(p<.35?'jack-reach':'jack-lift'):placing?(p<.55?'jack-align':p<.91?'jack-lower':'jack-release'):crank?'jack-crank':windowOpen?(p<.25?'window-handle-reach':p<.65?'window-handle-turn':'window-push'):'none';
+    if(weight>.5)animation.mode=carry?(Math.abs(speed)>.04?'carry-walk':'carry-idle'):crank?'crank':windowOpen?'window-opening':'jack-handling';
+    return alleyContacts;
   }
 
   function applyWindowClimb(windowClimb) {
@@ -899,7 +968,9 @@ export function createBoy(THREE) {
    * accelerating or settling into a stop.
    */
   function animate({time=0,speed=0,grounded=true,wake=1,push=false,interaction=null,crouch=0,slide=null,vy=0,dt,travel,acceleration=0,landImpact=0,jumpPrep=0,airTime,takeoff,climb=null,ladder=null,slip=null,stairs=null,story=null,launchSpeed,landingDistance}={}) {
-    const storyAction=!!story?.windowClimb||!!story?.caught;
+    const alleyAction=story?.alleyAction&&['carry','pickup-jack','place-jack','crank','open-window'].includes(story.alleyAction.type)?story.alleyAction:null;
+    const toolPlanted=!!alleyAction&&(alleyAction.type==='crank'||alleyAction.type==='pickup-jack'&&alleyAction.progress>=.28||alleyAction.type==='place-jack'&&alleyAction.progress>=.62);
+    const storyAction=!!story?.windowClimb||!!story?.caught||toolPlanted;
     const sliding=slide&&['drop','glide','recover'].includes(slide.phase)&&grounded&&wake>=1&&!climb&&!ladder&&!slip&&!stairs;
     if(climb||ladder||slip||sliding||storyAction){grounded=true;speed=0;travel=0;jumpPrep=0;airTime=0;takeoff=0;}
     const delta=clamp(Number.isFinite(dt)?dt:(initialized?time-previousTime:1/60),0,.1);
@@ -907,18 +978,31 @@ export function createBoy(THREE) {
     stepResult.footstep=false;stepResult.intensity=0;stepResult.bodyImpact=0;
     if(initialized&&delta===0)return stepResult;
     initialized=true;
+    if(alleyAction&&lastAlleyAction?.type==='place-jack'&&alleyAction.type==='crank'){
+      // Holding E through installation must let the child rise and take the
+      // crank, rather than changing two completed action poses in one frame.
+      for(let i=0;i<wakeObjects.length;i++){const object=wakeObjects[i],from=alleyTransitionPose[i];from.position.copy(object.position);from.quaternion.copy(object.quaternion);from.scale.copy(object.scale);from.hasDelta=false;}
+      group.updateWorldMatrix(true,true);for(let i=0;i<2;i++){legs[i].sole.getWorldPosition(alleyTransitionFeet[i]);group.worldToLocal(alleyTransitionFeet[i]);}
+      alleyTransitionTime=0;
+    }
+    if(alleyAction)lastAlleyAction={...alleyAction,handle:alleyAction.handle?{...alleyAction.handle}:null};
+    if(alleyAction&&alleyAction.type!=='crank')alleyTransitionTime=Infinity;
+    alleyWeight=damp(alleyWeight,alleyAction?1:0,alleyAction?14:8,delta);
+    if(alleyWeight<.0001)for(const arm of alleyRestArms)for(const joint of arm)joint.hasDelta=false;
+    if(climb||ladder||slip||sliding||story?.windowClimb||story?.caught){alleyWeight=0;lastAlleyAction=null;alleyTransitionTime=Infinity;}
+    const poseAction=storyAction||alleyWeight>.0001;
     if(storyWasApplied){
       // Keep advancing the unmodified locomotion pose beneath a scripted pose.
       // Feeding an IK guard or crouched window pose back into the free arm
       // filters would change Euler branches and visibly jerk an elbow.
       for(let i=0;i<wakeObjects.length;i++){const object=wakeObjects[i],base=storyRest[i];object.position.copy(base.position);object.quaternion.copy(base.quaternion);object.scale.copy(base.scale);}
-      if(!storyAction){caughtRig=null;animation.ragdoll=null;pose.position.set(0,0,0);pose.rotation.set(0,0,0);for(const foot of footState){foot.hasAnchor=false;foot.wasStance=false;foot.landingPlant=false;}}
+      if(!poseAction){caughtRig=null;animation.ragdoll=null;pose.position.set(0,0,0);pose.rotation.set(0,0,0);for(const foot of footState){foot.hasAnchor=false;foot.wasStance=false;foot.landingPlant=false;}}
     }
-    storyWasApplied=storyAction;
+    storyWasApplied=poseAction;
     if(sliding&&!slideWasActive)captureSlideEntry();
     if(!sliding&&slideWasActive)for(const foot of footState){foot.hasAnchor=false;foot.wasStance=false;foot.landingPlant=false;}
     slideWasActive=!!sliding;
-    const gripping=interaction&&['push','pull','hold'].includes(interaction.kind)&&Number.isFinite(interaction.objectX)&&(interaction.side===-1||interaction.side===1)&&grounded&&wake>=1&&!climb&&!ladder&&!slip&&!storyAction;
+    const gripping=interaction&&['push','pull','hold'].includes(interaction.kind)&&Number.isFinite(interaction.objectX)&&(interaction.side===-1||interaction.side===1)&&grounded&&wake>=1&&!climb&&!ladder&&!slip&&!poseAction;
     if(gripping)lastInteraction={...interaction};
     interactionWeight=damp(interactionWeight,gripping?1:0,14,delta);
     pullWeight=damp(pullWeight,gripping&&interaction.kind==='pull'?1:0,11,delta);
@@ -1204,12 +1288,20 @@ export function createBoy(THREE) {
     animation.jumpStage=grounded?(jumpPrep>0?'anticipation':landing>.008?'landing':'grounded'):(launchProgress<1?'takeoff':vy>1.2?'rising':vy>-.9?'apex':'descent');
     let handWeights=wakeProgress<1?applyWake(wakeProgress,time):noHands;
     if(manipulation>.0001){handWeights=applyInteraction(manipulation);if(manipulation>.5)animation.mode=lastInteraction.kind;}
-    animation.climbStage='none';animation.ladderStage='none';animation.slipStage='none';animation.slideStage='none';animation.storyStage='none';
+    animation.climbStage='none';animation.ladderStage='none';animation.slipStage='none';animation.slideStage='none';animation.storyStage='none';animation.alleyStage='none';
     if(climb){const contacts=applyClimb(climb);handWeights=contacts.hands;stances[0]=contacts.stances[0];stances[1]=contacts.stances[1];weights[0]=contacts.weights[0];weights[1]=contacts.weights[1];footstep=false;}
     if(ladder){const contacts=applyLadder(ladder);handWeights=contacts.hands;stances[0]=contacts.stances[0];stances[1]=contacts.stances[1];weights[0]=contacts.weights[0];weights[1]=contacts.weights[1];footstep=false;}
     if(slip){const contacts=applySlip(slip);handWeights=contacts.hands;stances[0]=contacts.stances[0];stances[1]=contacts.stances[1];weights[0]=contacts.weights[0];weights[1]=contacts.weights[1];footstep=false;}
     if(sliding){const contacts=applySlide(slide);handWeights=contacts.hands;stances[0]=contacts.stances[0];stances[1]=contacts.stances[1];weights[0]=contacts.weights[0];weights[1]=contacts.weights[1];footstep=false;}
-    if(storyAction)for(let i=0;i<wakeObjects.length;i++){const object=wakeObjects[i],base=storyRest[i];base.position.copy(object.position);base.quaternion.copy(object.quaternion);base.scale.copy(object.scale);}
+    if(poseAction)for(let i=0;i<wakeObjects.length;i++){const object=wakeObjects[i],base=storyRest[i];base.position.copy(object.position);base.quaternion.copy(object.quaternion);base.scale.copy(object.scale);}
+    if(alleyWeight>.0001&&lastAlleyAction){const contacts=applyAlleyAction(lastAlleyAction,alleyWeight,speed);handWeights=contacts.hands;if(toolPlanted)footstep=false;}
+    if(alleyTransitionTime<.42){
+      const blend=smooth(alleyTransitionTime,0,.42);
+      group.updateWorldMatrix(true,true);for(let i=0;i<2;i++){legs[i].sole.getWorldPosition(alleyFeet[i]);group.worldToLocal(alleyFeet[i]);}
+      for(let i=0;i<wakeObjects.length;i++){const object=wakeObjects[i],from=alleyTransitionPose[i];object.position.lerp(from.position,1-blend);blendAlleyRotation(object,from,blend);object.scale.lerp(from.scale,1-blend);}
+      for(let i=0;i<2;i++){solveLeg(legs[i],alleyFeet[i].lerp(alleyTransitionFeet[i],1-blend),footState[i].roll,torso.position.y,torso.position.z);handWeights[i]*=smooth(blend,.94,1);}
+      alleyTransitionTime+=delta;
+    }
     if(story?.windowClimb){const contacts=applyWindowClimb(story.windowClimb);handWeights=contacts.hands;stances[0]=contacts.stances[0];stances[1]=contacts.stances[1];weights[0]=contacts.weights[0];weights[1]=contacts.weights[1];footstep=false;}
     if(story?.caught){const contacts=applyCaught(story.caught);handWeights=contacts.hands;stances[0]=contacts.stances[0];stances[1]=contacts.stances[1];weights[0]=contacts.weights[0];weights[1]=contacts.weights[1];footstep=false;}
     if(wakeProgress<1){stances.fill(false);weights.fill(0);}

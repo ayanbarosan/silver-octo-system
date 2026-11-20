@@ -85,6 +85,7 @@ export function createDeveloperPanel({
   const locations=[
     ['roof','Rooftop'],['stairwell','First stairwell'],['street','Street'],['home','Apartment block'],
     ['apartment','Apartment kitchen'],['bedroom','Bedroom checkpoint'],['fireescape','Fire escape'],['playground','Playground'],
+    ['alley','Garage alley'],['workshop','Garage workshop'],['backyard','Backyard'],
   ];
   for(const[id,label]of locations)location.append(el('option',{value:id},label));
   locationRow.append(location);

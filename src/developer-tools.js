@@ -1,5 +1,6 @@
 import {createSaveSnapshot} from './session.js';
 import {TUTORIAL_IDS} from './tutorial.js';
+import {ALLEY} from './alley.js';
 
 // Test locations use the same supported save format as ordinary Continue.
 export function developerLocation(id){
@@ -13,6 +14,11 @@ export function developerLocation(id){
  else if(id==='bedroom'){Object.assign(value,{chapter:'apartment',apartment:{x:19.25,face:1,stage:'bedroom',nightstandX:21.2,doorClosed:true}});player.x=19.25;}
  else if(id==='fireescape'){Object.assign(value,{chapter:'apartment',apartment:{x:27.1,face:1,stage:'fireescape',flight:0}});player.x=27.1;}
  else if(id==='playground'){Object.assign(value,{chapter:'apartment',apartment:{x:40,face:1,stage:'playground'}});Object.assign(player,{x:40,y:-6.4});}
+ else if(['alley','workshop','backyard'].includes(id)){
+  const area=id==='workshop'?'garage':id==='backyard'?'yard':'alley',x=id==='workshop'?111.5:id==='backyard'?143:ALLEY.entry.x;
+  Object.assign(value,{chapter:'alley',alley:{area,x,y:0,face:1,crateXs:ALLEY.crates.map(crate=>crate.x),jackStatus:area==='alley'?'ground':'raised',pumpProgress:area==='alley'?0:1,fencePassed:area!=='alley'}});
+  Object.assign(player,{x,y:0});
+ }
  else return null;
  return createSaveSnapshot(value);
 }
@@ -25,6 +31,6 @@ export function moveDeveloperCamera(player,dt,input={}){
   player[key]+=target*dt+(old-target)*(1-decay)/10;player[velocity]=target+(old-target)*decay;
   if(!length&&Math.abs(player[velocity])<.002)player[velocity]=0;
  }
- player.x=Math.max(-100,Math.min(180,player.x));player.y=Math.max(-45,Math.min(65,player.y));player.z=Math.max(-90,Math.min(90,player.z));
+ player.x=Math.max(-100,Math.min(220,player.x));player.y=Math.max(-45,Math.min(65,player.y));player.z=Math.max(-90,Math.min(90,player.z));
  if(direction[0])player.face=direction[0];player.grounded=false;
 }

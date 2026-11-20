@@ -30,12 +30,12 @@ Open the generated `dist/Runaway.html` file in Chrome, Edge, or Firefox. No serv
 - **S** or **Down** at the wall ladder: climb down, including entering the ladder from the upper roof.
 - **D / Right** or **A / Left** while on the ladder: climb up or down, respectively. Release the controls to hold still; reverse direction at any point.
 - **Hold E + a direction**: push the crate; push or pull the street dumpster.
-- **Hold Ctrl or C** on the street: crouch and move slowly. Release to stand after clearing low obstacles.
+- **Hold Ctrl or C** on the street or garage alley: crouch and move slowly. Release to stand after clearing low obstacles.
 - **E**: open the lit door.
 - **Esc**: pause or resume; close Settings to return to its previous menu. On a touchscreen, the small pause icon opens the pause menu.
 - **R**: restart the level.
 
-Small touch icons appear on touchscreen devices. The running figure toggles running; the open hand interacts. Hold the hand icon and a direction to push or pull the dumpster. Press **↑** beside the crate or dumpster to climb onto it. Near the ladder, an extra **↓** button appears for climbing down; the **↑** button climbs up. The **← / →** buttons also move down or up while on the ladder. Release the buttons to hold your place. The crouching figure toggles crouch on the street; tap it again to stand when there is room. Sound and volume are controlled from **Settings**.
+Small touch icons appear on touchscreen devices. The running figure toggles running; the open hand interacts. Hold the hand icon and a direction to push or pull the dumpster. Press **↑** beside the crate or dumpster to climb onto it. Near the ladder, an extra **↓** button appears for climbing down; the **↑** button climbs up. The **← / →** buttons also move down or up while on the ladder. Release the buttons to hold your place. The crouching figure toggles crouch on the street and garage alley; tap it again to stand when there is room. Sound and volume are controlled from **Settings**.
 
 After **New Game**, the boy automatically braces his palms against the roof, brings a knee beneath him, and stands. Jumps preserve forward momentum, choose a leading leg from the current stride, and blend through anticipation, takeoff, airborne recovery, landing reach, and a step back into movement. A short input buffer and edge grace make repeated jumps more forgiving. At reachable vent and pipe ledges, he grabs the edge and pulls himself onto the roof automatically. Climbing onto the crate requires **Space**, **W**, **Up**, or the phone’s **↑** button.
 
@@ -254,3 +254,14 @@ The park visible to the right of the wooden street entrance is now the same park
 The fire escape descends into a bare service passage beside the home. Walking right follows the paving around the visible building corner and through an open side gate into the park; the street-facing access remains closed. Left/right movement follows this bend continuously, keeping the same walking pace. The camera briefly frames the boy and his father at the park entrance before following the boy farther into the park.
 
 Existing courtyard saves restore onto the supported passage or park path. The developer park shortcut starts inside the actual park.
+
+
+## Garage alley — v0.32
+
+The open gate at the end of the park leads into a rain-soaked alley of concrete garages and corrugated metal doors. Original 3D scenery includes rusty pitched roofs, muddy puddles, weeds, discarded parts, a mechanic working under a car bonnet, and a sleeping territorial dog. Nearby dogs, a muffled television, tools and rain on metal roofs use spatial audio. The garage resident and the yard owner are separate characters.
+
+Walk quietly past the dog, then move and climb the timber crates to cross the first locked fence. A second locked gate requires a route through the workshop: find the mechanical jack beside the old car, carry it to the stuck shutter, press **E** to place it, then hold **E** to operate the handle. The noisy door wakes the resident upstairs. Crouch under the raised shutter with **C / Ctrl**; inside, push the crate toward the rear window, climb onto it and press **E** at the latch. Use cover and the owner's changing gaze to cross the final yard. Running followed by **C / Ctrl** keeps the existing slide mechanic.
+
+Safe progress stores crate positions, the carried or installed jack, partial door lift and the workshop/backyard route. Being caught returns to a nearby checkpoint; entering the workshop preserves the raised door. Pausing freezes movement, threats and alley audio. Continue restores safe grounded positions and completed runs show the ending. Optional captions appear only with **Hints** enabled. The concealed developer menu also offers Garage alley, Garage workshop and Backyard test locations; free movement reaches the entire new area.
+
+The level emphasizes exploration and moderate tension, with nearby checkpoints to keep retries short.
