@@ -38,6 +38,14 @@ test('free movement can inspect the entire final courtyard past the former x180 
  assert(p.x>194&&p.x<=220);
 });
 
+test('the storage shortcut restores the actual optional room and keeps the gate locked',async()=>{
+ const {ALLEY,createAlley}=await import('../src/alley.js'),seed=developerLocation('storage');
+ assert(seed);assert.equal(seed.alley.area,'storage');assert.equal(seed.alley.gateOpened,false);
+ const player={},controller=createAlley();controller.begin(player,seed.alley);
+ assert.equal(player.z,ALLEY.storage.lane);assert(controller.state.storageVisited);
+ assert.equal(controller.state.gateKey,false);assert(controller.snapshot());
+});
+
 test('freezing pursuit holds the father while the player can still move, and release resumes him',async()=>{
  const {createApartment}=await import('../src/apartment.js');
  const apartment=createApartment(),player={};apartment.begin(player,{x:10,face:1});

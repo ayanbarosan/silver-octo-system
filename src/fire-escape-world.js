@@ -1,3 +1,5 @@
+import {escapeHeight} from './apartment.js';
+
 // A real metal fire escape and a rain-soaked courtyard. The two stair flights
 // use the same dimensions as the apartment controller, with separate depths at
 // their crossing so the child never passes through an earlier flight.
@@ -100,6 +102,13 @@ export function createFireEscapeWorld(THREE,scene){
   for(const z of [.65,2.30])box(.15,2.20,.085,25.82,2.05,z,windowFrame,false,upperFacade);
   for(const y of [1.0,3.10])box(.15,.085,1.82,25.82,y,1.475,windowFrame,false,upperFacade);
   box(.50,.11,1.94,25.76,.96,1.475,concrete,false,upperFacade);
+  // The interior cutaway is replaced once the child is below the first
+  // flight. Preserve a shallow, boxed bedroom recess behind the open aperture,
+  // so the closed exterior never reveals sky through an empty room.
+  const windowRecess=new THREE.Group();windowRecess.name='bedroom-window-interior-recess';upperFacade.add(windowRecess);
+  box(.055,1.98,1.73,25.20,2.05,1.475,dark,false,windowRecess);
+  for(const y of [1.045,3.055])box(.66,.05,1.77,25.53,y,1.475,plaster,false,windowRecess);
+  for(const z of [.62,2.33])box(.66,2.06,.045,25.53,2.05,z,plaster,false,windowRecess);
   const openWindow=new THREE.Group();openWindow.name='bedroom-window-open-exterior';openWindow.position.set(25.82,1.04,.69);openWindow.rotation.y=Math.PI*.52;upperFacade.add(openWindow);
   for(const z of [0,1.57])box(.060,1.98,.055,0,.99,z,windowFrame,false,openWindow);
   for(const y of [0,1.98])box(.060,.055,1.62,0,y,.785,windowFrame,false,openWindow);
@@ -275,7 +284,7 @@ export function createFireEscapeWorld(THREE,scene){
   // No duplicate playground is built beneath the fire escape.
   const equipment=[];
   for(const batch of batches.values()){
-    const object=new THREE.InstancedMesh(geometries[batch.type],batch.mat,batch.matrices.length);batch.matrices.forEach((matrix,i)=>object.setMatrixAt(i,matrix));object.instanceMatrix.needsUpdate=true;object.castShadow=batch.shadow;object.receiveShadow=true;batch.parent.add(object);
+    const object=new THREE.InstancedMesh(geometries[batch.type],batch.mat,batch.matrices.length);batch.matrices.forEach((matrix,i)=>object.setMatrixAt(i,matrix));object.instanceMatrix.needsUpdate=true;object.castShadow=batch.shadow||batch.mat===iron||batch.mat===ironEdge;object.receiveShadow=true;batch.parent.add(object);
   }
   // One draw for rain at three depths. It never affects interior rendering.
   const rainCount=1000,rainData=new Float32Array(rainCount*6),rainSpeed=new Float32Array(rainCount);
@@ -284,6 +293,7 @@ export function createFireEscapeWorld(THREE,scene){
   const rain=new THREE.LineSegments(rainGeo,new THREE.LineBasicMaterial({color:'#b0c9d4',transparent:true,opacity:.18,depthWrite:false,fog:true}));rain.frustumCulled=false;group.add(rain);
   const metadata={
     style:'american-wall-mounted',facade:facadeBounds,decks,anchors,railRuns,freestandingPosts:0,
+    exterior:{closureY:-1.7,cutaway:true,closed:false,windowRecess:{min:[25.1725,1.02,.5975],max:[25.86,3.08,2.3525]},metalShadows:true},
     solids:[{id:'fire-escape-brick-wing',bounds:facadeBounds},{id:'home-building-return-wall',bounds:returnWallBounds},...gatePosts,{id:'open-side-gate-leaf',bounds:sideGate.leaf},...decks.map((bounds,index)=>({id:`balcony-deck-${index}`,bounds})),...anchors.map((anchor,index)=>({id:`wall-bracket-${index}`,bounds:anchor.bounds}))],
     bounds:{min:[20.35,groundY-.3,-33.6],max:[67.6,16.3,7.5]},
     sharedPark:{id:'home-front-right-park',providedBy:'playground-world',translation:[-50,groundY,6.2]},
@@ -296,9 +306,11 @@ export function createFireEscapeWorld(THREE,scene){
     watch:{x:27.1,y:0,z:1.4},equipment,windows:nearWindows.length,lights:lamps.length,drawBatches:batches.size,rainDrops:rainCount
   };
   group.userData.fireEscape=metadata;let lastTime=null;
-  return {group,metadata,update(time,playerX=28,state=null){
+  return {group,metadata,update(time,playerX=28,state=null,playerY=undefined){
     if(!group.visible)return;
-    upperFacade.visible=state?.area==='playground';
+    const y=Number.isFinite(playerY)?playerY:state?.area==='fireescape'?escapeHeight(state.escapeFlight??0,playerX):0;
+    const closed=state?.area==='playground'||state?.area==='fireescape'&&y<metadata.exterior.closureY;
+    upperFacade.visible=closed;metadata.exterior.closed=closed;metadata.exterior.cutaway=!closed;
     const dt=lastTime===null?0:Math.min(.05,Math.max(0,time-lastTime));lastTime=time;
     for(let i=0;i<rainCount;i++){const o=i*6;rainData[o]-=dt*.9;rainData[o+1]-=rainSpeed[i]*dt;if(rainData[o+1]<groundY-.5||Math.abs(rainData[o]-playerX)>30){rainData[o]=playerX-22+rand(i+time*.13)*44;rainData[o+1]=7+rand(i+917)*5;}rainData[o+3]=rainData[o]-.025;rainData[o+4]=rainData[o+1]-(.16+rand(i+71)*.28);rainData[o+5]=rainData[o+2];}rainGeo.attributes.position.needsUpdate=true;
     lamps.forEach((light,i)=>{light.intensity=7.5*(.994+.004*Math.sin(time*.9+i));});

@@ -6,7 +6,7 @@ const mix=(a,b,t)=>a+(b-a)*t;
 const copy=record=>record?{...record,...(record.handle?{handle:{...record.handle}}:{})}:null;
 export function captureAlleyPose(state){
  if(!state)return null;
- const pose={phase:state.phase,phaseTime:state.phaseTime,crouch:state.crouch,doorGap:state.doorGap,pumpProgress:state.pumpProgress,windowProgress:state.windowProgress};
+ const pose={phase:state.phase,phaseTime:state.phaseTime,crouch:state.crouch,doorGap:state.doorGap,pumpProgress:state.pumpProgress,windowProgress:state.windowProgress,storageDoorProgress:state.storageDoorProgress,gateProgress:state.gateProgress,chainProgress:state.chainProgress};
  for(const key of ['dog','owner','garageResident','jackVisual','alleyAction','windowClimb','caught','climb','slide'])pose[key]=copy(state[key]);
  pose.crates=state.crates.map(copy);return pose;
 }
@@ -19,7 +19,7 @@ function record(current,previous,alpha,fields){
 export function interpolateAlleyState(state,previous,alpha){
  if(!state)return null;
  alpha=Math.max(0,Math.min(1,alpha));const result={...state};
- if(previous)for(const key of ['crouch','doorGap','pumpProgress','windowProgress'])if(Number.isFinite(state[key])&&Number.isFinite(previous[key]))result[key]=mix(previous[key],state[key],alpha);
+ if(previous)for(const key of ['crouch','doorGap','pumpProgress','windowProgress','storageDoorProgress','gateProgress','chainProgress'])if(Number.isFinite(state[key])&&Number.isFinite(previous[key]))result[key]=mix(previous[key],state[key],alpha);
  if(previous?.phase===state.phase&&Number.isFinite(state.phaseTime))result.phaseTime=mix(previous.phaseTime??state.phaseTime,state.phaseTime,alpha);
  for(const key of ['dog','owner','garageResident','jackVisual']){
   const current=state[key],candidate=previous?.[key],old=current?.role===candidate?.role?candidate:null;result[key]=record(current,old,alpha,['x','y','z','alert','raised']);

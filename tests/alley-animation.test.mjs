@@ -161,3 +161,34 @@ test('holding or releasing interact after placement rises into cranking without 
  assert(maxMotion<.08,`A place-to-crank joint teleports ${maxMotion.toFixed(3)}m.`);assert(floor<.02);
  }
 });
+
+test('keys, radio, gate and chain interactions reach their real handles and release smoothly',()=>{
+ for(const type of ['take-key','radio-switch','open-gate','rattle-chain'])for(const face of [-1,1])for(const depth of [0,-.38]){
+  const boy=make(face),handle={x:face*.50,y:type==='take-key'?1:.95,z:1.4+depth};
+  let error=0,contact=0,previous=null,maxStep=0;
+  for(let n=0;n<150;n++){
+   const time=n*dt,p=Math.min(time/.75,1),a=p<1?action(type,handle.x,handle.y,face,{progress:p,elapsed:time,handle}):null;
+   animate(boy,time,a);
+   const q=points(boy);assert(transforms(boy).every(Number.isFinite));
+   if(previous)q.forEach((point,i)=>maxStep=Math.max(maxStep,point.distanceTo(previous[i])));previous=q;
+   if(p>.49&&p<.66){const hands=boy.group.userData.animation.hands;error=Math.max(error,Math.min(...hands.map(hand=>new THREE.Vector3(hand.position.x,hand.position.y,hand.position.z).distanceTo(new THREE.Vector3(handle.x,handle.y,handle.z)))));contact=Math.max(contact,...hands.map(hand=>hand.contactWeight));}
+  }
+  assert(error<.045,`${type} misses its handle by ${error.toFixed(3)}m`);
+  assert(contact>.75,`${type} never acquires a supporting contact`);
+  assert(maxStep<.10,`${type} snaps a joint by ${maxStep.toFixed(3)}m`);
+ }
+});
+
+test('a child carrying the jack frees one hand for a switch and takes the load again without a snap',()=>{
+ const boy=make(),tool={x:.38,y:.77,z:1.4},handle={x:.5,y:.95,z:1.02};
+ let previous=null,maxStep=0;
+ for(let n=0;n<420;n++){
+  const time=n*dt,interacting=time>=1&&time<1.8;
+  const a=interacting?action('radio-switch',handle.x,handle.y,1,{progress:(time-1)/.8,elapsed:time-1,handle}):action('carry',tool.x,tool.y,1,{elapsed:time});
+  boy.animate({time,dt,grounded:true,wake:1,story:{alleyAction:a,jackStatus:'carried',jackVisual:tool}});
+  const q=points(boy);assert(transforms(boy).every(Number.isFinite));
+  if(previous)q.forEach((point,i)=>maxStep=Math.max(maxStep,point.distanceTo(previous[i])));previous=q;
+  if(time>1.4&&time<1.5){const hand=boy.group.userData.animation.hands[0];assert(new THREE.Vector3(hand.position.x,hand.position.y,hand.position.z).distanceTo(new THREE.Vector3(tool.x,tool.y+.06,tool.z+.15))<.04);}
+ }
+ assert(maxStep<.12,`Changing the grip moves a joint ${maxStep.toFixed(3)}m in one frame.`);
+});

@@ -21,6 +21,29 @@ export function createPlaygroundWorld(THREE,scene,{includeHome=false}={}){
     }
     const map=new THREE.CanvasTexture(canvas);map.colorSpace=THREE.SRGBColorSpace;map.wrapS=map.wrapT=THREE.RepeatWrapping;map.anisotropy=4;return map;
   }
+  // World units keep plaster grain continuous across the wall's many solid
+  // returns. Native texture origins also survive the park chapter transform.
+  function masonry(material){
+    material.onBeforeCompile=shader=>{
+      shader.vertexShader=shader.vertexShader.replace('#include <uv_vertex>',`#include <uv_vertex>
+        vec4 masonryPoint=vec4(position,1.0);
+        vec3 masonryNormal=normal;
+        #ifdef USE_INSTANCING
+          masonryPoint=instanceMatrix*masonryPoint;
+          masonryNormal=mat3(instanceMatrix)*masonryNormal;
+        #endif
+        vec3 masonryWorld=mat3(modelMatrix)*masonryPoint.xyz;
+        vec3 masonryAxis=abs(normalize(mat3(modelMatrix)*masonryNormal));
+        vec2 masonryUv=masonryAxis.z>masonryAxis.x&&masonryAxis.z>masonryAxis.y?masonryWorld.xy:(masonryAxis.y>masonryAxis.x?masonryWorld.xz:masonryWorld.zy);
+        #ifdef USE_MAP
+          vMapUv=masonryUv*.40;
+        #endif
+        #ifdef USE_BUMPMAP
+          vBumpMapUv=masonryUv*.40;
+        #endif`);
+    };
+    material.customProgramCacheKey=()=> 'continuous-masonry-v1';
+  }
   const plasterMap=texture('plaster'),groundMap=texture('ground'),sandMap=texture('sand');
   const plasterBump=plasterMap.clone();plasterBump.colorSpace=THREE.NoColorSpace;
   const groundBump=groundMap.clone();groundBump.colorSpace=THREE.NoColorSpace;
@@ -43,6 +66,7 @@ export function createPlaygroundWorld(THREE,scene,{includeHome=false}={}){
   ac.fillStyle='#000';ac.fillRect(0,0,128,128);ac.filter='blur(4px)';ac.beginPath();
   for(let i=0;i<20;i++){const a=i/19*Math.PI*2,r=39+rand(i+943)*17,x=64+Math.cos(a)*r,y=64+Math.sin(a)*r*.82;if(i)ac.lineTo(x,y);else ac.moveTo(x,y);}ac.closePath();ac.fillStyle='#fff';ac.fill();
   const alpha=new THREE.CanvasTexture(alphaCanvas);wet.alphaMap=reflection.alphaMap=alpha;
+  [plaster,distant,farWall,concrete,paving,soil,sand,wood].forEach(masonry);
   const batches=new Map(),dummy=new THREE.Object3D();
   const geometries={box:new THREE.BoxGeometry(1,1,1),cylinder:new THREE.CylinderGeometry(1,1,1,12),plane:new THREE.PlaneGeometry(1,1)};
   function instance(type,material,position,scale,q=null,shadow=true){
@@ -60,7 +84,7 @@ export function createPlaygroundWorld(THREE,scene,{includeHome=false}={}){
   // The service passage supplies its own paving up to the park's side entry.
   // Starting this strip at the entry avoids overlapping coplanar floor meshes.
   const pavingStart=COURTYARD.gateNativeX,pavingEnd=119;
-  box(90,.32,65,99,-.27,-24,concrete);box(54,.10,15,98,-.12,-4.8,soil);
+  box(90,.32,90,99,-.27,-24,concrete);box(54,.10,15,98,-.12,-4.8,soil);
   box(pavingEnd-pavingStart,.08,1.7,(pavingStart+pavingEnd)/2,-.04,0,paving);
   for(let x=pavingStart;x<pavingEnd;x+=1.12){box(.018,.005,1.69,x,.003,0,concrete,false);box(Math.min(1.10,pavingEnd-x),.13,.21,x+Math.min(1.10,pavingEnd-x)/2,-.025,.93,paving);}
   for(let i=0;i<38;i++)patch(pavingStart+1.2+rand(i+15)*29.4,-.25+rand(i+77)*-6,.65+rand(i+135)*2.2,.25+rand(i+247)*.95,wet,rand(i+77)<.18?.006:-.058);
@@ -69,26 +93,54 @@ export function createPlaygroundWorld(THREE,scene,{includeHome=false}={}){
   for(let x=86;x<112;x+=1.0)for(let z=-6.9;z<-1.9;z+=1.0)box(.985,.028,.985,x,-.055,z,(Math.round(x-z)%7===0?teal:concrete),false);
   for(let i=0;i<120;i++){const x=82+rand(i+491)*33,z=-1.25-rand(i+523)*6.3;box(.025+rand(i+609)*.055,.01,.025,x,-.04,z,rand(i+749)>.5?rust:concrete,false);}
 
-  function facade(x,width,height,z,material,seed,near=false){
-    box(width,height,3.4,x,height/2,z-1.72,material);
-    const columns=Math.max(2,Math.floor(width/2.1));
-    for(let row=0;2.9+row*2.75<height-.6;row++)for(let col=0;col<columns;col++){
-      const wx=x-width/2+1.12+col*(width-2.24)/(columns-1),wy=2.9+row*2.75,lit=rand(seed+row*43+col*13)>.87;
-      box(.91,1.29,.035,wx,wy,z+.01,dark,false);box(.78,1.16,.022,wx,wy,z+.04,lit?warmWindow:glass,false);
-      for(const dx of [-.421,.421])box(.04,1.26,.06,wx+dx,wy,z+.065,metal,false);
-      box(.031,1.22,.06,wx,wy,z+.071,metal,false);box(.85,.035,.06,wx,wy-.12,z+.071,metal,false);box(1.00,.09,.17,wx,wy-.68,z+.07,paving);
-      if(lit)for(const dx of [-.28,.29])box(.15,1.13,.01,wx+dx,wy,z+.06,curtain,false);
-      if(near&&row>0&&col===1&&row%2===1){box(1.48,.13,.75,wx,wy-.84,z+.32,concrete);rod([wx-.72,wy-.2,z+.66],[wx+.72,wy-.2,z+.66],.022);for(let k=0;k<7;k++)rod([wx-.69+k*.23,wy-.78,z+.66],[wx-.69+k*.23,wy-.20,z+.66],.014);}
+  const facades=[];
+  function facade(x,width,height,z,material,seed,near=false,opening=null){
+    const left=x-width/2,right=x+width/2,faceZ=z-.02,depth=3.4,skin=.24,columns=Math.max(2,Math.floor(width/2.1)),rows=[],apertures=[];
+    for(let y=2.9;y+.66<height-.04;y+=2.75)rows.push({y,windows:Array.from({length:columns},(_,col)=>({x:left+1.12+col*(width-2.24)/(columns-1),col}))});
+    box(width,height,.16,x,height/2,faceZ-depth+.08,material);
+    for(const xx of [left+.10,right-.10])box(.20,height,depth,xx,height/2,faceZ-depth/2,material);
+    const run=(a,b,y0,y1)=>{if(b-a>.001&&y1-y0>.001)box(b-a,y1-y0,skin,(a+b)/2,(y0+y1)/2,faceZ-skin/2,material);};
+    function band(y0,y1){
+      if(opening&&y0<opening.h){const stop=Math.min(y1,opening.h);run(left,opening.x-opening.w/2,y0,stop);run(opening.x+opening.w/2,right,y0,stop);if(y1>stop)run(left,right,stop,y1);}
+      else run(left,right,y0,y1);
     }
-    for(let y=3.9;y<height;y+=2.75)box(width,.052,.08,x,y,z+.04,concrete,false);
-    box(width+.18,.18,3.7,x,height+.04,z-1.61,concrete);
-    for(const dx of [-width/2+.18,width/2-.18])rod([x+dx,.12,z+.14],[x+dx,height-.13,z+.14],.039,metal);
+    let last=0;
+    for(const [rowIndex,row]of rows.entries()){
+      const y0=row.y-.66,y1=row.y+.66;band(last,y0);let cursor=left;
+      for(const window of row.windows){run(cursor,window.x-.465,y0,y1);cursor=window.x+.465;}
+      run(cursor,right,y0,y1);last=y1;box(width,.09,depth-.3,x,y0-.065,faceZ-depth/2,concrete,false);
+      for(const {x:wx,col}of row.windows){
+        const wy=row.y,lit=rand(seed+rowIndex*43+col*13)>.87;
+        box(.93,1.32,.03,wx,wy,faceZ-.19,dark,false);box(.78,1.16,.022,wx,wy,faceZ-.10,lit?warmWindow:glass,false);
+        for(const dx of [-.443,.443])box(.044,1.32,.19,wx+dx,wy,faceZ-.079,material,false);
+        for(const yy of [wy-.645,wy+.645])box(.93,.03,.19,wx,yy,faceZ-.079,material,false);
+        for(const dx of [-.421,.421])box(.04,1.26,.06,wx+dx,wy,faceZ+.006,metal,false);
+        box(.87,.04,.06,wx,wy+.63,faceZ+.006,metal,false);
+        box(.031,1.22,.055,wx,wy,faceZ-.051,metal,false);box(.85,.035,.055,wx,wy-.12,faceZ-.051,metal,false);box(1.00,.09,.24,wx,wy-.68,faceZ+.05,paving);
+        if(lit)for(const dx of [-.28,.29])box(.15,1.13,.01,wx+dx,wy,faceZ-.073,curtain,false);
+        apertures.push({x:wx,y:wy,width:.93,height:1.32,faceZ,glassZ:faceZ-.089,bounds:{min:[wx-.465,wy-.66,faceZ-skin],max:[wx+.465,wy+.66,faceZ]}});
+        if(near&&rowIndex>0&&col===1&&rowIndex%2===1){
+          box(1.48,.13,.75,wx,wy-.84,faceZ+.34,concrete);rod([wx-.72,wy-.2,faceZ+.68],[wx+.72,wy-.2,faceZ+.68],.022);
+          for(let k=0;k<7;k++)rod([wx-.69+k*.23,wy-.78,faceZ+.68],[wx-.69+k*.23,wy-.20,faceZ+.68],.014);
+          for(const dx of [-.70,.70])rod([wx+dx,wy-.78,faceZ+.10],[wx+dx,wy-.20,faceZ+.68],.017);
+        }
+      }
+    }
+    band(last,height);
+    for(let y=3.9;y<height;y+=2.75)box(width,.052,.09,x,y,faceZ+.025,concrete,false);
+    box(width+.18,.18,3.7,x,height+.04,faceZ-depth/2+.10,concrete);
+    for(const dx of [-width/2+.18,width/2-.18]){
+      rod([x+dx,.12,faceZ+.14],[x+dx,height-.13,faceZ+.14],.039,metal);
+      for(let y=.55;y<height-.15;y+=2.75)box(.13,.04,.19,x+dx,y,faceZ+.065,trim,false);
+    }
+    facades.push({id:`park-block-${seed}`,faceZ,bounds:{min:[left,0,faceZ-depth],max:[right,height+.13,faceZ]},windows:apertures,
+      doorAperture:opening?{min:[opening.x-opening.w/2,0,faceZ-depth+.16],max:[opening.x+opening.w/2,opening.h,faceZ]}:null});
   }
   // Chapter scenery already supplies the real home block. Keep the old
   // standalone facade opt-in so it cannot create a second entrance or house.
   const rearDoorX=81.8,rearDoorZ=-2.10;
   if(includeHome){
-  facade(77.3,12.0,13.4,-2.3,plaster,1021,true);
+  facade(77.3,12.0,13.4,-2.3,plaster,1021,true,{x:rearDoorX,w:1.22,h:2.37});
   box(12,.60,.13,77.3,.28,-2.24,concrete);
   for(const [px,py,ww,hh,seed]of[[78.0,1.15,2.4,1.7,1],[82.4,3.6,1.4,1.1,31],[74.2,5.0,2.1,1.25,67]]){
     const shape=new THREE.Shape();for(let i=0;i<9;i++){const a=i/8*Math.PI*2,r=.78+rand(seed+i)*.22,xx=Math.cos(a)*ww*.5*r,yy=Math.sin(a)*hh*.5*r;if(i)shape.lineTo(xx,yy);else shape.moveTo(xx,yy);}shape.closePath();
@@ -115,7 +167,7 @@ export function createPlaygroundWorld(THREE,scene,{includeHome=false}={}){
   }
   // Finished boundary railings enclose the yard behind the equipment.
   box(34,.42,.24,99,.17,-8.65,concrete);box(34,.08,.34,99,.41,-8.65,paving);
-  for(let x=82.6;x<116.1;x+=2.6){rod([x,.42,-8.64],[x,2.05,-8.64],.032);box(.10,.055,.10,x,2.07,-8.64,metal);}
+  for(const x of [82.6,85.2,87.8,90.4,93.0,95.6,98.2,100.8,103.4,106.0,108.6,111.2,113.8,116.0]){rod([x,.42,-8.64],[x,2.05,-8.64],.032);box(.10,.055,.10,x,2.07,-8.64,metal);}
   for(const y of [.55,1.96])rod([82.6,y,-8.64],[116.0,y,-8.64],.023);
   for(let x=82.78;x<116;x+=.22)rod([x,.54,-8.64],[x,1.96,-8.64],.010,metal,false);
 
@@ -237,7 +289,7 @@ export function createPlaygroundWorld(THREE,scene,{includeHome=false}={}){
     route:{minX:COURTYARD.gateNativeX,maxX:112,y:0,z:0,clearHalfWidth:.60},
     paving:{minX:pavingStart,maxX:pavingEnd,y:0,minZ:-.85,maxZ:.85},
     rearEntrance:includeHome?{x:rearDoorX,y:0,z:rearDoorZ,building:'home',open:true}:null,
-    legacyHomeIncluded:includeHome,parkExit:{x:exitX,y:0,z:0,open:true,clearHalfWidth:.95,destination:'garage-alley'},
+    legacyHomeIncluded:includeHome,facades,parkExit:{x:exitX,y:0,z:0,open:true,clearHalfWidth:.95,destination:'garage-alley'},
     landmarks:equipment.filter(item=>['swings','sandpit','slide','seesaw'].includes(item.type)).map(({id,type,bounds})=>({id,type,bounds})),
     equipment,lights:lights.length,drawBatches:batches.size,area:'playground'
   };

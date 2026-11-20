@@ -1,3 +1,4 @@
+import {fitFacadePatch,cityRoofBounds} from './roof-building-layout.js';
 // Layered, inhabited apartment blocks used only by the rooftop chapter.
 // All structural detail is instanced; the walking lane remains in front of z=-10.
 export function createRoofCity(THREE,parent,{materials={},random}={}){
@@ -93,14 +94,20 @@ export function createRoofCity(THREE,parent,{materials={},random}={}){
   const warmWindows=Array.from({length:3},(_,i)=>{const map=windowTexture(true,i);return standard('#c5b28b',.74,{map,emissive:'#d5b276',emissiveMap:map,emissiveIntensity:i===1?.83:.61});});
   const darkWindow=standard('#172b31',.72),farWindow=standard('#293f49',.82),farWarm=standard('#a79c7c',.94,{emissive:'#bc9d65',emissiveIntensity:.36});
   const fanQ=new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1,0,0),Math.PI/2);
-  const blocks=[];let windows=0,litWindows=0,balconies=0,airConditioners=0;
+  const blocks=[],facadeOverlays=[];let windows=0,litWindows=0,balconies=0,airConditioners=0;
   function materialFor(color,width,height){
     const m=wallBase.clone();m.color.set(color);m.roughness=.97;m.envMapIntensity=.07;
     for(const key of ['map','bumpMap','roughnessMap'])if(m[key]){m[key]=m[key].clone();m[key].repeat.set(width/4.2,height/4.2);}
     return m;
   }
   function block({x,width,top,z,seed,layer=0,bottom=-25}){
-    const depth=layer===0?5.2:layer===1?7:9,height=top-bottom;
+    const depth=layer===0?5.2:layer===1?7:9,height=top-bottom,host={id:`roof-city-${seed}`,x,width,top,bottom,z,layer};
+    function coating(material,xx,yy,w,h,angle=0){
+      const patch=fitFacadePatch(host,{x:xx,y:yy,width:w,height:h,angle});
+      const q=angle?new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,0,1),angle):null;
+      instance('plane',material,[patch.x,patch.y,z+.016],[patch.width,patch.height,1],q);
+      facadeOverlays.push({hostId:host.id,...patch});
+    }
     const colors=layer===0?['#53656a','#617074','#566970']:layer===1?['#5c737c','#687f85','#617780']:['#687e89','#718892','#6a828c'];
     const wall=materialFor(colors[seed%colors.length],width,height);
     box(width,height,depth,x,(top+bottom)/2,z-depth/2-.035,wall);
@@ -128,7 +135,7 @@ export function createRoofCity(THREE,parent,{materials={},random}={}){
           // Remnants of painted repairs and dark runoff below selected sills.
           if(rnd(n+40)>.67)box(.025+rnd(n+47)*.04,.35+rnd(n+43)*.78,.008,xx-w*.32,yy-h/2-.35,z+.045,panel);
           if(layer===0&&rnd(n+231)>.43){
-            instance('plane',runoff,[xx+(rnd(n+233)-.5)*.43,yy-h/2-.88,z+.017],[.72+rnd(n+237)*.70,1.8+rnd(n+239)*1.6,1]);runoffStains++;
+            coating(runoff,xx+(rnd(n+233)-.5)*.43,yy-h/2-.88,.72+rnd(n+237)*.70,1.8+rnd(n+239)*1.6);runoffStains++;
           }
         }else box(w+.13,.07,.13,xx,yy-h/2-.11,z+.085,panel);
         if(layer===0&&rnd(n+49)>.925&&col<cols-1){
@@ -156,11 +163,10 @@ export function createRoofCity(THREE,parent,{materials={},random}={}){
       const count=layer===0?26:12;
       for(let i=0;i<count;i++){
         const xx=x+(rnd(seed+i*13+3141)-.5)*(width-1.0),yy=bottom+1+rnd(seed+i*29+4431)*(height-2);
-        const q=new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,0,1),(rnd(seed+i+4911)-.5)*.20);
-        instance('plane',wornPlaster,[xx,yy,z+.012],[.65+rnd(seed+i+5931)*2.5,1.2+rnd(seed+i+6331)*3.5,1],q);weatheredPatches++;
+        coating(wornPlaster,xx,yy,.65+rnd(seed+i+5931)*2.5,1.2+rnd(seed+i+6331)*3.5,(rnd(seed+i+4911)-.5)*.20);weatheredPatches++;
       }
       for(const xx of [x-width/2+.38,x+width/2-.41]){
-        instance('plane',runoff,[xx,(top+bottom)/2,z+.014],[.55,height-1.1,1]);runoffStains++;
+        coating(runoff,xx,(top+bottom)/2,.55,height-1.1);runoffStains++;
       }
     }
     if(layer<2){
@@ -171,8 +177,16 @@ export function createRoofCity(THREE,parent,{materials={},random}={}){
       for(let xx=x-width/2+3.3;xx<x+width/2-.6;xx+=3.5)box(.019,height-.2,.013,xx,(top+bottom)/2,z+.009,panel);
       // Safety rails, flues and old aerials extend the silhouette of each roof.
       const roofZ=z-1.1;
-      rod([x-width/2+.3,top+.94,roofZ],[x+width/2-.3,top+.94,roofZ],.024);
-      for(let j=0;j<Math.ceil(width/2.6);j++){const xx=x-width/2+.3+j*2.6;rod([xx,top+.17,roofZ],[xx,top+.95,roofZ],.023);}
+      const railStart=x-width/2+.3,railEnd=x+width/2-.3,railIntervals=Math.ceil((railEnd-railStart)/2.6);
+      rod([railStart,top+.94,roofZ],[railEnd,top+.94,roofZ],.024);
+      for(let j=0;j<=railIntervals;j++){
+        const xx=railStart+(railEnd-railStart)*j/railIntervals;
+        rod([xx,top+.17,roofZ],[xx,top+.95,roofZ],.023);box(.12,.025,.12,xx,top+.1975,roofZ,zinc);
+      }
+      for(const xx of[railStart,railEnd]){
+        rod([xx,top+.94,roofZ],[xx,top+.94,roofZ-.75],.024);
+        rod([xx,top+.17,roofZ-.75],[xx,top+.95,roofZ-.75],.023);box(.12,.025,.12,xx,top+.1975,roofZ-.75,zinc);
+      }
       for(let j=0;j<2;j++){
         const xx=x-width*.27+j*width*.51;
         box(.59,.77,.59,xx,top+.49,z-2.35,panel);box(.71,.10,.71,xx,top+.92,z-2.35,rim);
@@ -181,7 +195,7 @@ export function createRoofCity(THREE,parent,{materials={},random}={}){
         rod([xx+.37,top+1.48,z-2.93],[xx+.37,top+1.48,z-2.23],.012,metal);
       }
     }
-    blocks.push({x,width,top,bottom,z,layer,bounds:{min:[x-width/2,bottom,z-depth-.035],max:[x+width/2,top+1.9,z+1.05]}});
+    blocks.push({...host,roofBounds:cityRoofBounds(host),bounds:{min:[x-width/2,bottom,z-depth-.035],max:[x+width/2,top+1.9,z+1.05]}});
   }
   // The taller flanking blocks frame the child; setbacks open fog-filled alleys.
   const near=[[-12,13.8,22.5,-11.8,142],[12,17.4,7.2,-17.8,206],[32,13.8,23.5,-13.2,338],[49.5,14.2,18.5,-20.2,424],[65.2,13.9,25.0,-14.0,516]];
@@ -196,7 +210,7 @@ export function createRoofCity(THREE,parent,{materials={},random}={}){
     const object=new THREE.InstancedMesh(geometries[batch.type],batch.material,batch.matrices.length);
     batch.matrices.forEach((m,i)=>object.setMatrixAt(i,m));object.instanceMatrix.needsUpdate=true;object.castShadow=batch.shadow;object.receiveShadow=false;group.add(object);
   }
-  const metadata={blocks,windows,litWindows,balconies,airConditioners,weatheredPatches,runoffStains,drawBatches:batches.size,searchlightMount:{x:8,y:8.3,z:-17.55},minZ:-10.75};
+  const metadata={blocks,windows,litWindows,balconies,airConditioners,weatheredPatches,runoffStains,facadeOverlays,drawBatches:batches.size,searchlightMount:{x:8,y:8.295,z:-18.4,hostId:'roof-city-206'},minZ:-10.75};
   group.userData.roofCity=metadata;
   return {group,metadata,update(){}};
 }

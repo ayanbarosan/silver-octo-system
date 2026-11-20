@@ -3,6 +3,7 @@ import {createRoofMaterials} from './roof-materials.js';
 import {createRoofCity} from './roof-city.js';
 import {createRoofSurface} from './roof-surface.js';
 import {createRoofWeather} from './roof-weather.js';
+import {roofServiceMount,windowWallPanels} from './roof-building-layout.js';
 
 // Original rooftop set, built entirely from local geometry and procedural textures.
 export function createWorld(THREE, scene) {
@@ -44,14 +45,42 @@ export function createWorld(THREE, scene) {
   const panes = [], warmPanes = [], ribbons = [];
   const glass = roofMaterials.glass;
 
+  world.userData.roofFacades=[];
   function facade(x, width, top, bottom, z, seed, spacing = 1.7, windowW = .65, windowH = 1.15) {
     const columns = Math.floor((width - 1) / spacing), rows = Math.floor((top - bottom - 2) / 2.4);
+    const columnXs=Array.from({length:columns},(_,col)=>x-width/2+1+col*spacing);
+    const rowYs=Array.from({length:rows},(_,row)=>top-2-row*2.4);
+    const apertureW=windowW+.12,apertureH=windowH+.16;
+    const panels=windowWallPanels({left:x-width/2,right:x+width/2,bottom,top,columns:columnXs,rows:rowYs,windowWidth:apertureW,windowHeight:apertureH});
+    // Preserve a common facade UV origin across its piers and spandrels.
+    // Unit-box instancing would restart the entire plaster texture on each
+    // narrow pier, producing conspicuous vertical stripes around the windows.
+    const positions=[],normals=[],uvs=[],indices=[];
+    for(const panel of panels){
+      const geometry=new THREE.BoxGeometry(panel.width,panel.height,.35);geometry.translate(panel.x,panel.y,z-.175);
+      const p=geometry.attributes.position,n=geometry.attributes.normal,base=positions.length/3;
+      for(let i=0;i<p.count;i++){
+        const px=p.getX(i),py=p.getY(i),pz=p.getZ(i),nx=n.getX(i),ny=n.getY(i),nz=n.getZ(i);
+        positions.push(px,py,pz);normals.push(nx,ny,nz);
+        uvs.push(Math.abs(nx)>.5?(pz-z+.35)/width:(px-x+width/2)/width,Math.abs(ny)>.5?(pz-z+.35)/(top-bottom):(py-bottom)/(top-bottom));
+      }
+      for(const index of geometry.index.array)indices.push(base+index);geometry.dispose();
+    }
+    const wallGeometry=new THREE.BufferGeometry();wallGeometry.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));wallGeometry.setAttribute('normal',new THREE.Float32BufferAttribute(normals,3));wallGeometry.setAttribute('uv',new THREE.Float32BufferAttribute(uvs,2));wallGeometry.setIndex(indices);wallGeometry.computeBoundingBox();wallGeometry.computeBoundingSphere();
+    const facadeMaterial=wallMat.clone();
+    for(const key of['map','bumpMap','roughnessMap'])if(facadeMaterial[key]){facadeMaterial[key]=facadeMaterial[key].clone();facadeMaterial[key].repeat.set(width/4.2,(top-bottom)/4.2);}
+    const facadeWall=new THREE.Mesh(wallGeometry,facadeMaterial);facadeWall.name='rooftop-window-wall';facadeWall.castShadow=facadeWall.receiveShadow=true;world.add(facadeWall);
+
+    world.userData.roofFacades.push({left:x-width/2,right:x+width/2,bottom,top,frontZ:z,backZ:z-.35,apertures:columnXs.flatMap(xx=>rowYs.map(yy=>({x:xx,y:yy,width:apertureW,height:apertureH,glazingZ:z-.23}))),panels});
     for (let row = 0; row < rows; row++) {
       for (let col = 0; col < columns; col++) {
         const xx = x - width / 2 + 1 + col * spacing, yy = top - 2 - row * 2.4;
-        const spec = { x: xx, y: yy, z:z+.042, w: windowW, h: windowH, shade: random(seed + col * 19 + row * 137) };
+        const spec = { x: xx, y: yy, z:z-.23, w: windowW, h: windowH, shade: random(seed + col * 19 + row * 137) };
         if (spec.shade > .973) warmPanes.push(spec); else panes.push(spec);
-        box(windowW+.10,windowH+.10,.025,xx,yy,z+.018,black,world,false);
+        box(windowW+.10,windowH+.10,.025,xx,yy,z-.249,black,world,false);
+        // Three dimensional reveals and a sill sit around recessed glazing.
+        for(const dx of[-windowW/2-.047,windowW/2+.047])box(.035,windowH+.10,.30,xx+dx,yy,z-.12,rimMat,world,false);
+        box(windowW+.12,.035,.30,xx,yy+windowH/2+.057,z-.12,rimMat,world,false);
         for(const dx of [-windowW/2-.018,windowW/2+.018])box(.038,windowH+.14,.10,xx+dx,yy,z+.055,darkMetal,world,false);
         for(const dy of [-windowH/2-.018,windowH/2+.018])box(windowW+.14,.038,.10,xx,yy+dy,z+.055,darkMetal,world,false);
         box(.025,windowH,.075,xx,yy,z+.068,zinc,world,false);
@@ -95,15 +124,16 @@ export function createWorld(THREE, scene) {
   }
   function rooftop(left, right, level, seed) {
     const center = (left + right) / 2, width = right - left;
-    box(width, 35, 4.3, center, level - 17.7, -.25, wallMat);
+    // The core stops behind the front wall so window apertures have depth.
+    box(width, 35, 3.95, center, level - 17.7, -.425, wallMat);
     beveledBox(width + .12, .28, 4.55, .045, center, level - .14, -.25, roofMat);
     // A thin bright cornice makes the height and roof thickness readable.
     box(width + .23, .12, .15, center, level - .18, 2.05, rimMat);
     box(.14, .12, 4.5, left + .02, level - .16, -.25, rimMat);
     box(.14, .12, 4.5, right - .02, level - .16, -.25, rimMat);
-    facade(center, width, level - .1, level - 34, 1.91, seed, 1.8, .71, 1.25);
+    facade(center, width, level-.2, level-35.2, 1.9, seed, 1.8, .71, 1.25);
     // Panel seams and modest rain streaks across the front face.
-    for (let x = left + .8; x < right; x += 3.6) {
+    for (let x = left + 1.9; x < right-.5; x += 3.6) {
       box(.026, 34.7, .014, x, level - 17.7, 1.914, darkMetal, world, false);
       if (random(x + seed) > .65) box(.06, 9, .02, x + .07, level - 4.7, 1.93, rust, world, false);
     }
@@ -128,8 +158,8 @@ export function createWorld(THREE, scene) {
   box(1.55, .43, .76, middleRoof.x + 3.1, middleRoof.y + .215, -1.67, zinc);
   box(1.67, .055, .86, middleRoof.x + 3.1, middleRoof.y + .455, -1.67, rimMat);
   for (let slot = 0; slot < 4; slot++) box(1.22, .025, .03, middleRoof.x + 3.1, middleRoof.y + .12 + slot * .075, -1.272, darkMetal);
-  const drain = cylinder(.075, 15, middleRoof.x + 1.5, -7.55, 1.985, zinc); drain.castShadow = false;
-  cylinder(.10, .12, middleRoof.x + 1.5, -.11, 1.985, darkMetal).castShadow = false;
+  const drain = cylinder(.075, 15, middleRoof.x + 1.5, middleRoof.y-7.54, 1.985, zinc); drain.castShadow = false;
+  cylinder(.10, .12, middleRoof.x + 1.5, middleRoof.y-.11, 1.985, darkMetal).castShadow = false;
   const blockSignCanvas = document.createElement('canvas'); blockSignCanvas.width = blockSignCanvas.height = 128;
   const signCtx = blockSignCanvas.getContext('2d'); signCtx.fillStyle = 'rgba(192,194,177,.45)'; signCtx.font = 'bold 70px monospace'; signCtx.fillText('10', 18, 87);
   for (let i = 0; i < 40; i++) signCtx.clearRect(random(i + 33) * 128, random(i + 77) * 128, 2 + random(i + 38) * 5, 1 + random(i + 99) * 3);
@@ -405,7 +435,20 @@ export function createWorld(THREE, scene) {
     const beam = box(thickness, direction.length(), thickness, center.x, center.y, center.z, material, world, false);
     beam.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction.normalize()); return beam;
   }
-  for (const [x, y, z] of [[8.2, 10.4, -26], [49.5, 11, -28], [-35, 4, -51]]) {
+  const services=[];
+  function serviceMount(id,hostId,x,z,halfWidth,halfDepth){
+    const host=city.metadata.blocks.find(block=>block.id===hostId);
+    if(!host)throw new Error(`Missing rooftop host ${hostId}`);
+    const mount=roofServiceMount(host,{x,z,halfWidth,halfDepth});
+    services.push({id,hostId,x:mount.x,y:mount.y,z:mount.z,footprint:{min:[mount.x-halfWidth,mount.y,mount.z-halfDepth],max:[mount.x+halfWidth,mount.y,mount.z+halfDepth]},roofBounds:mount.bounds});return mount;
+  }
+  world.userData.rooftopServices=services;
+  const tankMounts=[
+    serviceMount('water-tank-east','roof-city-206',8.2,-20.6,.72,.72),
+    serviceMount('water-tank-far','roof-city-424',49.5,-23.0,.72,.72),
+    serviceMount('water-tank-west','roof-city-142',-12,-14.6,.72,.72)
+  ];
+  for (const {x,y,z} of tankMounts) {
     // Old rooftop water tanks, supported on visible narrow legs.
     cylinder(.65, 1.15, x, y + 1.65, z, zinc).castShadow = false;
     cylinder(.7, .1, x, y + 2.28, z, darkMetal).castShadow = false;
@@ -413,7 +456,11 @@ export function createWorld(THREE, scene) {
     for (const dx of [-.4, .4]) for (const dz of [-.35, .35]) structuralBeam([x + dx, y, z + dz], [x + dx, y + 1.1, z + dz], .07);
   }
   // Set-back ventilation banks and roof service runs never enter the playable lane.
-  for (const [bx, by, bz] of [[-5, 3.05, -26], [23, 9.25, -27]]) {
+  const ventMounts=[
+    serviceMount('west-ventilation-bank','roof-city-142',-16.6,-15.1,1.7,.61),
+    serviceMount('east-ventilation-bank','roof-city-206',18.2,-21.1,1.7,.61)
+  ];
+  for (const {x,y:by,z:bz} of ventMounts) {const bx=x-1.1;
     for (let i = 0; i < 3; i++) {
       box(.85, .55, .75, bx + i * 1.05, by + .275, bz, zinc, world, false);
       for (let slot = 0; slot < 4; slot++) box(.65, .025, .025, bx + i * 1.05, by + .13 + slot * .09, bz + .39, darkMetal, world, false);
@@ -438,7 +485,11 @@ export function createWorld(THREE, scene) {
   }
   tram.add(tramBody, tramWindows);
   // Two tiny roof workers are readable only as distant silhouettes.
-  for (const [x, y, z] of [[20.3, 9.25, -26], [21.4, 9.25, -26.4]]) {
+  const workerMounts=[
+    serviceMount('roof-worker-one','roof-city-206',17.5,-19.8,.20,.15),
+    serviceMount('roof-worker-two','roof-city-206',18.5,-20.1,.20,.15)
+  ];
+  for (const {x,y,z} of workerMounts) {
     box(.21, .49, .16, x, y + .48, z, darkMetal, world, false);
     cylinder(.115, .19, x, y + .83, z, darkMetal).castShadow = false;
     for (const dx of [-.065, .065]) box(.055, .25, .06, x + dx, y + .125, z, darkMetal, world, false);
@@ -488,7 +539,9 @@ export function createWorld(THREE, scene) {
     sprite.scale.set(38 + i * 4, 5+i*.4, 1); sprite.userData.startX = sprite.position.x; mist.push(sprite); world.add(sprite);
   }
   // A distant security searchlight wakes up while the sleeping child remains protected.
-  const mount=city.metadata.searchlightMount??{x:8,y:8.3,z:-17.55};
+  const lightMount=city.metadata.searchlightMount;
+  const lightFoot=serviceMount('security-searchlight',lightMount.hostId,lightMount.x,lightMount.z-.1,.36,.29);
+  const mount={x:lightFoot.x,y:lightFoot.y+.91,z:lightFoot.z+.1};
   const searchOrigin=new THREE.Vector3(mount.x,mount.y,mount.z);
   box(.15,.72,.15,mount.x,mount.y-.48,mount.z-.10,darkMetal,world,false);
   box(.72,.14,.58,mount.x,mount.y-.84,mount.z-.10,zinc,world,false);

@@ -250,7 +250,7 @@ export function createApartmentWorld(THREE,scene){
     bedroom:{axis:'x',value:25.82,minA:.65,maxA:2.30,minY:1.0,maxY:3.10}};
   const cityMaterialCache=new Map();let exteriorBuildings=0,exteriorWindows=0;
   function portalMaterial(color,portal,emissive=false){
-    const key=`${portal.axis}/${color}/${emissive}`;if(cityMaterialCache.has(key))return cityMaterialCache.get(key);
+    const key=`${portal.axis}/${portal.value}/${portal.minA}/${portal.maxA}/${portal.minY}/${portal.maxY}/${color}/${emissive}`;if(cityMaterialCache.has(key))return cityMaterialCache.get(key);
     const m=mat(color,.94,{emissive:color,emissiveIntensity:emissive?.70:.13});
     m.onBeforeCompile=shader=>{
       shader.vertexShader='varying vec3 vApartmentCityWorld;\n'+shader.vertexShader;
@@ -264,6 +264,7 @@ export function createApartmentWorld(THREE,scene){
       const component=portal.axis==='z'?'z':'x',acomp=portal.axis==='z'?'x':'z';
       shader.fragmentShader=shader.fragmentShader.replace('#include <clipping_planes_fragment>',`#include <clipping_planes_fragment>
         vec3 cityRay=vApartmentCityWorld-cameraPosition;
+        if(abs(cityRay.${component})<.00001)discard;
         float cityT=(${portal.value.toFixed(4)}-cameraPosition.${component})/cityRay.${component};
         vec3 aperture=cameraPosition+cityRay*cityT;
         if(cityT<0.||cityT>1.||aperture.${acomp}<${portal.minA.toFixed(4)}||aperture.${acomp}>${portal.maxA.toFixed(4)}||aperture.y<${portal.minY.toFixed(4)}||aperture.y>${portal.maxY.toFixed(4)})discard;`);

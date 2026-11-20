@@ -22,14 +22,37 @@ export function createStreetWorld(THREE,scene){
       c.fillStyle='rgba(211,211,183,.17)';for(let i=0;i<1200;i++)c.fillRect(random(i+991)*512,random(i+2091)*512,1.3,1);
     }else{
       // Islands of old paint and fine repaired cracks are part of the plaster.
-      for(let i=0;i<27;i++){
+      for(let i=0;i<17;i++){
         const x=random(i+450)*512,y=random(i+800)*512,r=4+random(i+930)*28;c.beginPath();
-        for(let j=0;j<10;j++){const a=j/9*Math.PI*2,s=r*(.35+random(i*29+j)*.8);const xx=x+Math.cos(a)*s,yy=y+Math.sin(a)*s*.65;if(j===0)c.moveTo(xx,yy);else c.lineTo(xx,yy);}c.closePath();c.fillStyle='#858c80';c.fill();c.strokeStyle='rgba(215,214,188,.25)';c.lineWidth=.8;c.stroke();
+        for(let j=0;j<10;j++){const a=j/9*Math.PI*2,s=r*(.35+random(i*29+j)*.8);const xx=x+Math.cos(a)*s,yy=y+Math.sin(a)*s*.65;if(j===0)c.moveTo(xx,yy);else c.lineTo(xx,yy);}c.closePath();c.fillStyle='#9ca394';c.fill();c.strokeStyle='rgba(215,214,188,.25)';c.lineWidth=.8;c.stroke();
       }
       c.strokeStyle='rgba(24,34,29,.23)';c.lineWidth=.65;
       for(let i=0;i<9;i++){const x=random(i+1301)*512,y=random(i+1654)*512;c.beginPath();c.moveTo(x,y);for(let j=1;j<5;j++)c.lineTo(x+j*4+random(i*11+j)*7,y+j*8+random(i*21+j)*7);c.stroke();}
     }
     const texture=new THREE.CanvasTexture(canvas);texture.colorSpace=THREE.SRGBColorSpace;texture.wrapS=texture.wrapT=THREE.RepeatWrapping;texture.anisotropy=4;return texture;
+  }
+  // World units keep plaster grain continuous across the wall's many solid
+  // returns. Native texture origins also survive the park chapter transform.
+  function masonry(material){
+    material.onBeforeCompile=shader=>{
+      shader.vertexShader=shader.vertexShader.replace('#include <uv_vertex>',`#include <uv_vertex>
+        vec4 masonryPoint=vec4(position,1.0);
+        vec3 masonryNormal=normal;
+        #ifdef USE_INSTANCING
+          masonryPoint=instanceMatrix*masonryPoint;
+          masonryNormal=mat3(instanceMatrix)*masonryNormal;
+        #endif
+        vec3 masonryWorld=mat3(modelMatrix)*masonryPoint.xyz;
+        vec3 masonryAxis=abs(normalize(mat3(modelMatrix)*masonryNormal));
+        vec2 masonryUv=masonryAxis.z>masonryAxis.x&&masonryAxis.z>masonryAxis.y?masonryWorld.xy:(masonryAxis.y>masonryAxis.x?masonryWorld.xz:masonryWorld.zy);
+        #ifdef USE_MAP
+          vMapUv=masonryUv*.40;
+        #endif
+        #ifdef USE_BUMPMAP
+          vBumpMapUv=masonryUv*.40;
+        #endif`);
+    };
+    material.customProgramCacheKey=()=> 'continuous-masonry-v1';
   }
   const plasterMap=surfaceTexture('plaster'),roadMap=surfaceTexture('asphalt');
   const roadBump=roadMap.clone();roadBump.colorSpace=THREE.NoColorSpace;
@@ -54,6 +77,7 @@ export function createStreetWorld(THREE,scene){
   const puddleAlpha=new THREE.CanvasTexture(puddleCanvas);for(const m of [wet,damp,reflection]){m.alphaMap=puddleAlpha;m.transparent=true;m.opacity=m===reflection?.46:.64;m.depthWrite=false;m.polygonOffset=true;m.polygonOffsetFactor=-1;}
   const leafMat=mat('#4e5540',.94,{side:THREE.DoubleSide}),wood=mat('#454c40',.94,{map:plasterMap});
   const paints=[mat('#817e63',.64,{metalness:.23}),mat('#6b3b33',.73,{metalness:.17}),mat('#536761',.71,{metalness:.18}),mat('#676d69',.68,{metalness:.2}),mat('#5e6350',.77,{metalness:.15})];
+  [plaster,distantWall,farWall,pavement,darkConcrete,wood].forEach(masonry);
   const lightList=[],cars=[],props=[],lamps=[];
   const batches=new Map(),dummy=new THREE.Object3D();let placement=null;
   const geometries={box:new THREE.BoxGeometry(1,1,1),cylinder:new THREE.CylinderGeometry(1,1,1,12),leaf:new THREE.PlaneGeometry(1,1),patch:new THREE.PlaneGeometry(1,1)};
@@ -79,51 +103,95 @@ export function createStreetWorld(THREE,scene){
   for(let x=-2;x<79;x+=6.9){box(.64,.015,.32,x,-.035,1.27,metal);for(let n=0;n<9;n++)box(.027,.008,.29,x-.28+n*.07,-.023,1.27,black,false);}
   for(let i=0;i<70;i++){const x=-2+random(i+11)*81,z=-6.5+random(i+53)*12;flatPatch(x,z,.6+random(i+98)*3.5,.25+random(i+221)*1.4,i%4===0?damp:wet,z>-.8&&z<.8?.004:-.073,i*31);}
   for(let i=0;i<105;i++){const x=-2+random(i+242)*79,z=-.7+random(i+322)*1.4;box(.018+random(i+400)*.05,.009,.015+random(i+500)*.04,x,.007,z,darkConcrete,false);}
+  const facades=[];
   function facade(center,width,bottom,top,z,material,seed,near=false,opening=null){
-    if(opening){
-      const left=center-width/2,right=center+width/2,doorLeft=opening.x-opening.w/2,doorRight=opening.x+opening.w/2;
-      box(doorLeft-left,top-bottom,3.7,(left+doorLeft)/2,(top+bottom)/2,z-1.9,material);
-      box(right-doorRight,top-bottom,3.7,(doorRight+right)/2,(top+bottom)/2,z-1.9,material);
-      box(opening.w,top-opening.h,3.7,opening.x,(top+opening.h)/2,z-1.9,material);
-    }else box(width,top-bottom,3.7,center,(top+bottom)/2,z-1.9,material);
-    const left=center-width/2,columns=Math.max(1,Math.floor((width-1)/2.1)),firstWindowY=bottom+(near&&z>-3?4.1:2.0);
-    for(let row=0;firstWindowY+row*2.8<top-.7;row++)for(let col=0;col<columns;col++){
-      const x=left+1.15+col*(width-2.1)/Math.max(1,columns-1),y=firstWindowY+row*2.8;
-      const lit=random(seed+row*97+col*31)>.875,wm=lit?warmWindow:windowGlass;
-      box(.93,1.35,.035,x,y,z+.025,black,false);box(.80,1.21,.018,x,y,z+.049,wm,false);
-      for(const dx of [-.43,.43])box(.044,1.32,.07,x+dx,y,z+.071,trim,false);
-      box(.032,1.25,.06,x,y,z+.083,metal,false);box(.88,.035,.06,x,y-.13,z+.083,metal,false);
-      box(1.02,.09,.18,x,y-.70,z+.10,pavement);
-      if(lit){box(.21,1.17,.009,x-.27,y,z+.064,curtain,false);box(.13,1.17,.009,x+.31,y,z+.064,curtain,false);}
-      if(near&&col===0&&row%2===1){
-        box(1.5,.15,.83,x,y-.93,z+.32,darkConcrete);box(1.5,.10,.10,x,y-.15,z+.70,metal);
-        for(let p=0;p<7;p++)rod([x-.69+p*.23,y-.87,z+.70],[x-.69+p*.23,y-.16,z+.70],.016,metal);
+    const left=center-width/2,right=center+width/2,faceZ=z-.05,depth=3.7,skin=.25;
+    const columns=Math.max(1,Math.floor((width-1)/2.1)),firstWindowY=bottom+(near&&z>-3?4.1:2.0),rows=[];
+    const apertures=[];
+    for(let y=firstWindowY;y+.69<top-.04;y+=2.8){
+      const windows=[];
+      for(let col=0;col<columns;col++)windows.push({x:left+1.15+col*(width-2.1)/Math.max(1,columns-1),y,col});
+      rows.push({y,windows});
+    }
+    // A closed shell behind real openings prevents a bright window panel from
+    // floating in front of plaster, and the open entrance reveals a hallway.
+    box(width,top-bottom,.16,center,(top+bottom)/2,faceZ-depth+.08,material);
+    for(const x of [left+.11,right-.11])box(.22,top-bottom,depth,x,(top+bottom)/2,faceZ-depth/2,material);
+    function frontRun(a,b,y0,y1){if(b-a>.001&&y1-y0>.001)box(b-a,y1-y0,skin,(a+b)/2,(y0+y1)/2,faceZ-skin/2,material);}
+    function band(y0,y1){
+      if(y1<=y0)return;
+      const doorTop=opening?bottom+opening.h:bottom;
+      if(opening&&y0<doorTop){
+        const stop=Math.min(y1,doorTop),a=opening.x-opening.w/2,b=opening.x+opening.w/2;
+        frontRun(left,a,y0,stop);frontRun(b,right,y0,stop);
+        if(y1>stop)frontRun(left,right,stop,y1);
+      }else frontRun(left,right,y0,y1);
+    }
+    let last=bottom;
+    for(const row of rows){
+      const y0=row.y-.69,y1=row.y+.69;band(last,y0);let cursor=left;
+      for(const {x}of row.windows){frontRun(cursor,x-.47,y0,y1);cursor=x+.47;}
+      frontRun(cursor,right,y0,y1);last=y1;
+      // Interior slab is behind the recess, instead of cutting across its glass.
+      box(width,.10,depth-.3,center,y0-.075,faceZ-depth/2,darkConcrete,false);
+      for(const {x,y,col}of row.windows){
+        const lit=random(seed+rows.indexOf(row)*97+col*31)>.875,wm=lit?warmWindow:windowGlass;
+        box(.94,1.38,.035,x,y,faceZ-.20,black,false);
+        box(.80,1.21,.018,x,y,faceZ-.105,wm,false);
+        for(const dx of [-.448,.448])box(.045,1.38,.20,x+dx,y,faceZ-.083,material,false);
+        for(const yy of [y-.674,y+.674])box(.94,.032,.20,x,yy,faceZ-.083,material,false);
+        for(const dx of [-.43,.43])box(.044,1.32,.065,x+dx,y,faceZ+.006,trim,false);
+        box(.88,.043,.065,x,y+.66,faceZ+.006,trim,false);
+        box(.032,1.25,.052,x,y,faceZ-.054,metal,false);box(.88,.035,.052,x,y-.13,faceZ-.054,metal,false);
+        box(1.02,.09,.25,x,y-.70,faceZ+.055,pavement);
+        if(lit){box(.21,1.17,.009,x-.27,y,faceZ-.077,curtain,false);box(.13,1.17,.009,x+.31,y,faceZ-.077,curtain,false);}
+        apertures.push({x,y,width:.94,height:1.38,faceZ,glassZ:faceZ-.096,bounds:{min:[x-.47,y-.69,faceZ-skin],max:[x+.47,y+.69,faceZ]}});
+        if(near&&col===0&&rows.indexOf(row)%2===1){
+          box(1.5,.15,.83,x,y-.93,faceZ+.37,darkConcrete);box(1.5,.10,.10,x,y-.15,faceZ+.75,metal);
+          for(let p=0;p<7;p++)rod([x-.69+p*.23,y-.87,faceZ+.75],[x-.69+p*.23,y-.16,faceZ+.75],.016,metal);
+          for(const dx of [-.72,.72])rod([x+dx,y-.86,faceZ+.13],[x+dx,y-.16,faceZ+.75],.018,metal);
+        }
       }
     }
-    for(let y=bottom+3.5;y<top;y+=2.8)box(width,.055,.09,center,y,z+.045,darkConcrete,false);
-    box(width+.24,.20,4.05,center,top+.04,z-1.8,darkConcrete);
-    for(const x of [left+.18,left+width-.20])rod([x,bottom+.1,z+.14],[x,top-.12,z+.14],.039,metal);
+    band(last,top);
+    if(opening){
+      const doorTop=bottom+opening.h;
+      box(opening.w,.08,depth-.1,opening.x,bottom-.04,faceZ-depth/2,darkConcrete);
+      for(const dx of [-opening.w/2+.025,opening.w/2-.025])box(.05,opening.h,depth-.15,opening.x+dx,bottom+opening.h/2,faceZ-depth/2,darkConcrete);
+      box(opening.w,.06,depth-.15,opening.x,doorTop+.03,faceZ-depth/2,darkConcrete);
+    }
+    for(let y=bottom+3.5;y<top;y+=2.8)box(width,.055,.11,center,y,faceZ+.025,darkConcrete,false);
+    box(width+.24,.20,4.05,center,top+.04,faceZ-depth/2+.10,darkConcrete);
+    for(const x of [left+.18,right-.20]){
+      rod([x,bottom+.1,faceZ+.14],[x,top-.12,faceZ+.14],.039,metal);
+      for(let y=bottom+.55;y<top-.15;y+=2.8)box(.15,.045,.20,x,y,faceZ+.065,trim,false);
+    }
     for(let n=0;n<2;n++){
       const x=left+1.2+n*(width-2.5);rod([x,top+.1,z-1.5],[x,top+1.8,z-1.5],.017,metal);
       for(let k=0;k<4;k++)rod([x-.42+k*.08,top+.7+k*.22,z-1.7],[x+.42-k*.08,top+.7+k*.22,z-1.3],.009,metal);
     }
+    facades.push({id:`street-block-${seed}`,faceZ,bounds:{min:[left,bottom,faceZ-depth],max:[right,top+.14,faceZ]},windows:apertures,
+      doorAperture:opening?{min:[opening.x-opening.w/2,bottom,faceZ-depth+.16],max:[opening.x+opening.w/2,bottom+opening.h,faceZ]}:null});
   }
   // The exit building is close enough to read its worn plaster and fittings.
-  facade(-.6,15.2,0,16.4,-2.12,plaster,17,true);
+  facade(-.6,15.2,0,16.4,-2.12,plaster,17,true,{x:STREET.doorX??1.2,w:1.24,h:2.47});
   // A neighbouring apartment block meets the left edge of the entry building.
   facade(-15.1,13.8,0,18.1,-2.12,plaster,1907,true);
-  box(.13,18.1,.19,-8.2,9.05,-1.99,darkConcrete);
+  box(.13,18.1,.09,-8.2,9.05,-2.145,darkConcrete);
   // A projecting end face lets the opening street read beyond the entry block.
-  box(.13,16.3,4.4,7.03,8.15,-4.1,darkConcrete);
-  const doorX=STREET.doorX??1.2,doorZ=-1.88;
-  box(1.52,2.74,.20,doorX,1.35,doorZ-.15,darkConcrete);box(1.24,2.47,.025,doorX,1.23,doorZ-.035,black);
+  box(.13,16.3,.16,7.03,8.15,-2.15,darkConcrete);
+  const doorX=STREET.doorX??1.2,doorZ=-2.14;
+  for(const dx of [-.67,.67])box(.18,2.74,.28,doorX+dx,1.35,doorZ-.12,darkConcrete);
+  box(1.52,.16,.28,doorX,2.66,doorZ-.12,darkConcrete);
+  box(1.24,2.47,.06,doorX,1.235,doorZ-3.38,black);
+  box(.58,.065,.16,doorX,2.22,doorZ-2.60,lampGlass,false);
   for(const dx of [-.71,.71])box(.09,2.77,.15,doorX+dx,1.36,doorZ+.04,trim);
   box(1.52,.09,.15,doorX,2.73,doorZ+.04,trim);box(1.54,.08,.39,doorX,.035,doorZ+.14,pavement);
   const entryLeaf=new THREE.Group();entryLeaf.position.set(doorX-.59,.02,doorZ+.05);entryLeaf.rotation.y=1.05;group.add(entryLeaf);
   const leafBase=mesh(new THREE.BoxGeometry(1.18,2.4,.09),wood,entryLeaf);leafBase.position.set(.59,1.2,0);
   const leafGlass=mesh(new THREE.BoxGeometry(.45,.65,.025),warmWindow,entryLeaf,false);leafGlass.position.set(.59,1.64,.06);
   const leafHandle=mesh(new THREE.BoxGeometry(.17,.026,.045),trim,entryLeaf);leafHandle.position.set(.96,1.02,.075);
-  box(.39,.33,.12,doorX,2.99,doorZ+.12,metal);cylinder(.13,.24,doorX,2.98,doorZ+.28,lampGlass);
+  box(.39,.33,.12,doorX,2.99,doorZ+.005,metal);rod([doorX,2.99,doorZ+.06],[doorX,2.99,doorZ+.26],.025,metal);cylinder(.13,.24,doorX,2.98,doorZ+.28,lampGlass);
   for(const dx of [-.10,.10])rod([doorX+dx,2.85,doorZ+.37],[doorX+dx,3.11,doorZ+.37],.012,metal);
   const entryLight=new THREE.PointLight('#ffd293',15,7.5,2);entryLight.position.set(doorX,2.7,doorZ+.8);group.add(entryLight);lightList.push(entryLight);
   flatPatch(doorX,.1,2.1,2.0,reflection,.007,2001);
@@ -131,10 +199,10 @@ export function createStreetWorld(THREE,scene){
   const noticeCanvas=document.createElement('canvas');noticeCanvas.width=256;noticeCanvas.height=384;const nc=noticeCanvas.getContext('2d');nc.fillStyle='#666e61';nc.fillRect(0,0,256,384);
   for(let i=0;i<26;i++){const x=12+random(i+60)*190,y=10+random(i+160)*320,w=25+random(i+260)*70,h=24+random(i+360)*95;nc.fillStyle=['#9b9a7b','#747b6b','#b0ac8b'][i%3];nc.fillRect(x,y,w,h);nc.strokeStyle='rgba(37,44,36,.46)';nc.lineWidth=2;for(let k=0;k<4;k++){nc.beginPath();nc.moveTo(x+4,y+8+k*6);nc.lineTo(x+w-5-random(i+k)*9,y+8+k*6);nc.stroke();}}
   const noticeMap=new THREE.CanvasTexture(noticeCanvas);noticeMap.colorSpace=THREE.SRGBColorSpace;
-  box(.92,1.27,.065,4.7,1.3,-1.98,metal);const notices=mesh(new THREE.PlaneGeometry(.82,1.17),new THREE.MeshStandardMaterial({map:noticeMap,roughness:1}),group,false);notices.position.set(4.7,1.3,-1.936);
+  box(.92,1.27,.065,4.7,1.3,-2.135,metal);const notices=mesh(new THREE.PlaneGeometry(.82,1.17),new THREE.MeshStandardMaterial({map:noticeMap,roughness:1}),group,false);notices.position.set(4.7,1.3,-2.093);
   const graffitiCanvas=document.createElement('canvas');graffitiCanvas.width=512;graffitiCanvas.height=256;const gc=graffitiCanvas.getContext('2d');gc.strokeStyle='#263b39';gc.lineWidth=8;gc.lineCap='round';
   for(let i=0;i<8;i++){gc.beginPath();gc.moveTo(35+i*48,210);gc.bezierCurveTo(5+i*48,35,100+i*42,15,57+i*45,180);gc.bezierCurveTo(105+i*38,230,15+i*45,100,80+i*45,115);gc.stroke();}
-  const graffitiMap=new THREE.CanvasTexture(graffitiCanvas);const graffiti=mesh(new THREE.PlaneGeometry(1.62,.82),new THREE.MeshBasicMaterial({map:graffitiMap,transparent:true,depthWrite:false}),group,false);graffiti.position.set(3.05,1.12,-1.927);
+  const graffitiMap=new THREE.CanvasTexture(graffitiCanvas);const graffiti=mesh(new THREE.PlaneGeometry(1.62,.82),new THREE.MeshBasicMaterial({map:graffitiMap,transparent:true,depthWrite:false}),group,false);graffiti.position.set(3.05,1.12,-2.166);
   const muralCanvas=document.createElement('canvas');muralCanvas.width=1024;muralCanvas.height=384;
   const mc=muralCanvas.getContext('2d');mc.lineCap='round';mc.lineJoin='round';
   // An original, loosely lettered tag with uneven spray strokes and worn paint.
@@ -153,43 +221,44 @@ export function createStreetWorld(THREE,scene){
   for(let i=0;i<19;i++){const x=70+random(i+982)*870,y=225+random(i+1191)*51;mc.beginPath();mc.moveTo(x,y);mc.lineTo(x+random(i+341)*3,y+18+random(i+415)*55);mc.stroke();}
   mc.globalCompositeOperation='destination-out';for(let i=0;i<950;i++){mc.fillStyle=`rgba(0,0,0,${.15+random(i+177)*.65})`;mc.fillRect(random(i+814)*1024,random(i+945)*384,1+random(i+734)*8,1+random(i+125)*3);}
   const muralMap=new THREE.CanvasTexture(muralCanvas);muralMap.colorSpace=THREE.SRGBColorSpace;
-  const mural=mesh(new THREE.PlaneGeometry(4.65,1.48),new THREE.MeshStandardMaterial({map:muralMap,transparent:true,depthWrite:false,roughness:1,polygonOffset:true,polygonOffsetFactor:-1}),group,false);mural.position.set(-3.45,1.20,-1.924);
-  box(.34,.54,.09,doorX-.97,1.18,doorZ+.09,metal);for(let i=0;i<5;i++)box(.11,.025,.012,doorX-.98,1.28-i*.055,doorZ+.145,black,false);
+  const mural=mesh(new THREE.PlaneGeometry(4.65,1.48),new THREE.MeshStandardMaterial({map:muralMap,transparent:true,depthWrite:false,roughness:1,polygonOffset:true,polygonOffsetFactor:-1}),group,false);mural.position.set(-3.45,1.20,-2.166);
+  box(.34,.54,.09,doorX-.97,1.18,doorZ+.015,metal);for(let i=0;i<5;i++)box(.11,.025,.012,doorX-.98,1.28-i*.055,doorZ+.065,black,false);
   for(const x of [-2.95,4.78]){
-    box(.83,.62,.32,x,4.38,-1.82,trim);cylinder(.23,.05,x,4.38,-1.63,metal,new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1,0,0),Math.PI/2));
-    for(let i=0;i<6;i++)rod([x-.22,4.13+i*.09,-1.59],[x+.22,4.13+i*.09,-1.59],.007,black);
-    wire([[x+.4,4.19,-1.75],[x+.6,3.9,-1.77],[x+.65,2.8,-1.79]],.012,metal);
+    box(.83,.62,.32,x,4.38,-2.01,trim);cylinder(.23,.05,x,4.38,-1.82,metal,new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1,0,0),Math.PI/2));
+    for(let i=0;i<6;i++)rod([x-.22,4.13+i*.09,-1.78],[x+.22,4.13+i*.09,-1.78],.007,black);
+    wire([[x+.4,4.19,-1.94],[x+.6,3.9,-2.15],[x+.65,2.8,-2.155]],.012,metal);
   }
   // Beyond the low fence is the boy's home: a small, poorly maintained block.
   // Recessed mortar, individual bricks and chipped plaster give the wall depth.
-  const homeConfig=STREET.home??{x:71.8,doorX:70.5},homeZ=-2.35,homeWidth=14;
+  const homeConfig=STREET.home??{x:71.8,doorX:70.5},homeZ=-2.35,homeFaceZ=homeZ-.05,homeWidth=14;
   const homeWall=mat('#777563',.99,{map:plasterMap,bumpMap:plasterBump,bumpScale:.047});
   const mortar=mat('#6e6a58',1,{map:plasterMap,bumpMap:plasterBump,bumpScale:.018});
   const brickMats=['#85644c','#6e5445','#98775a','#735e4e','#8c6d55'].map(color=>mat(color,.99,{map:plasterMap,bumpMap:plasterBump,bumpScale:.012}));
+  [homeWall,mortar,...brickMats].forEach(masonry);
   facade(homeConfig.x,homeWidth,0,13.4,homeZ,homeWall,7311,true,{x:homeConfig.doorX,w:1.24,h:2.47});
   const foundationLeft=homeConfig.x-homeWidth/2,foundationRight=homeConfig.x+homeWidth/2;
-  for(const [a,b]of[[foundationLeft,homeConfig.doorX-.62],[homeConfig.doorX+.62,foundationRight]])box(b-a,.68,.13,(a+b)/2,.32,homeZ+.035,darkConcrete);
+  for(const [a,b]of[[foundationLeft,homeConfig.doorX-.62],[homeConfig.doorX+.62,foundationRight]])box(b-a,.68,.13,(a+b)/2,.32,homeFaceZ+.035,darkConcrete);
   const brickPatches=[];
   function brickPatch(x,y,w,h,seed){
     const edge=[[-.49,-.43],[-.30,-.50],[-.11,-.44],[.12,-.50],[.40,-.41],[.48,-.21],[.43,.02],[.50,.21],[.32,.47],[.10,.44],[-.14,.50],[-.37,.36],[-.50,.13],[-.43,-.09]];
     const points=edge.map(([px,py],i)=>[px*w+(random(seed+i)-.5)*w*.055,py*h+(random(seed+31+i)-.5)*h*.055]);
     const shape=new THREE.Shape();points.forEach((p,i)=>i?shape.lineTo(...p):shape.moveTo(...p));shape.closePath();
-    const recess=mesh(new THREE.ShapeGeometry(shape),mortar,group,false);recess.position.set(x,y,homeZ+.07);
+    const recess=mesh(new THREE.ShapeGeometry(shape),mortar,group,false);recess.position.set(x,y,homeFaceZ+.003);
     const inside=(px,py)=>{let found=false;for(let i=0,j=points.length-1;i<points.length;j=i++){const a=points[i],b=points[j];if((a[1]>py)!==(b[1]>py)&&px<(b[0]-a[0])*(py-a[1])/(b[1]-a[1])+a[0])found=!found;}return found;};
     const bw=.32,bh=.145;let brickCount=0;
     for(let row=0;row<Math.ceil(h/bh)+1;row++)for(let col=0;col<Math.ceil(w/bw)+1;col++){
       const px=-w/2+col*bw+(row%2)*bw*.5,py=-h/2+row*bh;
       if(![[-.14,-.06],[.14,-.06],[.14,.06],[-.14,.06]].every(([dx,dy])=>inside(px+dx,py+dy)))continue;
       const m=brickMats[Math.floor(random(seed+row*51+col*13)*brickMats.length)];
-      box(.294,.121,.032+random(seed+row*15+col)*.012,x+px,y+py,homeZ+.088,m,false);brickCount++;
-      if(random(seed+row*7+col*19)>.78)box(.12,.014,.005,x+px-.035,y+py+.012,homeZ+.114,mortar,false);
+      box(.294,.121,.032+random(seed+row*15+col)*.012,x+px,y+py,homeFaceZ+.017,m,false);brickCount++;
+      if(random(seed+row*7+col*19)>.78)box(.12,.014,.005,x+px-.035,y+py+.012,homeFaceZ+.038,mortar,false);
     }
     for(let i=0;i<points.length;i++){
       const a=points[i],b=points[(i+1)%points.length],dx=b[0]-a[0],dy=b[1]-a[1],length=Math.hypot(dx,dy);
       const q=new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,0,1),Math.atan2(dy,dx));
-      instance('box',i%3===0?darkConcrete:homeWall,[x+(a[0]+b[0])/2,y+(a[1]+b[1])/2,homeZ+.111],[length,.026,.015],q,false);
+      instance('box',i%3===0?darkConcrete:homeWall,[x+(a[0]+b[0])/2,y+(a[1]+b[1])/2,homeFaceZ+.031],[length,.026,.015],q,false);
     }
-    brickPatches.push({x,y,width:w,height:h,z:homeZ+.115,brickCount});
+    brickPatches.push({x,y,width:w,height:h,z:homeFaceZ+.04,brickCount});
   }
   brickPatch(67.0,1.46,3.0,2.24,8101);brickPatch(75.1,1.90,3.05,2.70,8301);
   brickPatch(71.94,6.52,1.25,2.04,8501);brickPatch(76.65,9.64,1.15,2.05,8701);
@@ -200,7 +269,7 @@ export function createStreetWorld(THREE,scene){
   for(let i=0;i<40;i++){dc.fillStyle='rgba(38,36,29,.18)';dc.fillRect(random(i+491)*256,random(i+792)*512,2+random(i+997)*9,5+random(i+1142)*38);}
   const doorMap=new THREE.CanvasTexture(doorCanvas);doorMap.colorSpace=THREE.SRGBColorSpace;
   const oldWood=mat('#9d8767',.98,{map:doorMap,bumpMap:doorMap,bumpScale:.008}),doorFrame=mat('#575244',.98,{map:plasterMap});
-  const homeDoorX=homeConfig.doorX,homeDoorZ=homeZ+.15;
+  const homeDoorX=homeConfig.doorX,homeDoorZ=homeFaceZ+.065;
   // The opening has real depth. Its side walls and dim rear wall remain visible
   // while the wooden leaf swings inward, instead of revealing a solid facade.
   box(1.24,.045,3.55,homeDoorX,-.0225,homeZ-1.7,darkConcrete);
@@ -240,7 +309,7 @@ export function createStreetWorld(THREE,scene){
   let homeDoorProgress=0;
   const homeDoor={reset(){this.setProgress(0);},setProgress(value){if(!Number.isFinite(value))return;homeDoorProgress=Math.max(0,Math.min(1,value));homeLeaf.rotation.y=1.48*homeDoorProgress*homeDoorProgress*(3-2*homeDoorProgress);},get progress(){return homeDoorProgress;},get angle(){return homeLeaf.rotation.y;}};
   box(1.40,.022,.32,homeDoorX,-.011,homeDoorZ+.04,darkConcrete);
-  box(.30,.20,.15,homeDoorX,2.82,homeDoorZ+.05,metal);cylinder(.095,.16,homeDoorX,2.78,homeDoorZ+.19,lampGlass);
+  box(.30,.20,.15,homeDoorX,2.82,homeDoorZ+.005,metal);rod([homeDoorX,2.80,homeFaceZ+.09],[homeDoorX,2.80,homeDoorZ+.19],.022,metal);cylinder(.095,.16,homeDoorX,2.78,homeDoorZ+.19,lampGlass);
   const homeLight=new THREE.PointLight('#e1b479',11,7,2);homeLight.position.set(homeDoorX,2.69,homeDoorZ+.47);homeLight.userData.flickerBase=11;group.add(homeLight);lightList.push(homeLight);
   flatPatch(homeDoorX,.1,1.48,1.25,reflection,.006,8411);
   for(let i=0;i<23;i++){const x=65.7+random(i+6721)*12.3,z=-1.45+random(i+7631)*.4;box(.045+random(i+321)*.12,.035,.035+random(i+811)*.08,x,.003,z,i%3===0?brickMats[i%brickMats.length]:darkConcrete,false);}
@@ -451,8 +520,8 @@ export function createStreetWorld(THREE,scene){
   for(const batch of batches.values()){
     const object=new THREE.InstancedMesh(geometries[batch.type],batch.material,batch.matrices.length);batch.matrices.forEach((m,i)=>object.setMatrixAt(i,m));object.instanceMatrix.needsUpdate=true;object.castShadow=batch.shadow;object.receiveShadow=true;group.add(object);
   }
-  const metadata={entryDoor:{x:doorX,y:0,z:doorZ,kind:'building-exit'},route:{minX:STREET.minX,maxX:STREET.maxX,y:0,z:0,clearHalfWidth:.5},cars,props,lamps,endGate,fence:endGate,crawlGate,home,dumpster:dumpsterMetadata,
-    frontParkGate,neighbouringBuilding:{minX:-22,maxX:-8.2,z:-2.12},graffiti:{x:-3.45,y:1.20,z:-1.924,width:4.65,height:1.48},lights:lightList.length,drawBatches:batches.size};
+  const metadata={entryDoor:{x:doorX,y:0,z:doorZ,kind:'building-exit'},route:{minX:STREET.minX,maxX:STREET.maxX,y:0,z:0,clearHalfWidth:.5},cars,props,lamps,endGate,fence:endGate,crawlGate,home,dumpster:dumpsterMetadata,facades,
+    frontParkGate,neighbouringBuilding:{minX:-22,maxX:-8.2,z:-2.12},graffiti:{x:-3.45,y:1.20,z:-2.166,width:4.65,height:1.48},lights:lightList.length,drawBatches:batches.size};
   group.userData.street=metadata;let enteredAt=null;
   const entryDoor={reset(){enteredAt=null;entryLeaf.rotation.y=1.05;},get angle(){return entryLeaf.rotation.y;}};
   return {group,metadata,entryDoor,homeDoor,dumpster,update(time,playerX,streetState){

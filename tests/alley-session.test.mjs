@@ -17,6 +17,23 @@ const safeSnapshot=overrides=>{
  const snapshot=createSaveSnapshot(liveAlley(overrides));assert(snapshot,'The fixture must represent reachable supported geometry.');return snapshot;
 };
 
+test('Continue preserves exploration choices and the outdoor alternative without requiring the jack',()=>{
+ for(const fixture of [
+  {area:'storage',x:95.5,storageVisited:true,gateKey:true,radioOn:false},
+  {x:123,storageVisited:true,gateKey:true,gateOpened:true,radioOn:false},
+  {area:'yard',x:150,storageVisited:true,gateKey:true,gateOpened:true,radioOn:false,distractionUsed:true},
+ ]){
+  const storage=memoryStorage(),session=createSession(storage),saved=safeSnapshot({...fixture,fencePassed:true});
+  assert.equal(saved.alley.jackStatus,'ground');assert(session.save(saved));
+  const resumed=createSession(storage).getSave();assert.deepEqual(resumed,saved);
+  const player={},controller=createAlley();controller.begin(player,resumed.alley);
+  assert.equal(controller.state.gateKey,true);assert.equal(controller.state.radioOn,false);
+  assert.equal(controller.state.area,fixture.area??'alley');
+  assert.equal(controller.state.gateOpened,!!fixture.gateOpened);
+  if(fixture.area==='storage')assert.equal(player.z,ALLEY.storage.lane);
+ }
+});
+
 test('Continue restores each alley puzzle area, carried tools and a completed route',()=>{
  const storage=memoryStorage(),session=createSession(storage);
  const fixtures=[

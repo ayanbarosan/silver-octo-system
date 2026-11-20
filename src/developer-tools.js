@@ -14,6 +14,7 @@ export function developerLocation(id){
  else if(id==='bedroom'){Object.assign(value,{chapter:'apartment',apartment:{x:19.25,face:1,stage:'bedroom',nightstandX:21.2,doorClosed:true}});player.x=19.25;}
  else if(id==='fireescape'){Object.assign(value,{chapter:'apartment',apartment:{x:27.1,face:1,stage:'fireescape',flight:0}});player.x=27.1;}
  else if(id==='playground'){Object.assign(value,{chapter:'apartment',apartment:{x:40,face:1,stage:'playground'}});Object.assign(player,{x:40,y:-6.4});}
+ else if(id==='storage'){Object.assign(value,{chapter:'alley',alley:{area:'storage',x:89.2,y:0,face:1,crateXs:ALLEY.crates.map(crate=>crate.x),jackStatus:'ground',pumpProgress:0,fencePassed:true,storageVisited:true}});player.x=89.2;}
  else if(['alley','workshop','backyard'].includes(id)){
   const area=id==='workshop'?'garage':id==='backyard'?'yard':'alley',x=id==='workshop'?111.5:id==='backyard'?143:ALLEY.entry.x;
   Object.assign(value,{chapter:'alley',alley:{area,x,y:0,face:1,crateXs:ALLEY.crates.map(crate=>crate.x),jackStatus:area==='alley'?'ground':'raised',pumpProgress:area==='alley'?0:1,fencePassed:area!=='alley'}});

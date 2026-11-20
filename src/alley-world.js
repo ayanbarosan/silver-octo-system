@@ -36,7 +36,7 @@ export function createAlleyWorld(THREE,scene){
   const wet=material('#344b4d',.12,{metalness:.34,transparent:true,opacity:.49,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-1});
   const puddlePixels=new Uint8Array(64*64*4);for(let y=0;y<64;y++)for(let x=0;x<64;x++){const i=(y*64+x)*4,r=Math.hypot((x-31.5)/31.5,(y-31.5)/31.5),a=clamp((1-r)*6);puddlePixels[i]=puddlePixels[i+1]=puddlePixels[i+2]=255;puddlePixels[i+3]=Math.round(a*255);}
   const puddleMap=new THREE.DataTexture(puddlePixels,64,64);puddleMap.needsUpdate=true;wet.map=puddleMap;
-  const batches=new Map(),dummy=new THREE.Object3D(),props=[],surfaces=[],garages=[],lights=[],windows=[];
+  const batches=new Map(),dummy=new THREE.Object3D(),props=[],surfaces=[],garages=[],lights=[],windows=[],buildings=[];
   let currentParent=group;
   const geometries={box:new THREE.BoxGeometry(1,1,1),cylinder:new THREE.CylinderGeometry(1,1,1,10),plane:new THREE.PlaneGeometry(1,1)};
   const floorQ=new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1,0,0),-Math.PI/2);
@@ -53,13 +53,16 @@ export function createAlleyWorld(THREE,scene){
   function practical(x,y,z,intensity=7,color='#dcba86',parent=currentParent){const light=new THREE.PointLight(color,intensity,10,2);light.position.set(x,y,z);parent.add(light);lights.push({light,base:intensity,x});return light;}
   const cloudFill=new THREE.HemisphereLight('#a6bac0','#49493e',.65);group.add(cloudFill);
   // The lane is visibly muddy but its walking surface is continuous and flat.
-  box(226,.34,48,98,-.23,-2,mud);box(122,.10,2.35,57,-.05,1.4,wetMud);
+  box(226,.34,48,98,-.23,-2,mud);box(145,.10,2.35,68.5,-.05,1.4,wetMud);
   box(90,.10,2.35,150,-.05,4.2,wetMud);box(3.5,.10,4.0,108.5,-.05,2.8,wetMud);
-  surfaces.push({id:'alley-ground',minX:0,maxX:116,y:0,minZ:.20,maxZ:2.60},{id:'workshop-yard-ground',minX:107,maxX:194,y:0,minZ:3.0,maxZ:5.40},{id:'garage-approach-ground',minX:106.75,maxX:110.25,y:0,minZ:1.4,maxZ:5.4});
+  box(5.6,.10,4.1,141.3,-.05,2.80,wetMud);
+  surfaces.push({id:'alley-ground',minX:0,maxX:140,y:0,minZ:.20,maxZ:2.60},{id:'workshop-yard-ground',minX:107,maxX:194,y:0,minZ:3.0,maxZ:5.40},{id:'garage-approach-ground',minX:106.75,maxX:110.25,y:0,minZ:1.4,maxZ:5.4});
   for(let n=0;n<150;n++){
     const x=rand(n+31)*198,z=-6.2+rand(n+117)*13.2,nearMain=z>.25&&z<2.55&&x<117,nearSide=z>3.02&&z<5.38&&x>107;
     plane(.5+rand(n+217)*2.8,.21+rand(n+319)*1.1,x,nearMain||nearSide?.003:-.051,z,wet,floorQ);
   }
+  const rippleMaterial=material('#a6bfc0',.18,{transparent:true,opacity:.22,depthWrite:false,metalness:.2});
+  const ripples=new THREE.InstancedMesh(new THREE.TorusGeometry(1,.007,4,24),rippleMaterial,24);ripples.name='rain-puddle-ripples';ripples.frustumCulled=false;group.add(ripples);
   for(let i=0;i<330;i++){
     const x=2+rand(i+401)*192,z=-5.4+rand(i+991)*11.6;
     if(Math.abs(z-1.4)<.62&&x<117||Math.abs(z-4.2)<.62&&x>107)continue;
@@ -69,6 +72,7 @@ export function createAlleyWorld(THREE,scene){
   // Garage fronts face the camera; the roof ridges, handles and locks are all
   // geometry. Doors remain distinct silhouettes rather than painted facades.
   function garage(x,w,seed,{frontZ=-.8,height=3.05,open=false,number=true}={}){
+    const originalParent=currentParent,parent=new THREE.Group();parent.name=`garage-shell-${seed}`;group.add(parent);currentParent=parent;
     const depth=4.8,paint=doorPaint[seed%doorPaint.length],back=frontZ-depth;
     box(.23,height,depth,x-w/2,height/2,(frontZ+back)/2,seed%3===0?brick:concrete,true);box(.23,height,depth,x+w/2,height/2,(frontZ+back)/2,concrete,true);
     box(w,.24,depth,x,height-.10,(frontZ+back)/2,dirtyConcrete);box(w,height,.20,x,height/2,back,dirtyConcrete);
@@ -91,8 +95,14 @@ export function createAlleyWorld(THREE,scene){
     garages.push({id:`garage-${seed}`,x,width:w,height,frontZ,open,bounds:{min:[x-w/2-.12,0,back-.12],max:[x+w/2+.12,height+.64,frontZ+.12]}});
     // Faded rectangle marks and peeling patches stay part of the material.
     for(let k=0;k<5;k++){const xx=x-w*.4+rand(seed+k*31)*w*.8,yy=.3+rand(seed+k*43)*2.2;box(.06+rand(seed+k*71)*.3,.02+rand(seed+k*97)*.09,.008,xx,yy,frontZ+.058,seed%2?rust:dirtyConcrete);}
+    // Recessed jambs, a rain gutter and raised panel seams finish every edge.
+    for(const side of[-1,1])box(.10,height-.20,.15,x+side*(w/2-.16),(height-.20)/2,frontZ+.035,dirtyConcrete);
+    rod([x-w/2-.03,height+.12,frontZ+.12],[x+w/2+.03,height+.12,frontZ+.12],.047,iron);
+    rod([x+w/2-.09,.03,frontZ+.15],[x+w/2-.09,height+.12,frontZ+.15],.030,steel);
+    if(!open)for(let xx=x-w/2+.35;xx<x+w/2-.25;xx+=.43)box(.025,height-.32,.026,xx,(height-.20)/2,frontZ+.060,steel);
+    buildings.push({group:parent,id:`garage-${seed}`,bounds:{min:[x-w/2-.30,0,back-.2],max:[x+w/2+.30,height+.75,frontZ+.23]}});currentParent=originalParent;
   }
-  for(const[x,w,seed]of[[3.5,6.2,11],[10.2,6.6,13],[17.1,6.8,15],[24.1,6.7,18],[31.4,7.0,21],[38.8,7.2,23],[47.0,7.4,26],[61.8,7.5,31],[88.4,7.5,37],[96.5,7.8,41],[104.7,7.6,44]])garage(x,w,seed);
+  for(const[x,w,seed]of[[3.5,6.2,11],[10.2,6.6,13],[17.1,6.8,15],[24.1,6.7,18],[31.4,7.0,21],[38.8,7.2,23],[47.0,7.4,26],[61.8,7.5,31],[104.7,7.6,44]])garage(x,w,seed);
   garage(75.4,7.1,33,{open:true});
   // A kennel, worn bowl and slack chain explain the territorial dog's place.
   box(1.10,.66,.82,22.0,.33,-.65,wood);box(.46,.48,.04,22.0,.24,-.215,black);
@@ -110,7 +120,12 @@ export function createAlleyWorld(THREE,scene){
     return solid(id,area,[x-.095,0,z0-.09],[x+.095,h+.17,z1+.09],{climbable:id===ALLEY.fence.id,topY:h});
   }
   const climbFence=fence(55,.25,2.60,2.35,'alley-fence','alley');
-  const lockedGate=fence(116,.02,2.72,2.70,'locked-alley-gate','alley');
+  const gatePivot=new THREE.Group();gatePivot.name='unlockable-alley-gate';gatePivot.position.set(116,0,2.72);group.add(gatePivot);
+  currentParent=gatePivot;
+  const lockedGate=fence(0,-2.70,0,2.70,'locked-alley-gate','alley');
+  box(.07,.18,.14,-.06,.95,-1.32,rust);box(.012,.05,.024,-.103,.95,-1.32,black);
+  currentParent=group;lockedGate.bounds={min:[115.905,0,-.07],max:[116.095,2.87,2.81]};lockedGate.dynamic=true;lockedGate.hinge=[116,0,2.72];lockedGate.handle=[115.94,.95,1.4];lockedGate.openProgress=0;
+  for(const z of[.02,2.72]){box(.10,2.86,.10,116,1.43,z,iron);box(.17,.05,.17,116,2.89,z,zinc);}
   for(const x of[.12,194.0]){rod([x,0,-.25],[x,2.4,-.25],.045,iron);rod([x,0,2.75],[x,2.4,2.75],.045,iron);}
   // Low camera-side foundations imply the opposite garage row without a
   // roof beam crossing the playable silhouette in the side-on camera.
@@ -137,28 +152,112 @@ export function createAlleyWorld(THREE,scene){
     }
     return solid(`old-${van?'van':'car'}-${seed}`,x>140?'yard':'alley',[x-w/2-.10,0,z-.96],[x+w/2+.10,1.52,z+.96]);
   }
-  oldCar(76.3,-2.38,2,{hood:true});oldCar(83.5,-2.38,4);oldCar(99.4,-3.0,1);
-  // Backdrop apartment windows give the lane depth and a source for the TV.
-  function block(x,w,height,z,seed){
-    box(w,height,4.1,x,height/2,z-2.1,seed%2?dirtyConcrete:concrete);
-    for(let yy=2.1;yy<height-.8;yy+=2.75)for(let xx=x-w/2+1.15;xx<x+w/2-.6;xx+=2.05){
-      const lit=rand(seed+xx*11+yy*7)>.88;box(.86,1.18,.035,xx,yy,z,black);box(.72,1.04,.021,xx,yy,z+.025,lit?warmGlass:paleGlass);
-      for(const dx of[-.41,.41])box(.033,1.2,.07,xx+dx,yy,z+.06,steel);box(.89,.075,.20,xx,yy-.64,z+.055,dirtyConcrete);box(.026,1.13,.065,xx,yy,z+.06,steel);
+  oldCar(76.3,-2.38,2,{hood:true});oldCar(83.5,-2.38,4);oldCar(68.5,-2.4,1);
+  // A side storeroom can be explored and left again. Its front wall has an
+  // actual doorway; the roof, jambs and back remain when the view cuts inside.
+  const storageShell=new THREE.Group(),storageFront=new THREE.Group(),storageContents=new THREE.Group();
+  storageShell.name='storage-permanent-shell';storageFront.name='storage-front-cutaway';storageContents.name='storage-interior-props';
+  group.add(storageShell,storageFront,storageContents);
+  currentParent=storageShell;
+  box(12,.12,5.0,92.5,-.06,-3.2,dirtyConcrete,true);
+  box(.22,3.15,5.0,86.5,1.575,-3.2,concrete,true);box(.22,3.15,5.0,98.5,1.575,-3.2,concrete,true);
+  box(12,3.15,.20,92.5,1.575,-5.60,dirtyConcrete,true);
+  box(12.2,.14,5.25,92.5,3.18,-3.2,rust,true);box(12, .42,.22,92.5,2.94,-.80,concrete,true);
+  rod([86.4,3.17,-.61],[98.6,3.17,-.61],.055,iron);
+  rod([98.39,.05,-.59],[98.39,3.17,-.59],.035,steel);
+  for(const x of[88.0,89.2])box(.09,2.63,.23,x,1.315,-.73,iron,true);
+  box(1.30,.10,.23,88.6,2.63,-.73,iron,true);box(1.30,.045,.42,88.6,.018,-.72,dirtyConcrete,true);
+  currentParent=storageFront;
+  box(1.50,2.72,.22,87.25,1.36,-.8,concrete,true);box(9.3,2.72,.22,93.85,1.36,-.8,concrete,true);
+  for(let x=89.5;x<98.3;x+=.38)box(.025,2.54,.035,x,1.28,-.667,steel);
+  const storageDoor=new THREE.Group();storageDoor.name='storage-hinged-door';storageDoor.position.set(88.02,0,-.80);storageShell.add(storageDoor);
+  box(1.12,2.55,.07,.56,1.275,0,doorPaint[1],true,storageDoor);
+  for(const y of[.22,2.30])box(1.0,.045,.025,.56,y,.052,steel,false,storageDoor);
+  box(.08,.22,.025,1.02,1.03,.055,iron,false,storageDoor);rod([1.02,.98,.07],[1.02,1.12,.07],.018,zinc,storageDoor);
+  currentParent=storageContents;
+  for(const x of[90.7,94.5]){
+    for(const xx of[x-.8,x+.8])rod([xx,0,-5.10],[xx,2.50,-5.10],.024,iron);
+    for(const y of[.35,1.10,1.85,2.45]){
+      box(1.75,.06,.65,x,y,-5.12,wood,true);
+      for(let n=0;n<4;n++)box(.15+rand(x+n)*.18,.14+rand(x*3+n)*.26,.25,x-.61+n*.38,y+.15,-5.06,n%2?rust:steel);
     }
+  }
+  box(1.4,.09,.75,92.3,.71,-4.40,wood,true);
+  for(const x of[91.74,92.86])for(const z of[-4.70,-4.10])box(.06,.66,.06,x,.33,z,iron);
+  box(.70,.38,.40,92.3,.99,-4.02,wood,true);box(.54,.24,.026,92.3,1.0,-3.807,black);
+  for(let x=92.04;x<92.43;x+=.045)box(.014,.20,.018,x,1.01,-3.784,zinc);
+  const radioKnob=mesh(new THREE.CylinderGeometry(.038,.038,.026,16),zinc);radioKnob.rotation.x=Math.PI/2;radioKnob.position.set(92.3,.95,-3.78);
+  const radioGlowMaterial=material('#554f37',.55,{emissive:'#e4bc6e',emissiveIntensity:.18});
+  box(.17,.06,.012,92.53,1.10,-3.784,radioGlowMaterial);
+  rod([92.05,1.20,-4.06],[91.93,1.83,-4.06],.008,zinc);
+  // The key hangs from a slim bracket behind the clear walking strip.
+  rod([96.0,1.26,-5.48],[96.0,1.26,-3.84],.014,iron);
+  rod([96.0,1.26,-3.84],[96.0,1.08,-3.78],.009,zinc);
+  const keyObject=new THREE.Group();keyObject.name='side-gate-key';keyObject.position.set(96.0,1.0,-3.78);storageContents.add(keyObject);
+  const brass=material('#b9a570',.32,{metalness:.68});
+  const keyRing=mesh(new THREE.TorusGeometry(.055,.010,8,16),brass,keyObject);keyRing.position.y=.09;
+  box(.018,.15,.016,0,-.005,0,brass,false,keyObject);box(.065,.020,.018,.022,-.068,0,brass,false,keyObject);box(.043,.016,.018,.012,-.032,0,brass,false,keyObject);
+  practical(91.6,2.76,-3.7,12,'#d7c49c',storageShell);box(.72,.065,.28,91.6,2.85,-3.7,iron,false,storageShell);box(.60,.023,.22,91.6,2.806,-3.7,lampGlass,false,storageShell);
+  practical(96.0,2.18,-4.20,4.5,'#dfc28d',storageShell);box(.30,.08,.22,96.0,2.26,-4.20,iron,false,storageShell);box(.22,.023,.16,96.0,2.208,-4.20,lampGlass,false,storageShell);
+  currentParent=group;
+  const storageMetadata={bounds:{min:[86.38,0,-5.72],max:[98.62,3.30,-.60]},entry:{x:88.6,y:0,z:-.8,width:1.2,height:2.58},route:{minX:87.4,maxX:97.2,y:0,z:-3.4,clearHalfWidth:.30},key:{x:96.0,y:1.0,z:-3.78,collected:false},radio:{x:92.3,y:.95,z:-3.78,on:true},doorProgress:0,cutaway:false};
+  surfaces.push({id:'storage-floor',area:'storage',minX:86.5,maxX:98.5,y:0,minZ:-5.6,maxZ:-.7});
+  solid('storage-back-wall','storage',[86.38,0,-5.72],[98.62,3.15,-5.50],{wall:true});
+  solid('storage-radio-table','storage',[91.59,0,-4.79],[93.01,.76,-4.0]);
+  // Backdrop apartment windows give the lane depth and a source for the TV.
+  const tvMaterial=material('#66868c',.58,{emissive:'#91b6c2',emissiveIntensity:.48});
+  function block(x,w,height,z,seed){
+    const oldParent=currentParent,parent=new THREE.Group();parent.name=`alley-apartment-${seed}`;group.add(parent);currentParent=parent;
+    const wall=seed%2?dirtyConcrete:concrete,left=x-w/2,right=x+w/2,rows=[],columns=[];
+    // The glass lies inside an actual masonry recess, with reveals and sills.
+    // Previously panes stood in front of an uncut solid slab.
+    box(w,height,3.78,x,height/2,z-2.21,wall);
+    for(let yy=2.1;yy<height-.8;yy+=2.75)rows.push(yy);
+    for(let xx=left+1.15;xx<right-.6;xx+=2.05)columns.push(xx);
+    let bottom=0;
+    for(const yy of rows){
+      box(w,yy-.62-bottom,.25,x,(bottom+yy-.62)/2,z-.125,wall);let start=left;
+      for(const xx of columns){
+        box(xx-.46-start,1.24,.25,(start+xx-.46)/2,yy,z-.125,wall);start=xx+.46;
+        const lit=rand(seed+xx*11+yy*7)>.88;
+        const television=seed===79&&Math.abs(xx-87.55)<.01&&Math.abs(yy-4.85)<.01;
+        box(.92,1.24,.025,xx,yy,z-.28,black);box(.76,1.08,.021,xx,yy,z-.205,television?tvMaterial:lit?warmGlass:paleGlass);
+        if(television)windows.push({id:'television-window',x:xx,y:yy,z:z-.205,host:`alley-apartment-${seed}`});
+        for(const side of[-1,1]){
+          box(.055,1.24,.23,xx+side*.435,yy,z-.075,concrete);
+          box(.031,1.12,.045,xx+side*.385,yy,z-.15,steel);
+        }
+        box(.94,.075,.36,xx,yy-.65,z-.02,dirtyConcrete);box(.026,1.12,.04,xx,yy,z-.15,steel);
+        box(.79,.028,.04,xx,yy+.02,z-.15,steel);
+        if(lit){box(.15,.24,.018,xx-.20,yy-.38,z-.18,wood);box(.075,.31,.018,xx+.22,yy-.34,z-.18,black);}
+      }
+      box(right-start,1.24,.25,(start+right)/2,yy,z-.125,wall);bottom=yy+.62;
+    }
+    box(w,height-bottom,.25,x,(height+bottom)/2,z-.125,wall);
     box(w+.24,.16,4.4,x,height+.04,z-2.0,dirtyConcrete);
     rod([x-w*.25,.2,z+.12],[x-w*.25,height-.2,z+.12],.035,steel);
+    for(let y=1.05;y<height;y+=2.75)box(w,.065,.10,x,y,z+.055,dirtyConcrete);
+    buildings.push({group:parent,id:`apartment-${seed}`,bounds:{min:[left-.18,0,z-4.4],max:[right+.18,height+.2,z+.24]}});currentParent=oldParent;
   }
   for(const[x,w,h,z,seed]of[[15,18,13,-14,71],[42,21,16,-19,73],[80,20,15,-14,79],[112,20,12,-11,83],[154,19,14,-13,89],[182,21,18,-21,97]])block(x,w,h,z,seed);
   for(let x=5;x<193;x+=11){rod([x,5.8,-5],[x+11,5.45,-5.1],.014,black);}
   // A small upstairs room reacts to the first loud scrape of the jack.
+  // Its occupied lower storey stands behind the outdoor passage. The old
+  // upstairs slab floated beside the workshop, with no matching support.
+  box(8.2,3.10,3.8,113.7,1.55,-.80,dirtyConcrete,true);
+  box(8.42,.16,4.0,113.7,.08,-.80,concrete,true);
+  for(const x of[109.67,117.73])box(.16,6.18,.15,x,3.09,1.17,concrete,true);
+  box(1.75,1.10,.06,114.9,1.78,1.15,iron);for(let x=114.15;x<115.70;x+=.18)box(.042,1.02,.025,x,1.78,1.20,steel);
   box(8.2,3.1,3.8,113.7,4.65,-.80,concrete);box(1.37,1.53,.09,113.2,4.73,1.15,black);
   const heardWindow=mesh(new THREE.PlaneGeometry(1.18,1.34),material('#1c3036',.54,{emissive:'#e2b875',emissiveIntensity:0}));heardWindow.position.set(113.2,4.73,1.205);
   for(const dx of[-.65,.65])box(.055,1.57,.12,113.2+dx,4.73,1.23,steel);box(1.38,.06,.12,113.2,5.51,1.23,steel);box(1.46,.10,.25,113.2,3.91,1.25,dirtyConcrete);box(.039,1.47,.09,113.2,4.73,1.28,steel);
   const heardLight=practical(113.2,4.65,1.58,0,'#e6ba77');
-  const tvMaterial=material('#66868c',.58,{emissive:'#91b6c2',emissiveIntensity:.48});box(1.24,1.49,.055,90.3,5.80,-10.87,black);box(1.10,1.34,.024,90.3,5.80,-10.82,tvMaterial);windows.push({id:'television-window',x:90.3,y:5.8,z:-10.82});
+
   // Real workshop shell. The near wall and roof are removed from the cutaway
   // view only after the boy steps inside; the back wall/props keep depth.
-  const workshopExterior=new THREE.Group();workshopExterior.name='workshop-camera-side-shell';group.add(workshopExterior);
+  const workshopExterior=new THREE.Group();workshopExterior.name='workshop-near-wall-cutaway';group.add(workshopExterior);
+  const workshopStructure=new THREE.Group();workshopStructure.name='workshop-permanent-roof-frame';group.add(workshopStructure);
+  const workshopNearMaterial=concrete.clone();workshopNearMaterial.transparent=true;workshopNearMaterial.depthWrite=false;
   const workshopBack=new THREE.Group();workshopBack.name='workshop-interior-back-wall';group.add(workshopBack);
   const workshopContents=new THREE.Group();workshopContents.name='workshop-interior-clutter';group.add(workshopContents);
   box(27.8,3.25,.16,124.0,1.625,2.92,dirtyConcrete,true,workshopBack);
@@ -170,9 +269,14 @@ export function createAlleyWorld(THREE,scene){
   box(1.10,2.16,.055,.55,1.08,0,doorPaint[1],false,serviceDoor);
   box(.38,.55,.025,.55,1.55,.04,black,false,serviceDoor);
   rod([.94,.98,.045],[.94,.98,.17],.018,zinc,serviceDoor);
-  box(27.8,3.25,.15,124.0,1.625,5.56,concrete,true,workshopExterior);
-  box(28.2,.14,3.1,124.0,3.25,4.24,rust,true,workshopExterior);
-  for(let x=110.0;x<138.2;x+=.23)box(.045,.026,3.18,x,3.34,4.24,steel,false,workshopExterior);
+  box(27.8,2.85,.15,124.0,1.675,5.56,workshopNearMaterial,false,workshopExterior);
+  box(28.2,.14,3.1,124.0,3.25,4.24,rust,true,workshopStructure);
+  for(let x=110.0;x<138.2;x+=.23)box(.045,.026,3.18,x,3.34,4.24,steel,false,workshopStructure);
+  for(const z of[2.92,5.56]){
+    box(27.8,.24,.18,124,.12,z,dirtyConcrete,true,workshopStructure);
+    box(27.8,.30,.18,124,3.00,z,concrete,true,workshopStructure);
+  }
+  rod([109.95,3.30,5.75],[138.05,3.30,5.75],.047,iron,workshopStructure);
   box(.18,3.20,.26,110,1.60,2.96,concrete,true);box(.18,3.20,.26,110,1.60,5.44,concrete,true);box(.23,.22,2.65,110,3.17,4.2,dirtyConcrete);
   solid('workshop-back-wall','garage',[110.10,0,2.84],[137.90,3.25,3.00],{wall:true});
   solid('workshop-near-wall','garage',[110.10,0,5.485],[137.90,3.25,5.635],{wall:true,cutaway:true});
@@ -246,6 +350,14 @@ export function createAlleyWorld(THREE,scene){
     box(w,h,.52,x,h/2,2.72,id.includes('timber')?wood:concrete,true);box(w+.08,.07,.61,x,h+.035,2.72,id.includes('timber')?rust:dirtyConcrete);
     cover.push(solid(id,'yard',[x-w/2-.04,0,2.40],[x+w/2+.04,h+.07,3.04],{cover:true,coverTopY:h+.07}));
   }
+  // A loose service chain can be rattled from cover to draw the owner away.
+  const chainGroup=new THREE.Group();chainGroup.name='yard-distraction-chain';chainGroup.position.set(152.2,1.85,4.2);group.add(chainGroup);
+  rod([152.2,1.89,2.91],[152.2,1.89,4.2],.025,iron);
+  box(.16,.24,.08,152.2,1.80,2.96,steel,true);
+  for(let i=0;i<16;i++){
+    const link=mesh(new THREE.TorusGeometry(.030,.0065,6,10),zinc,chainGroup);link.position.y=-i*.060;link.scale.y=1.30;if(i%2)link.rotation.y=Math.PI/2;
+  }
+  const chainMetadata={x:152.2,y:.90,z:4.2,used:false,progress:0};
   oldCar(170.8,.25,3,{van:true});
   for(const[x,w,seed]of[[147,10,51],[160.3,11.3,53],[175,12.7,57],[189.2,11.5,61]])garage(x,w,seed,{frontZ:-1.6,height:3.2});
   for(let i=0;i<90;i++){
@@ -258,29 +370,54 @@ export function createAlleyWorld(THREE,scene){
   }
   // Batched geometry is grouped into short cells; distant roofs and hardware
   // do not consume draw calls while the camera is inside the workshop.
-  const cellMeshes=[];
+  const cellMeshes=[],storageFadeMaterials=[];
   for(const batch of batches.values()){
-    const object=new THREE.InstancedMesh(geometries[batch.type],batch.mat,batch.matrices.length);batch.matrices.forEach((m,i)=>object.setMatrixAt(i,m));object.instanceMatrix.needsUpdate=true;object.castShadow=batch.shadow;object.receiveShadow=true;batch.parent.add(object);
-    if(typeof batch.zone==='number')cellMeshes.push({object,center:batch.zone*26+13});
+    let mat=batch.mat;
+    if(batch.parent===storageFront){mat=mat.clone();mat.transparent=true;mat.depthWrite=false;storageFadeMaterials.push(mat);}
+    const object=new THREE.InstancedMesh(geometries[batch.type],mat,batch.matrices.length);batch.matrices.forEach((m,i)=>object.setMatrixAt(i,m));object.instanceMatrix.needsUpdate=true;object.castShadow=batch.parent===storageFront?false:batch.shadow;object.receiveShadow=true;batch.parent.add(object);
+    if(typeof batch.zone==='number'){
+      // Test the complete batch extent, never just the cell origin: doors,
+      // roofs and long foundations can straddle several cells.
+      object.computeBoundingBox();const b=object.boundingBox;
+      cellMeshes.push({object,minX:b.min.x,maxX:b.max.x,farDepth:Math.max(0,-b.min.z)});
+    }
   }
   const rainCount=650,rainPositions=new Float32Array(rainCount*6),speeds=new Float32Array(rainCount);
   for(let i=0;i<rainCount;i++){const o=i*6;rainPositions[o]=rand(i+311)*44-20;rainPositions[o+1]=rand(i+733)*9;rainPositions[o+2]=-10+rand(i+997)*17;speeds[i]=8+rand(i+1163)*7;rainPositions[o+3]=rainPositions[o]-.03;rainPositions[o+4]=rainPositions[o+1]-.25;rainPositions[o+5]=rainPositions[o+2];}
   const rainGeo=new THREE.BufferGeometry();rainGeo.setAttribute('position',new THREE.BufferAttribute(rainPositions,3).setUsage(THREE.DynamicDrawUsage));
   const rain=new THREE.LineSegments(rainGeo,new THREE.LineBasicMaterial({color:'#a4bec5',transparent:true,opacity:.18,fog:true,depthWrite:false}));rain.frustumCulled=false;group.add(rain);
   const jackPoint=new THREE.Vector3(),crankEnd=new THREE.Vector3(),crankStart=new THREE.Vector3(),delta=new THREE.Vector3();
-  const metadata={id:'garage-alley',length:194,route:{minX:0,maxX:194,y:0,alleyZ:1.4,garageZ:4.2,yardZ:4.2,clearHalfWidth:.60},surfaces,props,garages,
+  const metadata={id:'garage-alley',length:194,route:{minX:0,maxX:194,y:0,alleyZ:1.4,garageZ:4.2,yardZ:4.2,clearHalfWidth:.60},surfaces,props,garages,storage:storageMetadata,chain:chainMetadata,
     dogDen:{x:23,y:0,z:.3},mechanic:{x:73.45,y:0,z:-1.8,hood:[74.2,1.04,-1.8]},fence:climbFence,lockedGate,
     workshop:{minX:110,maxX:137.8,lane:4.2,cutaway:true,door:shutterBounds,window:rearWindow},jack:jackMetadata,crates:crateDefaults,cover,ownerRoute:{minX:160,maxX:178,z:1.2},
-    heardWindow:{x:113.2,y:4.73,z:1.205,lit:false},television:windows[0],exit:{x:192.3,y:0,z:4.2},bounds:{min:[-15,-.4,-26],max:[211,18.2,22]},drawBatches:batches.size,lights:lights.length,rainDrops:rainCount};
+    heardWindow:{x:113.2,y:4.73,z:1.205,lit:false},television:windows[0],exit:{x:192.3,y:0,z:4.2},bounds:{min:[-15,-.4,-26],max:[211,18.2,22]},drawBatches:batches.size,lights:lights.length,rainDrops:rainCount,
+    buildings:buildings.map(({id,bounds})=>({id,bounds})),visibility:{strategy:'whole-building-and-batch-bounds',cutaway:'near-walls-only',workshopStructureVisible:true}};
   const actors=createAlleyActors(THREE,group);metadata.actors=actors.metadata;
   group.userData.alley=metadata;
-  let previousTime=null;
+  let previousTime=null,storageCutawayAmount=0;
   function update(time=0,playerX=2,state=null,player=null){
     if(!group.visible)return;const dt=previousTime===null?0:Math.min(.06,Math.max(0,time-previousTime));previousTime=time;
-    const area=state?.area??'alley',inside=area==='garage',gap=clamp(state?.doorGap??.22,.05,2.8);
+    const area=state?.area??'alley',inside=area==='garage',inStorage=area==='storage',storageTransit=['enter-storage','exit-storage'].includes(state?.phase),gap=clamp(state?.doorGap??.22,.05,2.8);
     actors.update(time,state,player??{x:playerX});
-    workshopExterior.visible=!(playerX>106&&playerX<141)&&!inside;
+    const approachCut=clamp((playerX-104)/4)*clamp((142-playerX)/4);
+    workshopNearMaterial.opacity=inside||state?.windowClimb?0:1-approachCut;
+    workshopExterior.visible=workshopNearMaterial.opacity>.005;
+    workshopStructure.visible=true;
+    metadata.visibility.workshopStructureVisible=workshopStructure.visible;
     workshopBack.visible=workshopContents.visible=inside||!!state?.windowClimb;
+    const storageProgress=clamp(state?.storageDoorProgress??(inStorage?1:0));
+    storageDoor.rotation.y=-storageProgress*1.45;
+    storageCutawayAmount=THREE.MathUtils.damp(storageCutawayAmount,inStorage||storageTransit?1:0,12,dt||1);
+    for(const mat of storageFadeMaterials)mat.opacity=1-storageCutawayAmount;
+    storageFront.visible=storageCutawayAmount<.995;
+    storageContents.visible=inStorage||storageTransit||Math.abs(playerX-88.6)<10&&storageProgress>.2;
+    storageMetadata.doorProgress=storageProgress;storageMetadata.cutaway=storageCutawayAmount>.5;
+    storageMetadata.key.collected=!!state?.gateKey;keyObject.visible=!state?.gateKey;
+    storageMetadata.radio.on=state?.radioOn??true;radioGlowMaterial.emissiveIntensity=storageMetadata.radio.on?.42:.02;
+    const gateProgress=clamp(state?.gateProgress??(state?.gateOpened?1:0));gatePivot.rotation.y=-gateProgress*1.45;
+    lockedGate.openProgress=gateProgress;lockedGate.blocking=!state?.gateOpened;
+    const gateHandle=gatePivot.localToWorld(new THREE.Vector3(-.06,.95,-1.32));lockedGate.handle=gateHandle.toArray();
+    chainGroup.rotation.x=(state?.chainProgress??0)*.16;chainGroup.rotation.z=(state?.chainProgress??0)*.08;chainMetadata.used=!!state?.distractionUsed;chainMetadata.progress=state?.chainProgress??0;
     const resident=state?.owner?.role==='garage-resident'?state.owner:state?.garageResident;
     serviceDoor.rotation.y=resident?.phase==='inspect'?-Math.sin(clamp((resident.time??0)/2)*Math.PI)*1.05:0;
     shutter.position.set(110,gap,4.2);shutter.scale.y=(3.10-gap)/3.02;shutterBounds.bounds.min[1]=gap;shutterBounds.bounds.max[1]=3.12;
@@ -302,12 +439,18 @@ export function createAlleyWorld(THREE,scene){
     if(installed){
       const handle=state?.alleyAction?.handle??{x:109.56,y:.78,z:4.2};crankEnd.set(handle.x,handle.y,handle.z);crankStart.set(109.86,.14,4.2);delta.copy(crankEnd).sub(crankStart);crankRod.position.copy(crankStart).add(crankEnd).multiplyScalar(.5);crankRod.scale.y=delta.length();crankRod.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),delta.normalize());crankGrip.position.copy(crankEnd);jackMetadata.handle=crankEnd.toArray();
     }
-    const heard=!!(state?.windowLight||state?.windowLit||state?.heard||state?.owner?.awake||state?.owner?.phase&&state.owner.phase!=='idle'&&state.owner.phase!=='repair');
+    const heard=!!(state?.windowLight||state?.windowLit||state?.heard||state?.owner?.awake||state?.owner?.role==='garage-resident'&&state.owner.phase!=='idle'&&state.owner.phase!=='repair');
     metadata.heardWindow.lit=heard;heardWindow.material.emissiveIntensity=heard?1.25:0;heardWindow.material.color.set(heard?'#b79c6e':'#1c3036');heardLight.intensity=heard?5:0;
     tvMaterial.emissiveIntensity=.41+.13*Math.sin(time*7.1)+.05*Math.sin(time*19.3);
-    for(const cell of cellMeshes)cell.object.visible=Math.abs(cell.center-playerX)<46;
+    for(const cell of cellMeshes){const margin=46+cell.farDepth*.35;cell.object.visible=cell.minX<=playerX+margin&&cell.maxX>=playerX-margin;}
+    for(const building of buildings){const margin=46+Math.max(0,-building.bounds.max[2])*.4;building.group.visible=building.bounds.min[0]<=playerX+margin&&building.bounds.max[0]>=playerX-margin;}
     for(const entry of lights){entry.light.visible=Math.abs(entry.x-playerX)<25;entry.light.intensity=entry.light===heardLight?(heard?5:0):entry.base*(.985+.012*Math.sin(time*.83+entry.x));}
-    rain.visible=!inside;
+    rain.visible=!inside&&!inStorage;
+    ripples.visible=!inside&&!inStorage;
+    for(let i=0;i<24;i++){
+      const phase=(time*.85+rand(i+851)*7)%1,r=.035+phase*.24,x=playerX-13+rand(i+1403)*26,z=(playerX>138?4.2:1.4)+(rand(i+1551)-.5)*1.6;
+      dummy.position.set(x,.010,z);dummy.rotation.set(-Math.PI/2,0,rand(i+763)*6.28);dummy.scale.set(r,r,.25);dummy.updateMatrix();ripples.setMatrixAt(i,dummy.matrix);
+    }ripples.instanceMatrix.needsUpdate=true;
     for(let i=0;i<rainCount;i++){const o=i*6;rainPositions[o]-=dt*.9;rainPositions[o+1]-=speeds[i]*dt;if(rainPositions[o+1]<.02||Math.abs(rainPositions[o]-playerX)>25){rainPositions[o]=playerX-22+rand(i+time*.17)*44;rainPositions[o+1]=6+rand(i+119)*4;}rainPositions[o+3]=rainPositions[o]-.03;rainPositions[o+4]=rainPositions[o+1]-.22;rainPositions[o+5]=rainPositions[o+2];}rainGeo.attributes.position.needsUpdate=true;
   }
   update(0,2);

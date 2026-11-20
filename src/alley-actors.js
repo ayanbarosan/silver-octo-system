@@ -156,7 +156,7 @@ export function createAlleyActors(THREE,parent){
   function update(time,state,repair=false){
    const x=state.x??0,y=state.y??0,z=state.z??0,clock=Number.isFinite(state.time)?state.time:time,phase=state.phase??'repair',distance=lastX===null?0:Math.hypot(x-lastX,z-lastZ);
    if(distance<3)gait+=distance*Math.PI*2/.78;else gait=0;lastX=x;lastZ=z;
-   const moving=distance>.0001&&['approach','chase','patrol'].includes(phase),work=repair?.5+.5*Math.sin(clock*2.4):0,lean=repair?.43+.025*work:.105;
+   const moving=distance>.0001&&['approach','chase','patrol','inspect','distracted'].includes(phase),work=repair?.5+.5*Math.sin(clock*2.4):0,lean=repair?.43+.025*work:.105;
    root.position.set(x,y,z);root.rotation.y=(state.face===-1?-1:1)*Math.PI/2;
    const bob=moving?Math.sin(gait*2)*.012:0,breath=Math.sin(clock*1.15)*.0035;
    const pelvis=v(0,repair?.845:.97+bob,0),q=new THREE.Quaternion().setFromAxisAngle(v(1,0,0),lean),shoulder=pelvis.clone().add(v(0,.585,0).applyQuaternion(q));
@@ -173,7 +173,7 @@ export function createAlleyActors(THREE,parent){
    }
    headGroup.position.copy(pelvis).add(v(0,.70+breath,.026).applyQuaternion(q));
    headGroup.rotation.set(repair?.42:.14+(phase==='listen'?.20:0),phase==='inspect'?.23*Math.sin(clock*.75):0,0);
-   if(lamp){const on=['listen','approach','inspect','patrol','chase','caught'].includes(phase);lamp.visible=on;lens.material.emissiveIntensity=on?1.8:.15;}
+   if(lamp){const on=['listen','approach','inspect','patrol','chase','caught','distracted'].includes(phase);lamp.visible=on;lens.material.emissiveIntensity=on?1.8:.15;}
    // SkinnedMesh updates its inverse bind matrix here as well as the bones.
    root.updateMatrixWorld(true);
    const probes=Object.fromEntries([['pelvis',boneMap.pelvis],['leftHand',hands.left],['rightHand',hands.right]].map(([name,o])=>[name,o.getWorldPosition(v()).toArray()]));

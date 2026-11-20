@@ -265,3 +265,12 @@ Walk quietly past the dog, then move and climb the timber crates to cross the fi
 Safe progress stores crate positions, the carried or installed jack, partial door lift and the workshop/backyard route. Being caught returns to a nearby checkpoint; entering the workshop preserves the raised door. Pausing freezes movement, threats and alley audio. Continue restores safe grounded positions and completed runs show the ending. Optional captions appear only with **Hints** enabled. The concealed developer menu also offers Garage alley, Garage workshop and Backyard test locations; free movement reaches the entire new area.
 
 The level emphasizes exploration and moderate tension, with nearby checkpoints to keep retries short.
+
+
+## Building repairs and exploration — v0.33
+
+The city now has recessed window apertures, connected door frames and continuous facade textures. Rooftop service equipment sits on its actual host roofs; plaster patches stay inside wall silhouettes. Street doorways open into recessed passages. The home exterior closes behind the fire escape after the boy descends below the apartment, while the open bedroom window retains a real interior recess. Alley buildings retain their roofs and structural frames during cutaways; visibility uses geometry bounds to keep parts of a building together.
+
+A storage room beside the alley offers an alternative to the noisy jack puzzle. Press **E** at its wooden door, explore inside, collect the hanging gate key, then return to unlock the outdoor gate. Both routes lead to the final yard. The room's radio can be switched on or off, with matching sound and indicator light. In the yard, interact with the hanging chain to draw the owner away temporarily, or continue using cover and patrol timing. Discoveries and route choices are included in Continue; older saves remain compatible. The developer menu includes a **Storage room** shortcut.
+
+The additional interactions use animated hand contacts. All captions remain optional through Settings → Hints, and the existing rooftop, stair, street, apartment and escape controls remain available.

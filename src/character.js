@@ -193,14 +193,14 @@ export function createBoy(THREE) {
   const alleyContacts={hands:[0,0],stances:[true,true],weights:[1,1]},alleyFeet=legs.map(()=>new THREE.Vector3());
   const alleyTarget=new THREE.Vector3();
   const alleyRestArms=arms.map(()=>[0,1,2].map(()=>({quaternion:new THREE.Quaternion(),delta:new THREE.Quaternion(),previousDelta:new THREE.Quaternion(),hasDelta:false})));
-  let alleyWeight=0,lastAlleyAction=null,alleyTransitionTime=Infinity;
+  let alleyWeight=0,lastAlleyAction=null,alleyTransitionTime=Infinity,alleyTransitionDuration=.42,alleyTransitionKind=null;
   let storyWasApplied=false;
 
   function reset() {
     phase=.04;moving=running=pushing=air=lean=headLean=bagLean=stairWeight=0;locomotionActive=false;
     interactionWeight=pullWeight=0;lastInteraction=null;interactionWasApplied=false;interactionHands.fill(0);slideWasActive=false;storyWasApplied=false;alleyWeight=0;lastAlleyAction=null;
     for(const arm of alleyRestArms)for(const joint of arm)joint.hasDelta=false;
-    alleyTransitionTime=Infinity;
+    alleyTransitionTime=Infinity;alleyTransitionDuration=.42;alleyTransitionKind=null;
     landing=landingVelocity=0;previousGrounded=true;previousTime=0;initialized=false;internalAirTime=previousPrep=launchCrouch=0;launchLead=takeoffSpeed=takeoffRun=landingReach=landingFoot=bagVelocity=0;landingAge=Infinity;
     pose.position.set(0,0,0);pose.rotation.set(0,0,0);
     caughtRig=null;animation.ragdoll=null;
@@ -773,7 +773,7 @@ export function createBoy(THREE) {
 
   function applyAlleyAction(action,weight,speed) {
     const type=action.type,p=clamp(Number.isFinite(action.progress)?action.progress:0,0,1),elapsed=Math.max(0,action.elapsed??0);
-    const carry=type==='carry',pickup=type==='pickup-jack',placing=type==='place-jack',crank=type==='crank',windowOpen=type==='open-window';
+    const carry=type==='carry',pickup=type==='pickup-jack',placing=type==='place-jack',crank=type==='crank',windowOpen=type==='open-window',touch=['take-key','radio-switch','open-gate','rattle-chain'].includes(type);
     const cycleAngle=Number.isFinite(action.elapsed)?elapsed*TAU:(action.crankPhase??0)*TAU;
     group.updateWorldMatrix(true,true);
     for(let i=0;i<2;i++){
@@ -786,8 +786,10 @@ export function createBoy(THREE) {
     if(pickup){bend=smooth(p,0,.29)*(1-smooth(p,.35,.98));carryBody=smooth(p,.42,.99);grip=smooth(p,.14,.35);}
     if(placing){bend=smooth(p,.55,.98);carryBody=1-bend;grip=1-smooth(p,.91,1);}
     if(windowOpen)grip=smooth(p,0,.24);
+    if(touch)grip=smooth(p,.18,.43)*(1-smooth(p,.72,1));
     if(crank){hip=.50+.012*Math.sin(cycleAngle);tilt=.42+.028*Math.sin(cycleAngle+.35);hipZ=.012;}
     else{hip=lerp(torso.position.y,torso.position.y-.015,carryBody);hip=lerp(hip,.28,bend);tilt=lerp(torso.rotation.x+.10*carryBody,placing?1.08:.93,bend);hipZ=lerp(torso.position.z-.012*carryBody,-.025,bend);}
+    if(touch){const reach=smooth(p,.16,.40)*(1-smooth(p,.72,1));tilt+=.25*reach;hipZ+=.022*reach;}
     if(windowOpen){const reach=smooth(p,0,.24)*(1-smooth(p,.65,1));tilt+=.22*reach;hipZ+=.025*reach;}
     const baseHip=torso.position.y,baseZ=torso.position.z;
     torso.position.y=lerp(baseHip,hip,weight);torso.position.z=lerp(baseZ,hipZ,weight);
@@ -795,13 +797,15 @@ export function createBoy(THREE) {
     head.rotation.x+=weight*(crank?-.20:-.40*bend-.025*carryBody);
     bag.rotation.x+=weight*(.035*carryBody+.035*bend+(crank?.025*Math.sin(cycleAngle+.65):0));
     for(let i=0;i<2;i++)solveLeg(legs[i],alleyFeet[i],footState[i].roll,torso.position.y,torso.position.z);
-    const face=action.face===-1?-1:1;
+    const face=action.face===-1?-1:1,touchArm=touch&&action.handle?(action.handle.z-group.position.z)*face<-.05?1:0:0;
     for(let i=0;i<2;i++){
-      const arm=arms[i],handle=crank||windowOpen&&i===0?action.handle:null;
-      const handBlend=weight*grip*(windowOpen?1-smooth(p,i===0?.43:.84,i===0?.67:1):1);
+      const arm=arms[i],handle=crank||windowOpen&&i===0||touch&&i===touchArm?action.handle:null;
+      const handBlend=touch&&i!==touchArm?(action.heldTool?weight:0):weight*grip*(windowOpen?1-smooth(p,i===0?.43:.84,i===0?.67:1):1);
       if(handle&&[handle.x,handle.y,handle.z].every(Number.isFinite)){
-        alleyTarget.set(handle.x-(i===0?0:.025)*face,handle.y-(i===0?0:.012),handle.z-(windowOpen?0:face*arm.side*.11));
-      }else if(windowOpen){
+        alleyTarget.set(handle.x-(i===0?0:.025)*face,handle.y-(i===0?0:.012),handle.z-(windowOpen||touch?0:face*arm.side*.11));
+      }else if(touch&&i!==touchArm&&action.heldTool){
+        alleyTarget.set(action.heldTool.x,action.heldTool.y+.06,action.heldTool.z-face*arm.side*.15);
+      }else if(windowOpen||touch){
         alleyTarget.set(action.objectX,action.objectY-(i===0?0:.15),action.objectZ-(i===0?0:face*.17));
       }else{
         alleyTarget.set(action.objectX-(placing?.14*smooth(p,.55,.98)*face:0),action.objectY+.06,action.objectZ-face*arm.side*.15);
@@ -816,8 +820,8 @@ export function createBoy(THREE) {
       group.updateWorldMatrix(true,true);arm.palm.getWorldPosition(interactionActual);group.worldToLocal(interactionActual);
       alleyContacts.hands[i]=handBlend*(1-smooth(interactionActual.distanceTo(alleyTarget),.008,.065));
     }
-    animation.alleyStage=carry?'carrying':pickup?(p<.35?'jack-reach':'jack-lift'):placing?(p<.55?'jack-align':p<.91?'jack-lower':'jack-release'):crank?'jack-crank':windowOpen?(p<.25?'window-handle-reach':p<.65?'window-handle-turn':'window-push'):'none';
-    if(weight>.5)animation.mode=carry?(Math.abs(speed)>.04?'carry-walk':'carry-idle'):crank?'crank':windowOpen?'window-opening':'jack-handling';
+    animation.alleyStage=touch?({ 'take-key':'key-reach','radio-switch':'radio-switch','open-gate':'gate-unlock','rattle-chain':'chain-rattle' }[type]):carry?'carrying':pickup?(p<.35?'jack-reach':'jack-lift'):placing?(p<.55?'jack-align':p<.91?'jack-lower':'jack-release'):crank?'jack-crank':windowOpen?(p<.25?'window-handle-reach':p<.65?'window-handle-turn':'window-push'):'none';
+    if(weight>.5)animation.mode=touch?'interacting':carry?(Math.abs(speed)>.04?'carry-walk':'carry-idle'):crank?'crank':windowOpen?'window-opening':'jack-handling';
     return alleyContacts;
   }
 
@@ -968,8 +972,9 @@ export function createBoy(THREE) {
    * accelerating or settling into a stop.
    */
   function animate({time=0,speed=0,grounded=true,wake=1,push=false,interaction=null,crouch=0,slide=null,vy=0,dt,travel,acceleration=0,landImpact=0,jumpPrep=0,airTime,takeoff,climb=null,ladder=null,slip=null,stairs=null,story=null,launchSpeed,landingDistance}={}) {
-    const alleyAction=story?.alleyAction&&['carry','pickup-jack','place-jack','crank','open-window'].includes(story.alleyAction.type)?story.alleyAction:null;
-    const toolPlanted=!!alleyAction&&(alleyAction.type==='crank'||alleyAction.type==='pickup-jack'&&alleyAction.progress>=.28||alleyAction.type==='place-jack'&&alleyAction.progress>=.62);
+    const sceneTouch=story?.alleyAction&&['take-key','radio-switch','open-gate','rattle-chain'].includes(story.alleyAction.type);
+    const alleyAction=story?.alleyAction&&['carry','pickup-jack','place-jack','crank','open-window','take-key','radio-switch','open-gate','rattle-chain'].includes(story.alleyAction.type)?{...story.alleyAction,...(sceneTouch&&story.jackStatus==='carried'?{heldTool:story.jackVisual}:{})}:null;
+    const toolPlanted=!!alleyAction&&(sceneTouch&&!alleyAction.aligning||alleyAction.type==='crank'||alleyAction.type==='pickup-jack'&&alleyAction.progress>=.28||alleyAction.type==='place-jack'&&alleyAction.progress>=.62);
     const storyAction=!!story?.windowClimb||!!story?.caught||toolPlanted;
     const sliding=slide&&['drop','glide','recover'].includes(slide.phase)&&grounded&&wake>=1&&!climb&&!ladder&&!slip&&!stairs;
     if(climb||ladder||slip||sliding||storyAction){grounded=true;speed=0;travel=0;jumpPrep=0;airTime=0;takeoff=0;}
@@ -978,15 +983,17 @@ export function createBoy(THREE) {
     stepResult.footstep=false;stepResult.intensity=0;stepResult.bodyImpact=0;
     if(initialized&&delta===0)return stepResult;
     initialized=true;
-    if(alleyAction&&lastAlleyAction?.type==='place-jack'&&alleyAction.type==='crank'){
+    const touchKinds=['take-key','radio-switch','open-gate','rattle-chain'];
+    const carryHandoff=alleyAction&&lastAlleyAction&&(alleyAction.type==='carry'&&touchKinds.includes(lastAlleyAction.type)||lastAlleyAction.type==='carry'&&touchKinds.includes(alleyAction.type));
+    if(alleyAction&&(lastAlleyAction?.type==='place-jack'&&alleyAction.type==='crank'||carryHandoff)){
       // Holding E through installation must let the child rise and take the
       // crank, rather than changing two completed action poses in one frame.
       for(let i=0;i<wakeObjects.length;i++){const object=wakeObjects[i],from=alleyTransitionPose[i];from.position.copy(object.position);from.quaternion.copy(object.quaternion);from.scale.copy(object.scale);from.hasDelta=false;}
       group.updateWorldMatrix(true,true);for(let i=0;i<2;i++){legs[i].sole.getWorldPosition(alleyTransitionFeet[i]);group.worldToLocal(alleyTransitionFeet[i]);}
-      alleyTransitionTime=0;
+      alleyTransitionTime=0;alleyTransitionDuration=carryHandoff?.22:.42;alleyTransitionKind=alleyAction.type;
     }
     if(alleyAction)lastAlleyAction={...alleyAction,handle:alleyAction.handle?{...alleyAction.handle}:null};
-    if(alleyAction&&alleyAction.type!=='crank')alleyTransitionTime=Infinity;
+    if(alleyAction&&alleyAction.type!==alleyTransitionKind)alleyTransitionTime=Infinity;
     alleyWeight=damp(alleyWeight,alleyAction?1:0,alleyAction?14:8,delta);
     if(alleyWeight<.0001)for(const arm of alleyRestArms)for(const joint of arm)joint.hasDelta=false;
     if(climb||ladder||slip||sliding||story?.windowClimb||story?.caught){alleyWeight=0;lastAlleyAction=null;alleyTransitionTime=Infinity;}
@@ -1295,8 +1302,8 @@ export function createBoy(THREE) {
     if(sliding){const contacts=applySlide(slide);handWeights=contacts.hands;stances[0]=contacts.stances[0];stances[1]=contacts.stances[1];weights[0]=contacts.weights[0];weights[1]=contacts.weights[1];footstep=false;}
     if(poseAction)for(let i=0;i<wakeObjects.length;i++){const object=wakeObjects[i],base=storyRest[i];base.position.copy(object.position);base.quaternion.copy(object.quaternion);base.scale.copy(object.scale);}
     if(alleyWeight>.0001&&lastAlleyAction){const contacts=applyAlleyAction(lastAlleyAction,alleyWeight,speed);handWeights=contacts.hands;if(toolPlanted)footstep=false;}
-    if(alleyTransitionTime<.42){
-      const blend=smooth(alleyTransitionTime,0,.42);
+    if(alleyTransitionTime<alleyTransitionDuration){
+      const blend=smooth(alleyTransitionTime,0,alleyTransitionDuration);
       group.updateWorldMatrix(true,true);for(let i=0;i<2;i++){legs[i].sole.getWorldPosition(alleyFeet[i]);group.worldToLocal(alleyFeet[i]);}
       for(let i=0;i<wakeObjects.length;i++){const object=wakeObjects[i],from=alleyTransitionPose[i];object.position.lerp(from.position,1-blend);blendAlleyRotation(object,from,blend);object.scale.lerp(from.scale,1-blend);}
       for(let i=0;i<2;i++){solveLeg(legs[i],alleyFeet[i].lerp(alleyTransitionFeet[i],1-blend),footState[i].roll,torso.position.y,torso.position.z);handWeights[i]*=smooth(blend,.94,1);}

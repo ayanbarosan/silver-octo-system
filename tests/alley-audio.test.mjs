@@ -40,6 +40,16 @@ const state=()=>({area:'alley',dog:{x:23,phase:'sleep'},owner:{x:115,phase:'repa
 const setup=()=>{const context=new Context(),master=context.createGain();master.gain.value=.37;master.connect(context.destination);const audio=createAlleyAudio(context,master);return {context,master,audio,s:state(),p:{x:20}};};
 const play=r=>r.audio.update(1/60,{active:true,playing:true,player:r.p,state:r.s});
 
+test('the optional radio follows its switch and all branch cues stop with pause',()=>{
+ const r=setup();r.p.x=92.3;r.s.area='storage';r.s.radioOn=true;play(r);
+ assert.equal(r.audio.metadata.activeVoices,3);
+ for(let n=0;n<4;n++)play(r);assert.equal(r.audio.metadata.activeVoices,3,'A radio must reuse its continuous source.');
+ r.s.radioOn=false;play(r);r.context.advance(.05);assert.equal(r.audio.metadata.activeVoices,2);
+ for(const event of ['storage-enter','storage-exit','key-pickup','radio-toggle','gate-unlock','chain-rattle'])assert(r.audio.event(event,{player:r.p,state:r.s}));
+ r.audio.update(.016,{active:true,playing:false,player:r.p,state:r.s});r.context.advance(.05);
+ assert.equal(r.audio.metadata.activeSources,0);assert.equal(r.audio.metadata.fadingVoices,0);
+});
+
 test('alley sounds stay silent until gameplay enables them and route through the master volume',()=>{
  const r=setup();
  assert.equal(r.audio.event('dog-bark',{player:r.p,state:r.s}),false);assert.equal(r.context.sources.length,0);

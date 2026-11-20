@@ -2,7 +2,7 @@ import {MOVEMENT,crateSideContact} from './movement.js';
 import {createClimb,sampleClimb} from './climb.js';
 import {createSlide} from './slide.js';
 
-const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const clamp=(v,a=0,b=1)=>Math.max(a,Math.min(b,v));
 const smooth=v=>{const t=clamp(v,0,1);return t*t*(3-2*t);};
 const mix=(a,b,t)=>a+(b-a)*t;
 const EPS=1e-7,RADIUS=.22,GRAB=.40;
@@ -13,6 +13,9 @@ export const ALLEY=frozen({
  dog:frozen({x:23,y:0,z:.25,wakeRadius:9,hearingRadius:8.5}),
  fence:frozen({id:'alley-fence',x:55,w:.18,y:2.35}),
  mainGate:frozen({id:'locked-alley-gate',x:116,w:.18,y:2.7}),
+ storage:frozen({minX:87.4,maxX:97.2,lane:-3.4,entryX:88.6,duration:2.6,key:frozen({x:96,y:1,z:-3.78}),radio:frozen({x:92.3,y:.95,z:-3.78})}),
+ gate:frozen({nearX:115.2,handle:frozen({x:115.94,y:.95,z:1.4}),bypassEndX:139.2,yardEntryX:143}),
+ chain:frozen({x:152.2,y:.90,z:4.2,duration:.7,distractionDuration:12,targetX:145}),
  carry:frozen({x:.38,y:.77}),
  mechanic:frozen({x:73,y:0,z:-1.4}),jack:frozen({x:82,y:.12,z:1.4}),
  garage:frozen({doorX:110,alignX:109.2,approachMinX:108.1,nearX:108.5,initialGap:.22,raisedGap:1.13,pumpDuration:8,pumpCycles:8,handle:frozen({x:109.56,y:.78,z:4.2,amplitude:.10}),lane:4.2,minX:110.65,maxX:137.45,windowX:137.8,sillY:1.55,windowExitX:140.3,windowReachX:137.2,windowAlignX:137.42,windowHandleY:1.87}),
@@ -32,8 +35,14 @@ const supported=(x,y,area,crates)=>{
 export function normalizeAlleySave(value){
  if(!value||typeof value!=='object'||Array.isArray(value))return null;
  const {x,face}=value,y=value.y??0,area=value.area??'alley';
- if(!['alley','garage','yard'].includes(area)||!Number.isFinite(x)||!Number.isFinite(y)||(face!==1&&face!==-1))return null;
- const bounds=area==='garage'?[ALLEY.garage.minX,ALLEY.garage.maxX]:area==='yard'?[ALLEY.yard.minX,ALLEY.maxX]:[ALLEY.minX,ALLEY.mainGate.x-RADIUS];
+ if(!['alley','garage','yard','storage'].includes(area)||!Number.isFinite(x)||!Number.isFinite(y)||(face!==1&&face!==-1))return null;
+ const branches={gateKey:false,gateOpened:false,storageVisited:area==='storage',radioOn:true,distractionUsed:false};
+ for(const key of Object.keys(branches)){
+  if(value[key]!==undefined&&typeof value[key]!=='boolean')return null;
+  if(value[key]!==undefined)branches[key]=value[key];
+ }
+ if(branches.gateOpened&&!branches.gateKey||area==='storage'&&!branches.storageVisited)return null;
+ const bounds=area==='garage'?[ALLEY.garage.minX,ALLEY.garage.maxX]:area==='yard'?[ALLEY.yard.minX,ALLEY.maxX]:area==='storage'?[ALLEY.storage.minX,ALLEY.storage.maxX]:[ALLEY.minX,branches.gateOpened?ALLEY.gate.bypassEndX:ALLEY.mainGate.x-RADIUS];
  if(x<bounds[0]-EPS||x>bounds[1]+EPS)return null;
  const crateXs=value.crateXs??ALLEY.crates.map(c=>c.x);
  if(!Array.isArray(crateXs)||crateXs.length!==3||ALLEY.crates.some((c,i)=>!Number.isFinite(crateXs[i])||crateXs[i]<c.minX-EPS||crateXs[i]>c.maxX+EPS))return null;
@@ -41,12 +50,12 @@ export function normalizeAlleySave(value){
  const jackStatus=value.jackStatus??'ground',pumpProgress=value.pumpProgress??(jackStatus==='raised'?1:0);
  if(!['ground','carried','installed','raised'].includes(jackStatus)||!Number.isFinite(pumpProgress)||pumpProgress<0||pumpProgress>1)return null;
  if(jackStatus==='raised'&&pumpProgress!==1||['ground','carried'].includes(jackStatus)&&pumpProgress!==0)return null;
- if(area!=='alley'&&jackStatus!=='raised'||area==='alley'&&jackStatus==='carried'&&x<55.7)return null;
+ if((area==='garage'||area==='yard'&&!branches.gateOpened)&&jackStatus!=='raised'||area==='alley'&&jackStatus==='carried'&&x<55.7)return null;
  if(area==='alley'&&Math.abs(y)<.025&&x+RADIUS>ALLEY.fence.x+EPS&&x-RADIUS<ALLEY.fence.x+ALLEY.fence.w-EPS)return null;
  if(!supported(x,y,area,crateXs))return null;
  if(value.fencePassed!==undefined&&typeof value.fencePassed!=='boolean'||value.completed!==undefined&&typeof value.completed!=='boolean')return null;
  if(value.completed&&(area!=='yard'||x<190))return null;
- return {area,x,y:Math.abs(y)<.025?0:ALLEY.crates.find(c=>Math.abs(c.y-y)<.025).y,face,crateXs:[...crateXs],jackStatus,pumpProgress,fencePassed:value.fencePassed??(x>55.7||area!=='alley'),completed:!!value.completed};
+ return {area,x,y:Math.abs(y)<.025?0:ALLEY.crates.find(c=>Math.abs(c.y-y)<.025).y,face,crateXs:[...crateXs],jackStatus,pumpProgress,fencePassed:value.fencePassed??(x>55.7||area!=='alley'),completed:!!value.completed,...branches};
 }
 export const alleyHeight=saved=>Number.isFinite(saved?.y)?saved.y:0;
 
@@ -64,21 +73,23 @@ export function createAlley(){
   dog:{phase:saved.fencePassed?'sleep':'sleep',x:ALLEY.dog.x,y:0,z:ALLEY.dog.z,face:1,time:0,alert:0},
   owner:{role:saved.area==='yard'?'yard-owner':'garage-resident',phase:saved.area==='yard'?'patrol':'repair',x:saved.area==='yard'?171:113.6,y:saved.area==='yard'?0:3.4,z:saved.area==='yard'?ALLEY.owner.z:1.0,face:-1,time:0,alert:0},
   garageResident:null,dogPassed:saved.fencePassed,fencePassed:saved.fencePassed,completed:saved.completed,checkpoint:null,events:[],nearJack:false,nearGarage:false,nearPump:false,nearWindow:false,nearInteraction:false,inCover:false,
+  gateKey:saved.gateKey,gateOpened:saved.gateOpened,gateProgress:saved.gateOpened?1:0,storageVisited:saved.storageVisited,storageDoorProgress:saved.storageVisited?1:0,radioOn:saved.radioOn,
+  distractionUsed:saved.distractionUsed,distractionTime:0,chainProgress:0,nearStorage:false,nearKey:false,nearRadio:false,nearGate:false,nearChain:false,branchAction:null,
   ownerEntered:false,barked:false,crankStroke:0,windowAction:null,retryIssued:false
  };}
  function begin(player,saved=null){
   if(state||!player||typeof player!=='object')return false;
   const r=normalizeAlleySave(saved)??normalizeAlleySave(ALLEY.entry);
   state=baseState(r);lastPlayer=player;slide.reset();
-  Object.assign(player,{x:r.x,y:r.y,z:r.area==='alley'?ALLEY.lane:ALLEY.garageLane,vx:0,vy:0,vz:0,grounded:true,face:r.face});
-  state.checkpoint=r.area==='garage'?{...r,x:111.5,y:0,jackStatus:'raised',pumpProgress:1}:r.area==='yard'?{...r,x:143,y:0}:r.fencePassed?{...r,x:60,y:0,jackStatus:'ground',pumpProgress:0}:normalizeAlleySave({...ALLEY.entry,x:13});
+  Object.assign(player,{x:r.x,y:r.y,z:r.area==='storage'?ALLEY.storage.lane:r.area==='alley'?ALLEY.lane:ALLEY.garageLane,vx:0,vy:0,vz:0,grounded:true,face:r.face});
+  state.checkpoint=r.area==='garage'?{...r,x:111.5,y:0,jackStatus:'raised',pumpProgress:1}:r.area==='yard'?{...r,x:143,y:0}:r.area==='storage'?{...r,x:ALLEY.storage.entryX,y:0}:r.fencePassed?{...r,x:60,y:0,jackStatus:'ground',pumpProgress:0}:normalizeAlleySave({...ALLEY.entry,x:13});
   sync(player);return true;
  }
  const crateCollider=c=>({id:c.id,x:c.x-c.w/2,w:c.w,y:c.y});
  const activeCrates=()=>state.crates.filter(c=>c.area===state.area);
  const grabbableCrate=player=>state.phase==='walk'&&!state.climb&&!slide.active&&!state.jump.preparing&&!state.jump.launched&&state.crouch<.02&&state.jackStatus!=='carried'&&player.grounded&&Math.abs(player.y)<.03?activeCrates().find(c=>{const side=Math.sign(player.x-c.x)||-player.face,gap=(player.x-c.x)*side-c.w/2;return gap>=RADIUS-.035&&gap<.46;}):null;
- const solidsFor=approach=>[...activeCrates().map(crateCollider),...(state.area==='alley'&&!approach?[ALLEY.fence,ALLEY.mainGate]:[])];
- const motionLimits=approach=>state.area==='garage'?[ALLEY.garage.minX,ALLEY.garage.maxX]:state.area==='yard'?[ALLEY.yard.minX,ALLEY.maxX]:approach?[ALLEY.garage.approachMinX,ALLEY.garage.minX+.2]:[ALLEY.minX,ALLEY.mainGate.x-RADIUS];
+ const solidsFor=approach=>[...activeCrates().map(crateCollider),...(state.area==='alley'&&!approach?[ALLEY.fence,...(state.gateOpened?[]:[ALLEY.mainGate])]:[])];
+ const motionLimits=approach=>state.area==='garage'?[ALLEY.garage.minX,ALLEY.garage.maxX]:state.area==='yard'?[ALLEY.yard.minX,ALLEY.maxX]:state.area==='storage'?[ALLEY.storage.minX,ALLEY.storage.maxX]:approach?[ALLEY.garage.approachMinX,ALLEY.garage.minX+.2]:[ALLEY.minX,state.gateOpened?ALLEY.gate.bypassEndX:ALLEY.mainGate.x-RADIUS];
  function supportAt(x,oldY=Infinity){
   let floor=0;for(const c of activeCrates())if(x>c.x-c.w/2+.015&&x<c.x+c.w/2-.015&&oldY>=c.y-.03)floor=Math.max(floor,c.y);return floor;
  }
@@ -87,17 +98,23 @@ export function createAlley(){
   const snapshot=saveAt(player);if(snapshot){state.checkpoint=snapshot;emit('checkpoint');state.checkpointKind=kind;}
  }
  function sync(player){
-  state.velocity=Math.hypot(player.vx,player.vz);if(!['pickup-jack','place-jack','approach-garage','return-lane'].includes(state.phase))state.heading=player.face*Math.PI/2;
+  state.velocity=Math.hypot(player.vx,player.vz);if(!['pickup-jack','place-jack','approach-garage','return-lane','enter-storage','exit-storage','yard-entry'].includes(state.phase))state.heading=player.face*Math.PI/2;
   state.nearJack=state.area==='alley'&&state.phase==='walk'&&!slide.active&&state.jackStatus==='ground'&&player.grounded&&Math.abs(player.y)<.03&&Math.abs(player.x-ALLEY.jack.x)<.85&&Math.abs(player.z-ALLEY.lane)<.1;
   state.nearGarage=state.area==='alley'&&state.phase==='walk'&&!slide.active&&player.grounded&&player.x>=108.0&&player.x<=110.9;
   state.nearPump=state.nearGarage&&['installed','raised'].includes(state.jackStatus)&&Math.abs(player.z-ALLEY.garageLane)<.1&&Math.abs(player.x-ALLEY.garage.alignX)<.85;
   state.nearWindow=state.area==='garage'&&state.phase==='walk'&&!slide.active&&player.grounded&&player.y>=.70&&player.x>=ALLEY.garage.windowReachX;
-  state.nearInteraction=state.nearJack||state.nearGarage&&(state.jackStatus==='carried'||['installed','raised'].includes(state.jackStatus)&&Math.abs(player.z-ALLEY.garageLane)>.1)||state.nearPump&&state.jackStatus!=='raised'||state.nearWindow||!!state.interaction||!!grabbableCrate(player);
+  const ready=state.phase==='walk'&&!slide.active&&!state.climb&&!state.jump.preparing&&!state.jump.launched&&player.grounded&&Math.abs(player.y)<.03;
+  state.nearStorage=ready&&['alley','storage'].includes(state.area)&&Math.abs(player.x-ALLEY.storage.entryX)<.85&&Math.abs(player.z-(state.area==='storage'?ALLEY.storage.lane:ALLEY.lane))<.1;
+  state.nearKey=ready&&state.area==='storage'&&!state.gateKey&&Math.abs(player.x-ALLEY.storage.key.x)<.85;
+  state.nearRadio=ready&&state.area==='storage'&&Math.abs(player.x-ALLEY.storage.radio.x)<.85;
+  state.nearGate=ready&&state.area==='alley'&&!state.gateOpened&&Math.abs(player.x-ALLEY.gate.nearX)<.85&&Math.abs(player.z-ALLEY.lane)<.1;
+  state.nearChain=ready&&state.area==='yard'&&!state.distractionUsed&&Math.abs(player.x-ALLEY.chain.x)<.85;
+  state.nearInteraction=state.nearStorage||state.nearKey||state.nearRadio||state.nearGate||state.nearChain||state.nearJack||state.nearGarage&&(state.jackStatus==='carried'||['installed','raised'].includes(state.jackStatus)&&Math.abs(player.z-ALLEY.garageLane)>.1)||state.nearPump&&state.jackStatus!=='raised'||state.nearWindow||!!state.interaction||!!grabbableCrate(player);
   state.inCover=state.area==='yard'&&state.crouch>.8&&ALLEY.yard.covers.some(([a,b])=>player.x>=a&&player.x<=b);
   const held=state.jackStatus==='carried';
   if(held){
    Object.assign(state.jackVisual,{x:player.x+player.face*ALLEY.carry.x,y:player.y+ALLEY.carry.y,z:player.z,raised:0,carried:true});
-   if(state.phase==='walk')state.alleyAction={type:'carry',progress:1,elapsed:state.elapsed,objectX:state.jackVisual.x,objectY:state.jackVisual.y,objectZ:player.z,face:player.face};
+   if(['walk','enter-storage','exit-storage','yard-entry'].includes(state.phase))state.alleyAction={type:'carry',progress:1,elapsed:state.elapsed,objectX:state.jackVisual.x,objectY:state.jackVisual.y,objectZ:player.z,face:player.face};
   }else if(!['pickup-jack','place-jack'].includes(state.phase)){
    Object.assign(state.jackVisual,state.jackStatus==='ground'?{...ALLEY.jack,raised:0,carried:false}:{x:ALLEY.garage.doorX-.02,y:state.doorGap/2,z:ALLEY.garageLane,raised:state.pumpProgress,carried:false});
    if(state.phase==='walk'&&state.alleyAction?.type!=='crank')state.alleyAction=null;
@@ -106,7 +123,7 @@ export function createAlley(){
  function saveAt(player){
   if(!player||!player.grounded||state.phase!=='walk'||state.climb||slide.active||state.jump.preparing||state.jump.launched||state.crouch>.001&&state.crouch<.98||state.area==='alley'&&Math.abs(player.z-ALLEY.lane)>.025)return null;
   if(state.dog.alert>.3||state.owner.alert>.15||state.owner.phase==='chase'||state.owner.phase==='inspect'&&state.area==='garage')return null;
-  return normalizeAlleySave({area:state.area,x:player.x,y:player.y,face:player.face,crateXs:state.crates.map(c=>c.x),jackStatus:state.jackStatus,pumpProgress:state.pumpProgress,fencePassed:state.fencePassed,completed:state.completed});
+  return normalizeAlleySave({area:state.area,x:player.x,y:player.y,face:player.face,crateXs:state.crates.map(c=>c.x),jackStatus:state.jackStatus,pumpProgress:state.pumpProgress,fencePassed:state.fencePassed,completed:state.completed,gateKey:state.gateKey,gateOpened:state.gateOpened,storageVisited:state.storageVisited,radioOn:state.radioOn,distractionUsed:state.distractionUsed});
  }
  function startCaught(player,reason){
   if(state.phase==='caught')return;setPhase('caught');state.alleyAction=null;state.slide=null;slide.reset();state.climb=null;resetJump();
@@ -143,6 +160,10 @@ export function createAlley(){
   }
   if(state.area==='yard'){
    const o=state.owner;o.time+=dt;if(state.garageResident){const resident=state.garageResident;resident.time+=dt;if(resident.y<.1&&['chase','inspect'].includes(resident.phase)){resident.x=Math.min(ALLEY.garage.windowX-.4,resident.x+1.4*dt);resident.face=1;resident.phase='inspect';}}
+   if(state.distractionTime>0){
+    state.distractionTime=Math.max(0,state.distractionTime-dt);o.phase='distracted';o.alert=Math.max(0,o.alert-dt*1.5);o.face=-1;o.y=0;o.z=ALLEY.owner.z;
+    o.x+=clamp(ALLEY.chain.targetX-o.x,-1.8*dt,1.8*dt);return;
+   }
    if(o.phase==='chase'&&o.alert<.2)o.phase='patrol';
    if(o.phase!=='chase'){
     o.phase='patrol';const cycle=o.time%28;
@@ -167,11 +188,53 @@ export function createAlley(){
   state.climb=c;state.interaction=null;state.grabbedId=null;resetJump();player.vx=player.vy=0;player.grounded=false;emit('climb-start');return true;
  }
  function reachable(player,target){const edge=player.face>0?target.x:target.x+target.w,ahead=(edge-player.x)*player.face,rise=target.y-player.y;return ahead>=.17&&ahead<=.65&&rise>=.25&&rise<=1.08;}
+ function yardArrival(player,{fromWindow=false}={}){
+  if(fromWindow)state.garageResident={...state.owner};
+  state.area='yard';setPhase('walk');state.windowClimb=null;state.alleyAction=null;state.branchAction=null;
+  player.y=0;player.vx=player.vy=player.vz=0;player.z=ALLEY.garageLane;player.grounded=true;player.face=1;
+  Object.assign(state.owner,{role:'yard-owner',phase:'patrol',x:171,y:0,z:ALLEY.owner.z,face:1,time:0,alert:0});state.investigationTime=null;
+  emit(fromWindow?'window-exit':'gate-passed');checkpoint(player,'yard');
+ }
+ function beginBranch(player,phase,handle=null,duration=1){
+  const face=handle?Math.sign(handle.x-player.x)||player.face:player.face;
+  state.branchAction={x:player.x,z:player.z,face,heading:state.heading,handle:handle?{...handle}:null,duration};
+  setPhase(phase);state.alleyAction=null;state.crouch=state.crouch>.5?1:0;player.vx=player.vy=player.vz=0;resetJump();
+ }
  function action(dt,player){
   state.phaseTime+=dt;const t=state.phaseTime,G=ALLEY.garage;
   if(state.phase==='caught'){
    const c=state.caught;c.elapsed=Math.min(c.duration,c.elapsed+dt);c.progress=c.elapsed/c.duration;player.vx=player.vy=player.vz=0;
    if(c.progress>=1&&!state.retryIssued){state.retryIssued=true;emit('retry');}return true;
+  }
+  if(state.phase==='enter-storage'||state.phase==='exit-storage'){
+   const S=ALLEY.storage,entering=state.phase==='enter-storage',a=state.branchAction,p=clamp(t/S.duration),align=smooth(p/.30),depth=smooth((p-.18)/.82),oldX=player.x,oldZ=player.z;
+   player.x=mix(a.x,S.entryX,align);player.z=mix(a.z,entering?S.lane:ALLEY.lane,depth);player.y=0;player.vx=(player.x-oldX)/dt;player.vz=(player.z-oldZ)/dt;player.face=1;
+   state.heading=mix(mix(a.heading,entering?Math.PI:0,smooth(p/.22)),Math.PI/2,smooth((p-.80)/.20));
+   state.storageDoorProgress=Math.max(state.storageDoorProgress,smooth(p/.20));
+   if(p>=1){state.area=entering?'storage':'alley';state.storageVisited=true;state.branchAction=null;setPhase('walk');player.vx=player.vz=0;state.heading=Math.PI/2;emit(entering?'storage-enter':'storage-exit');checkpoint(player,entering?'storage':'storage-exit');}return true;
+  }
+  if(['take-key','radio-switch','open-gate','gate-locked','rattle-chain'].includes(state.phase)){
+   const a=state.branchAction,type=state.phase,p=clamp(t/a.duration),alignment=clamp(p/.35),oldX=player.x;
+   const endX=a.handle.x-a.face*.50;
+   player.x=mix(a.x,endX,smooth(alignment));player.vx=(player.x-oldX)/dt;player.vz=player.vy=0;player.face=a.face;
+   state.alleyAction={type:type==='gate-locked'?'open-gate':type,progress:p,elapsed:t,alignProgress:alignment,aligning:alignment<1,objectX:a.handle.x,objectY:a.handle.y,objectZ:a.handle.z,handle:{...a.handle},face:a.face,locked:type==='gate-locked'};
+   if(type==='open-gate')state.gateProgress=smooth((p-.72)/.28);
+   if(type==='rattle-chain')state.chainProgress=Math.sin(p*Math.PI)*Math.sin(p*Math.PI*8)*.28;
+   if(p>=1){
+    if(type==='take-key'){state.gateKey=true;emit('key-pickup');}
+    else if(type==='radio-switch'){state.radioOn=!state.radioOn;emit('radio-toggle');}
+    else if(type==='open-gate'){state.gateOpened=true;state.gateProgress=1;emit('gate-unlock');}
+    else if(type==='gate-locked')emit('gate-locked');
+    else{state.distractionUsed=true;state.distractionTime=ALLEY.chain.distractionDuration;state.chainProgress=0;state.owner.alert=0;emit('chain-rattle');}
+    state.alleyAction=null;state.branchAction=null;setPhase('walk');player.vx=0;
+    if(type!=='gate-locked')checkpoint(player,type);
+   }return true;
+  }
+  if(state.phase==='yard-entry'){
+   const a=state.branchAction,p=clamp(t/a.duration),oldX=player.x,oldZ=player.z;
+   player.x=mix(a.x,ALLEY.gate.yardEntryX,smooth(p));player.z=mix(a.z,ALLEY.garageLane,smooth(p));player.y=0;player.face=1;
+   player.vx=(player.x-oldX)/dt;player.vz=(player.z-oldZ)/dt;state.heading=Math.PI/2-Math.sin(p*Math.PI)*.65;
+   if(p>=1)yardArrival(player);return true;
   }
   if(state.phase==='pickup-jack'){
    const p=clamp(t/.8,0,1),lift=smooth((p-.32)/.68),visual=state.jackVisual,a=state.pickupAction,oldX=player.x;
@@ -209,7 +272,7 @@ export function createAlley(){
    const c=state.windowClimb;c.elapsed=Math.min(c.duration,c.elapsed+dt);c.progress=c.elapsed/c.duration;const p=c.progress,oldX=player.x,oldY=player.y;
    player.x=p<.36?mix(c.startX,G.windowX-.20,smooth(p/.36)):mix(G.windowX-.20,G.windowExitX,smooth((p-.36)/.64));
    player.y=p<.36?mix(c.startY,G.sillY,smooth(p/.36)):p<.64?G.sillY:mix(G.sillY,0,smooth((p-.64)/.36));player.z=G.lane;player.face=1;player.vx=(player.x-oldX)/dt;player.vy=(player.y-oldY)/dt;player.vz=0;player.grounded=false;
-   if(p>=1){state.area='yard';setPhase('walk');state.windowClimb=null;state.alleyAction=null;player.x=G.windowExitX;player.y=0;player.vx=player.vy=0;player.grounded=true;state.garageResident={...state.owner};Object.assign(state.owner,{role:'yard-owner',phase:'patrol',x:171,y:0,z:ALLEY.owner.z,face:1,time:0,alert:0});state.investigationTime=null;emit('window-exit');checkpoint(player,'yard');}return true;
+   if(p>=1){player.x=G.windowExitX;yardArrival(player,{fromWindow:true});}return true;
   }
   return false;
  }
@@ -218,6 +281,11 @@ export function createAlley(){
   const direction=Number.isFinite(input.direction)?Math.sign(input.direction):0,interact=!!input.interact,freshInteract=interact&&!state.interactHeld,wantsJump=!!input.jump,freshJump=wantsJump&&!state.jumpHeld,crouch=!!input.crouch,freshCrouch=crouch&&!state.crouchHeld;
   state.interactHeld=interact;state.jumpHeld=wantsJump;state.crouchHeld=crouch;state.direction=direction;
   if(action(dt,player)){if(state.phase!=='caught')ai(dt,player,input);sync(player);return state.events[0]??null;}
+  if(freshInteract&&state.nearStorage){beginBranch(player,state.area==='storage'?'exit-storage':'enter-storage',null,ALLEY.storage.duration);state.crouch=0;return null;}
+  if(freshInteract&&state.nearKey){beginBranch(player,'take-key',ALLEY.storage.key,.85);return null;}
+  if(freshInteract&&state.nearRadio){beginBranch(player,'radio-switch',ALLEY.storage.radio,.75);return null;}
+  if(freshInteract&&state.nearGate){beginBranch(player,state.gateKey?'open-gate':'gate-locked',ALLEY.gate.handle,state.gateKey?1.6:.6);return null;}
+  if(freshInteract&&state.nearChain){beginBranch(player,'rattle-chain',ALLEY.chain,ALLEY.chain.duration);return null;}
   if(freshInteract&&state.nearJack){state.pickupAction={x:player.x,face:Math.sign(ALLEY.jack.x-player.x)||player.face,heading:state.heading};setPhase('pickup-jack');state.alleyAction=null;player.vx=player.vy=0;return null;}
   if(freshInteract&&state.nearGarage&&state.jackStatus==='carried'){
    state.placeAction={x:player.x,z:player.z,heading:state.heading};setPhase('place-jack');player.vx=player.vy=0;resetJump();return null;
@@ -305,6 +373,7 @@ export function createAlley(){
   player.vz=0;
   if(approach&&state.jackStatus==='raised'&&player.x>=ALLEY.garage.minX){state.area='garage';state.underDoor=false;state.crouch=1;emit('garage-enter');checkpoint(player,'garage');}
   if(state.area==='alley'&&!state.fencePassed&&player.x>57.0&&player.grounded){state.fencePassed=true;state.dogPassed=true;checkpoint(player,'fence');}
+  if(state.area==='alley'&&state.gateOpened&&player.x>=ALLEY.gate.bypassEndX-.01&&player.grounded){beginBranch(player,'yard-entry',null,2.2);}
   if(state.area==='yard'&&!state.completed&&player.x>=190&&player.grounded&&!state.jump.preparing&&!state.jump.launched){state.completed=true;state.owner.alert=0;state.owner.phase='patrol';state.owner.face=-1;emit('complete');checkpoint(player,'complete');}
   ai(dt,player,input);sync(player);return state.events[0]??null;
  }
