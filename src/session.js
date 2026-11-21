@@ -5,6 +5,7 @@ import {normalizeStreetSave} from './street.js';
 import {normalizeHomeSave,homeHeight} from './home.js';
 import {APARTMENT,normalizeApartmentSave,apartmentHeight} from './apartment.js';
 import {normalizeAlleySave,alleyHeight} from './alley.js';
+import {normalizeMarketSave,marketHeight} from './market.js';
 
 export const DEFAULT_SETTINGS=Object.freeze({hints:false,sound:true,volume:.65,brightness:1,graphics:'high'});
 const SETTINGS_KEY='runaway.settings.v1',SAVE_KEY='runaway.save.v1';
@@ -15,7 +16,7 @@ const pipe=Object.freeze({x:16.725,w:.55,y:1.65});
 const guard=Object.freeze({x:-1.04,w:.18,y:1.32});
 const record=value=>value!==null&&typeof value==='object'&&!Array.isArray(value);
 const inRange=(value,min,max)=>typeof value==='number'&&Number.isFinite(value)&&value>=min&&value<=max;
-const copySave=value=>value?{...value,player:{...value.player},learnedMechanics:[...value.learnedMechanics],...(value.stairwell?{stairwell:{...value.stairwell}}:{}),...(value.street?{street:{...value.street}}:{}),...(value.home?{home:{...value.home}}:{}),...(value.apartment?{apartment:{...value.apartment}}:{}),...(value.alley?{alley:JSON.parse(JSON.stringify(value.alley))}:{})}:null;
+const copySave=value=>value?{...value,player:{...value.player},learnedMechanics:[...value.learnedMechanics],...(value.stairwell?{stairwell:{...value.stairwell}}:{}),...(value.street?{street:{...value.street}}:{}),...(value.home?{home:{...value.home}}:{}),...(value.apartment?{apartment:{...value.apartment}}:{}),...(value.alley?{alley:JSON.parse(JSON.stringify(value.alley))}:{}),...(value.market?{market:JSON.parse(JSON.stringify(value.market))}:{})}:null;
 const learnedFrom=value=>Array.isArray(value)?[...new Set(value.filter(id=>typeof id==='string'&&TUTORIAL_IDS.includes(id)))]:[];
 
 function settingsFrom(value,base=DEFAULT_SETTINGS){
@@ -35,7 +36,14 @@ function normalizeSave(value,requireGrounded=false){
   if(!inRange(crateX,10.5,16)||typeof bridgeBroken!=='boolean'||typeof slipPlayed!=='boolean'||typeof awakened!=='boolean')return null;
   if(!Number.isFinite(player.x)||!Number.isFinite(player.y)||(player.face!==1&&player.face!==-1))return null;
   if(requireGrounded&&player.grounded!==true)return null;
-  if(value.chapter!==undefined&&value.chapter!=='rooftop'&&value.chapter!=='stairwell'&&value.chapter!=='street'&&value.chapter!=='home'&&value.chapter!=='apartment'&&value.chapter!=='alley')return null;
+  if(value.chapter!==undefined&&value.chapter!=='rooftop'&&value.chapter!=='stairwell'&&value.chapter!=='street'&&value.chapter!=='home'&&value.chapter!=='apartment'&&value.chapter!=='alley'&&value.chapter!=='market')return null;
+
+  if(value.chapter==='market') {
+    const market=normalizeMarketSave(value.market);if(!market||!awakened)return null;
+    const y=marketHeight(market);
+    if(Math.abs(player.x-market.x)>EPSILON||Math.abs(player.y-y)>SURFACE_TOLERANCE+EPSILON||player.face!==market.face)return null;
+    return {version:1,chapter:'market',market,checkpoint,player:{x:market.x,y,face:market.face},crateX,bridgeBroken,slipPlayed,awakened,learnedMechanics:learnedFrom(value.learnedMechanics)};
+  }
 
   if(value.chapter==='alley') {
     const alley=normalizeAlleySave(value.alley);

@@ -86,6 +86,7 @@ export function createDeveloperPanel({
     ['roof','Rooftop'],['stairwell','First stairwell'],['street','Street'],['home','Apartment block'],
     ['apartment','Apartment kitchen'],['bedroom','Bedroom checkpoint'],['fireescape','Fire escape'],['playground','Playground'],
     ['alley','Garage alley'],['storage','Storage room'],['workshop','Garage workshop'],['backyard','Backyard'],
+    ['kiosk','Kiosk'],['market-chase','Kiosk pursuit'],['market-ground','Market'],
   ];
   for(const[id,label]of locations)location.append(el('option',{value:id},label));
   locationRow.append(location);

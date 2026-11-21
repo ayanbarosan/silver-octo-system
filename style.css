@@ -17,3 +17,5 @@ body.in-alley #mobile .touch-actions [data-key="e"]{display:none}body.in-alley.n
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}
 .setting-row select{width:150px;max-width:48%;padding:4px 0;border:0;border-bottom:1px solid #a6b09666;border-radius:0;background:transparent;color:#b4beb0;font:inherit;letter-spacing:.6px;cursor:pointer}.setting-row select option{background:#0a1114;color:#b4beb0}.setting-row select:focus-visible{outline:1px solid #aab889;outline-offset:5px}
 body.in-apartment-room #mobile .touch-actions [data-key=" "]{display:flex}body.on-fire-escape #mobile .touch-actions [data-key="e"]{display:none}body.on-fire-escape #mobile .touch-actions [data-key=" "]{display:none}
+
+body.in-market #mobile .touch-crouch{display:flex}body.in-market #mobile .touch-actions [data-key="e"]{display:none}body.in-market.near-object #mobile .touch-actions [data-key="e"]{display:flex}

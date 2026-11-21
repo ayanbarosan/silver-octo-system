@@ -156,6 +156,22 @@ export function createBoy(THREE) {
     softBox(bag,M.bagSide,side*.167,-.093,-.044,.052,.126,.089,.015);
   }
 
+  // This roll belongs to the gripping palm, so running, vaulting and eating
+  // never leave a floating food sprite in front of the child.
+  const marketBread=new THREE.Group();marketBread.name='held-market-bread';marketBread.position.set(0,0,.035);marketBread.visible=false;
+  const breadGeometry=new THREE.SphereGeometry(1,32,20),breadPoints=breadGeometry.attributes.position,breadColors=[];
+  const crust=new THREE.Color('#b67d3f'),flour=new THREE.Color('#d9b477');
+  for(let i=0;i<breadPoints.count;i++){
+    const x=breadPoints.getX(i),y=breadPoints.getY(i),z=breadPoints.getZ(i);
+    breadPoints.setXYZ(i,x*.115,y*.061*(1-.08*Math.cos(x*6)),z*.071);
+    const color=crust.clone().lerp(flour,Math.max(0,y)*.48+.10*Math.sin(x*17+z*5)**2);breadColors.push(color.r,color.g,color.b);
+  }
+  breadGeometry.setAttribute('color',new THREE.Float32BufferAttribute(breadColors,3));breadGeometry.computeVertexNormals();
+  mesh(breadGeometry,new THREE.MeshStandardMaterial({color:'#ffffff',vertexColors:true,roughness:.96}),marketBread);
+  const breadScoring=new THREE.MeshStandardMaterial({color:'#dfba7e',roughness:1});
+  for(const x of[-.062,-.02,.022,.064])line(marketBread,[[x-.012,.040,-.034],[x,.060,0],[x+.012,.040,.034]],breadScoring,.0028);
+  const breadBite=oval(marketBread,breadScoring,.099,.005,0,.021,.045,.051);breadBite.visible=false;
+
   group.userData.height=1.56;
   const clamp=THREE.MathUtils.clamp,lerp=THREE.MathUtils.lerp;
   const smooth=(x,a=0,b=1)=>THREE.MathUtils.smoothstep(x,a,b);
@@ -163,7 +179,7 @@ export function createBoy(THREE) {
   const cycle=x=>((x%1)+1)%1;
   const TAU=Math.PI*2,THIGH=.305,SHIN=.31;
   const footWorld=new THREE.Vector3(),temporary=new THREE.Vector3();
-  const animation={phase:0,mode:'idle',wakeStage:'awake',jumpStage:'grounded',climbStage:'none',ladderStage:'none',slipStage:'none',slideStage:'none',storyStage:'none',alleyStage:'none',launchLead:0,launchSpeed:0,landingReach:0,feet:legs.map(()=>({stance:true,contactWeight:1,position:{x:0,y:0,z:0}})),hands:arms.map(()=>({contactWeight:0,position:{x:0,y:0,z:0}}))};
+  const animation={phase:0,mode:'idle',wakeStage:'awake',jumpStage:'grounded',climbStage:'none',ladderStage:'none',slipStage:'none',slideStage:'none',storyStage:'none',alleyStage:'none',marketStage:'none',food:{visible:false,arm:1,position:{x:0,y:0,z:0}},launchLead:0,launchSpeed:0,landingReach:0,feet:legs.map(()=>({stance:true,contactWeight:1,position:{x:0,y:0,z:0}})),hands:arms.map(()=>({contactWeight:0,position:{x:0,y:0,z:0}}))};
   group.userData.animation=animation;
   let phase=0,moving=0,running=0,pushing=0,air=0,lean=0,headLean=0,bagLean=0,locomotionActive=false,stairWeight=0;
   let interactionWeight=0,pullWeight=0,lastInteraction=null,interactionWasApplied=false;
@@ -194,6 +210,13 @@ export function createBoy(THREE) {
   const alleyTarget=new THREE.Vector3();
   const alleyRestArms=arms.map(()=>[0,1,2].map(()=>({quaternion:new THREE.Quaternion(),delta:new THREE.Quaternion(),previousDelta:new THREE.Quaternion(),hasDelta:false})));
   let alleyWeight=0,lastAlleyAction=null,alleyTransitionTime=Infinity,alleyTransitionDuration=.42,alleyTransitionKind=null;
+  const marketContacts={hands:[0,0],stances:[true,true],weights:[1,1]},marketFeet=legs.map(()=>new THREE.Vector3()),marketTarget=new THREE.Vector3(),marketPoint=new THREE.Vector3();
+  const marketRestArms=arms.map(()=>[0,1,2].map(()=>({quaternion:new THREE.Quaternion(),delta:new THREE.Quaternion(),previousDelta:new THREE.Quaternion(),hasDelta:false})));
+  let marketWeight=0,lastMarketAction=null,marketHipOffset=0,marketLean=0,marketArm=1;
+  const marketEntryArms=arms.map(()=>[0,1,2].map(()=>({quaternion:new THREE.Quaternion(),delta:new THREE.Quaternion(),previousDelta:new THREE.Quaternion(),hasDelta:false})));
+  let marketPoseKey=null,marketArmEntryTime=Infinity;
+  const marketAirEntryFeet=legs.map(()=>new THREE.Vector3()),marketAirEntryRolls=new Float64Array(2);
+  let marketDropWasAirborne=false;
   let storyWasApplied=false;
 
   function reset() {
@@ -201,6 +224,11 @@ export function createBoy(THREE) {
     interactionWeight=pullWeight=0;lastInteraction=null;interactionWasApplied=false;interactionHands.fill(0);slideWasActive=false;storyWasApplied=false;alleyWeight=0;lastAlleyAction=null;
     for(const arm of alleyRestArms)for(const joint of arm)joint.hasDelta=false;
     alleyTransitionTime=Infinity;alleyTransitionDuration=.42;alleyTransitionKind=null;
+    marketWeight=0;lastMarketAction=null;marketHipOffset=marketLean=0;marketArm=1;marketBread.removeFromParent();marketBread.visible=false;marketBread.scale.setScalar(0);breadBite.visible=false;
+    marketBread.traverse(object=>{if(object.isMesh)object.visible=false;});
+    marketPoseKey=null;marketArmEntryTime=Infinity;
+    marketDropWasAirborne=false;
+    for(const arm of marketRestArms)for(const joint of arm)joint.hasDelta=false;
     landing=landingVelocity=0;previousGrounded=true;previousTime=0;initialized=false;internalAirTime=previousPrep=launchCrouch=0;launchLead=takeoffSpeed=takeoffRun=landingReach=landingFoot=bagVelocity=0;landingAge=Infinity;
     pose.position.set(0,0,0);pose.rotation.set(0,0,0);
     caughtRig=null;animation.ragdoll=null;
@@ -212,7 +240,7 @@ export function createBoy(THREE) {
     // Initialization uses the same IK as moving poses, so restarting cannot
     // retain a knee angle, a contact anchor or a backpack spring from last time.
     legs.forEach((leg,i)=>solveLeg(leg,footState[i].target,0,.64));
-    animation.phase=phase;animation.mode='idle';animation.wakeStage='awake';animation.jumpStage='grounded';animation.climbStage='none';animation.ladderStage='none';animation.slipStage='none';animation.slideStage='none';animation.storyStage='none';animation.alleyStage='none';animation.launchLead=0;animation.launchSpeed=0;animation.landingReach=0;
+    animation.phase=phase;animation.mode='idle';animation.wakeStage='awake';animation.jumpStage='grounded';animation.climbStage='none';animation.ladderStage='none';animation.slipStage='none';animation.slideStage='none';animation.storyStage='none';animation.alleyStage='none';animation.marketStage='none';animation.food.visible=false;animation.food.arm=1;animation.launchLead=0;animation.launchSpeed=0;animation.landingReach=0;
     updateDiagnostics([true,true],[1,1]);
   }
 
@@ -224,6 +252,7 @@ export function createBoy(THREE) {
       info.position.x=footWorld.x;info.position.y=footWorld.y;info.position.z=footWorld.z;
     }
     for(let i=0;i<arms.length;i++){const info=animation.hands[i];arms[i].palm.getWorldPosition(footWorld);info.contactWeight=handWeights[i];info.position.x=footWorld.x;info.position.y=footWorld.y;info.position.z=footWorld.z;}
+    marketBread.getWorldPosition(footWorld);animation.food.visible=marketBread.visible;animation.food.arm=marketArm;animation.food.position.x=footWorld.x;animation.food.position.y=footWorld.y;animation.food.position.z=footWorld.z;
     animation.phase=phase;
   }
 
@@ -354,11 +383,15 @@ export function createBoy(THREE) {
     capturePose();
     pose.position.set(0,0,0);pose.rotation.set(0,0,0);
     group.updateWorldMatrix(true,false);
-    const localEdge=climbEdge.set(climb.edgeX,climb.topY,0);group.worldToLocal(localEdge);
+    const localEdge=climbEdge.set(climb.edgeX,climb.topY,group.position.z);group.worldToLocal(localEdge);
     const risingLean=lerp(.13,1.07,smooth(p,.22,.60));
     const tilt=lerp(risingLean,0,smooth(p,.69,.96));
     const supportHip=clamp(localEdge.y+.30-.405*Math.cos(risingLean),.18,.64);
-    const hipHeight=lerp(supportHip,.64,smooth(p,.69,.96));
+    let hipHeight=lerp(supportHip,.64,smooth(p,.69,.96));
+    if(climb.vault&&climb.targetId==='market-street-railing'){
+      const raisedSoleY=lerp(startY,climb.topY+.08,smooth(p,.28,.48))-.072*smooth(p,.52,.65);
+      hipHeight=Math.max(hipHeight,Math.min(.64,raisedSoleY-group.position.y+.25));
+    }
     const hipZ=-.015*Math.sin(Math.PI*smooth(p,.22,.90));
     torso.position.set(0,hipHeight,hipZ);torso.rotation.set(tilt,0,0);torso.scale.set(1,1,1);
     head.position.set(0,.679,.026);head.rotation.set(-tilt*.56+.035,0,0);
@@ -376,7 +409,7 @@ export function createBoy(THREE) {
     trailWorldY=lerp(trailWorldY,climb.topY+.12,trailLift);
     trailWorldX=lerp(trailWorldX,endX-face*.025,smooth(p,.82,.98));
     trailWorldY=lerp(trailWorldY,climb.topY,smooth(p,.90,1));
-    const feetWorld=climbFeet;feetWorld[0].set(leadWorldX,leadWorldY,-face*legs[0].side*.108);feetWorld[1].set(trailWorldX,trailWorldY,-face*legs[1].side*.108);
+    const feetWorld=climbFeet;feetWorld[0].set(leadWorldX,leadWorldY,group.position.z-face*legs[0].side*.108);feetWorld[1].set(trailWorldX,trailWorldY,group.position.z-face*legs[1].side*.108);
     for(let i=0;i<legs.length;i++){
       const leg=legs[i],target=group.worldToLocal(feetWorld[i]);
       const roll=i===0?-.25*Math.sin(Math.PI*smooth(p,.27,.65)):.55*Math.sin(Math.PI*smooth(p,.20,.90));
@@ -384,7 +417,7 @@ export function createBoy(THREE) {
     }
     const handWeights=climbContacts.hands;
     for(let i=0;i<arms.length;i++){
-      const arm=arms[i],anchor=climbAnchors[i].set(climb.edgeX,climb.topY+.015,-face*arm.side*.19);
+      const arm=arms[i],anchor=climbAnchors[i].set(climb.edgeX,climb.topY+.015,group.position.z-face*arm.side*.19);
       group.worldToLocal(anchor);
       const release=smooth(p,i===0?.58:.66,i===0?.66:.74);
       const rest=climbRest[i].set(arm.side*.227,hipHeight-.002,.07);
@@ -825,6 +858,90 @@ export function createBoy(THREE) {
     return alleyContacts;
   }
 
+  function applyMarketAction(action,weight,speed,delta) {
+    const type=action.type,p=clamp(action.progress??0,0,1),elapsed=Math.max(0,action.elapsed??0),face=action.face===-1?-1:1;
+    const hunger=type==='hunger',taking=type==='take-food',carrying=type==='carry-food',impact=type==='awning-impact',dropping=type==='awning-drop',eating=type==='eat';
+    const hungerAmount=hunger?smooth(p,0,.18)*(1-smooth(p,.76,1)):0;
+    const takeLean=taking?smooth(p,.02,.25)*(1-smooth(p,.58,1)):0,dropSupported=dropping&&action.supported===true&&!action.airborne;
+    group.updateWorldMatrix(true,true);
+    for(let i=0;i<2;i++){
+      legs[i].sole.getWorldPosition(marketFeet[i]);group.worldToLocal(marketFeet[i]);
+      [arms[i].shoulder,arms[i].elbow,arms[i].wrist].forEach((joint,j)=>marketRestArms[i][j].quaternion.copy(joint.quaternion));
+    }
+    if(taking&&action.handle&&p<.28)marketArm=(action.handle.z-group.position.z)*face<-.05?1:0;
+    let hip=torso.position.y-.035*hungerAmount,tilt=.18*hungerAmount+.25*takeLean,hipZ=.032*takeLean;
+    if(carrying)tilt=.025;
+    if(impact){
+      hip=lerp(lerp(.59,.22,smooth(p,0,.20)),.44,smooth(p,.34,1));
+      tilt=lerp(lerp(.22,1.20,smooth(p,0,.20)),.66,smooth(p,.34,1));hipZ=.025;
+    }
+    if(dropping&&!dropSupported){
+      hip=p<.75?.44+.07*Math.sin(p*Math.PI):lerp(.29,.63,smooth(p,.75,1));
+      tilt=p<.75?.58-.23*Math.sin(p*Math.PI):lerp(.82,.04,smooth(p,.75,1));hipZ=.015;
+    }
+    if(dropSupported){hip=torso.position.y-.025;tilt=.12;}
+    if(eating)tilt=.035+.045*Math.sin(p*Math.PI);
+    marketHipOffset=damp(marketHipOffset,hip-torso.position.y,22,delta);marketLean=damp(marketLean,tilt,20,delta);
+    torso.position.y+=marketHipOffset*weight;torso.position.z+=hipZ*weight;
+    torso.rotation.x+=marketLean*weight;torso.rotation.z*=1-weight*.55;
+    head.rotation.x-=marketLean*.55*weight;
+    if(hunger)head.rotation.y+=.12*hungerAmount*weight;
+    if(eating)head.rotation.x+=.035*Math.sin(p*Math.PI*8)*smooth(p,.2,.4)*(1-smooth(p,.7,.9))*weight;
+    bag.rotation.x+=weight*(impact?.07*Math.sin(p*Math.PI):dropping?.05:.02*hungerAmount);
+    for(let i=0;i<2;i++){
+      let soleRoll=impact||dropping?0:footState[i].roll;
+      if(impact){
+        marketPoint.set(legs[i].side*.108,0,.025+legs[i].side*.065*Math.sin(p*Math.PI));
+        marketFeet[i].lerp(marketPoint,weight*smooth(p,0,.15));
+      }
+      if(dropping&&!dropSupported){
+        const airborne=action.airborne??(p>.12&&p<.76),lift=airborne?.07+.13*Math.sin(p*Math.PI):0;
+        marketPoint.set(legs[i].side*.108,lift,.025+legs[i].side*.12*Math.sin(p*Math.PI));
+        if(airborne){
+          const release=smooth(action.airTime??p*.75,0,.18);
+          marketPoint.lerp(marketAirEntryFeet[i],1-release);
+          soleRoll=lerp(marketAirEntryRolls[i],0,release);
+        }
+        marketFeet[i].lerp(marketPoint,weight);
+      }
+      solveLeg(legs[i],marketFeet[i],soleRoll,torso.position.y,torso.position.z);
+      const planted=impact?p>.08:dropping?!(action.airborne??(p>.12&&p<.76)):true;
+      marketContacts.stances[i]=planted;marketContacts.weights[i]=planted?1:0;
+    }
+    group.updateWorldMatrix(true,true);
+    const biteLift=eating?smooth(p,0,.25)*(1-smooth(p,.74,.96)):0;
+    for(let i=0;i<2;i++){
+      const arm=arms[i];let grip=0,external=false,pitch=.22;
+      const carryTarget=handTargets[i].set(arm.side*.12,torso.position.y+.36,torso.position.z+.255+.008*Math.sin(phase*TAU));
+      if(hunger&&i===0){marketTarget.set(-.075,torso.position.y+.19,torso.position.z+.215);grip=weight*hungerAmount;}
+      else if((carrying||taking||eating)&&i===marketArm){
+        marketTarget.copy(carryTarget);grip=weight;
+        if(taking&&action.handle){
+          marketPoint.set(action.handle.x,action.handle.y,action.handle.z);group.worldToLocal(marketPoint);
+          marketTarget.copy(marketPoint).lerp(carryTarget,smooth(p,.57,1));grip*=smooth(p,.02,.28);external=p<.57;
+        }
+        if(eating){head.localToWorld(marketPoint.set(arm.side*.035,-.095,.205));group.worldToLocal(marketPoint);marketTarget.lerp(marketPoint,biteLift);pitch=.22+.14*biteLift;}
+      }else if(impact){
+        const brace=smooth(p,.08,.21)*(1-smooth(p,.42,.70)),handle=action.handles?.[i];
+        if(handle)marketTarget.set(handle.x,handle.y,handle.z);
+        else marketTarget.set(group.position.x+face*.35,action.braceY??group.position.y+.035,group.position.z-face*arm.side*.19);
+        group.worldToLocal(marketTarget);grip=weight*brace;external=true;pitch=.13;
+      }else if(dropping){
+        marketTarget.set(arm.side*(.28+.05*Math.sin(p*Math.PI)),torso.position.y+.26,torso.position.z+.15+.16*Math.sin(p*Math.PI));
+        grip=weight*smooth(p,0,.15)*(1-smooth(p,.80,1));
+      }
+      if(grip>.00001){
+        solveSpatialArm(arm,marketTarget,pitch,arm.side);
+        [arm.shoulder,arm.elbow,arm.wrist].forEach((joint,j)=>blendAlleyRotation(joint,marketRestArms[i][j],grip));
+        group.updateWorldMatrix(true,true);arm.palm.getWorldPosition(interactionActual);group.worldToLocal(interactionActual);
+        marketContacts.hands[i]=external?grip*(1-smooth(interactionActual.distanceTo(marketTarget),.008,.065)):grip;
+      }else marketContacts.hands[i]=0;
+    }
+    animation.marketStage=hunger?'hunger-clutch':taking?(p<.57?'food-reach':'food-lift'):carrying?(Math.abs(speed)>.05?'food-run':'food-hold'):impact?(p<.30?'awning-compress':'awning-rebound'):dropping?(p<.15?'awning-slide':p<.76?'market-drop':'market-recover'):eating?(p<.75?'food-bite':'food-relief'):'none';
+    if(weight>.5)animation.mode=hunger?'hungry':carrying?(Math.abs(speed)>.05?'food-run':'food-hold'):taking?'taking-food':impact?'soft-landing':dropping?'awning-drop':eating?'eating':animation.mode;
+    return marketContacts;
+  }
+
   function applyWindowClimb(windowClimb) {
     const p=clamp(Number.isFinite(windowClimb.progress)?windowClimb.progress:0,0,1),face=windowClimb.face===-1?-1:1;
     const sillX=windowClimb.sillX??25.8,sillY=windowClimb.sillY??1.02;
@@ -975,7 +1092,9 @@ export function createBoy(THREE) {
     const sceneTouch=story?.alleyAction&&['take-key','radio-switch','open-gate','rattle-chain'].includes(story.alleyAction.type);
     const alleyAction=story?.alleyAction&&['carry','pickup-jack','place-jack','crank','open-window','take-key','radio-switch','open-gate','rattle-chain'].includes(story.alleyAction.type)?{...story.alleyAction,...(sceneTouch&&story.jackStatus==='carried'?{heldTool:story.jackVisual}:{})}:null;
     const toolPlanted=!!alleyAction&&(sceneTouch&&!alleyAction.aligning||alleyAction.type==='crank'||alleyAction.type==='pickup-jack'&&alleyAction.progress>=.28||alleyAction.type==='place-jack'&&alleyAction.progress>=.62);
-    const storyAction=!!story?.windowClimb||!!story?.caught||toolPlanted;
+    const marketAction=story?.marketAction&&['hunger','take-food','carry-food','awning-impact','awning-drop','eat'].includes(story.marketAction.type)?story.marketAction:null;
+    const marketLocked=!!marketAction&&(['take-food','awning-impact','eat'].includes(marketAction.type)||marketAction.type==='awning-drop'&&marketAction.airborne)&&!marketAction.aligning;
+    const storyAction=!!story?.windowClimb||!!story?.caught||toolPlanted||marketLocked;
     const sliding=slide&&['drop','glide','recover'].includes(slide.phase)&&grounded&&wake>=1&&!climb&&!ladder&&!slip&&!stairs;
     if(climb||ladder||slip||sliding||storyAction){grounded=true;speed=0;travel=0;jumpPrep=0;airTime=0;takeoff=0;}
     const delta=clamp(Number.isFinite(dt)?dt:(initialized?time-previousTime:1/60),0,.1);
@@ -983,6 +1102,24 @@ export function createBoy(THREE) {
     stepResult.footstep=false;stepResult.intensity=0;stepResult.bodyImpact=0;
     if(initialized&&delta===0)return stepResult;
     initialized=true;
+    const marketDropAirborne=marketAction?.type==='awning-drop'&&marketAction.airborne;
+    if(marketDropAirborne&&!marketDropWasAirborne){
+      group.updateWorldMatrix(true,true);
+      for(let i=0;i<2;i++){
+        legs[i].sole.getWorldPosition(marketAirEntryFeet[i]);group.worldToLocal(marketAirEntryFeet[i]);
+        marketAirEntryRolls[i]=legs[i].hip.rotation.x+legs[i].knee.rotation.x+legs[i].foot.rotation.x;
+      }
+    }
+    marketDropWasAirborne=!!marketDropAirborne;
+    const marketScene=!!story&&['display','held','eaten'].includes(story.food);
+    const nextMarketPose=marketScene?(climb?'vault':story.caught?'caught':marketAction?.type??'walk'):null;
+    if(nextMarketPose!==marketPoseKey){
+      if(nextMarketPose&&nextMarketPose!=='caught'){
+        for(let i=0;i<2;i++)[arms[i].shoulder,arms[i].elbow,arms[i].wrist].forEach((joint,j)=>{marketEntryArms[i][j].quaternion.copy(joint.quaternion);marketEntryArms[i][j].hasDelta=false;});
+        marketArmEntryTime=0;
+      }else marketArmEntryTime=Infinity;
+      marketPoseKey=nextMarketPose;
+    }
     const touchKinds=['take-key','radio-switch','open-gate','rattle-chain'];
     const carryHandoff=alleyAction&&lastAlleyAction&&(alleyAction.type==='carry'&&touchKinds.includes(lastAlleyAction.type)||lastAlleyAction.type==='carry'&&touchKinds.includes(alleyAction.type));
     if(alleyAction&&(lastAlleyAction?.type==='place-jack'&&alleyAction.type==='crank'||carryHandoff)){
@@ -997,7 +1134,11 @@ export function createBoy(THREE) {
     alleyWeight=damp(alleyWeight,alleyAction?1:0,alleyAction?14:8,delta);
     if(alleyWeight<.0001)for(const arm of alleyRestArms)for(const joint of arm)joint.hasDelta=false;
     if(climb||ladder||slip||sliding||story?.windowClimb||story?.caught){alleyWeight=0;lastAlleyAction=null;alleyTransitionTime=Infinity;}
-    const poseAction=storyAction||alleyWeight>.0001;
+    if(marketAction)lastMarketAction={...marketAction,handle:marketAction.handle?{...marketAction.handle}:null};
+    marketWeight=damp(marketWeight,marketAction?1:0,marketAction?14:10,delta);
+    if(marketWeight<.0001){marketHipOffset=marketLean=0;for(const arm of marketRestArms)for(const joint of arm)joint.hasDelta=false;}
+    if(climb||ladder||slip||sliding||story?.windowClimb||story?.caught){marketWeight=0;lastMarketAction=null;marketHipOffset=marketLean=0;}
+    const poseAction=storyAction||alleyWeight>.0001||marketWeight>.0001;
     if(storyWasApplied){
       // Keep advancing the unmodified locomotion pose beneath a scripted pose.
       // Feeding an IK guard or crouched window pose back into the free arm
@@ -1295,7 +1436,7 @@ export function createBoy(THREE) {
     animation.jumpStage=grounded?(jumpPrep>0?'anticipation':landing>.008?'landing':'grounded'):(launchProgress<1?'takeoff':vy>1.2?'rising':vy>-.9?'apex':'descent');
     let handWeights=wakeProgress<1?applyWake(wakeProgress,time):noHands;
     if(manipulation>.0001){handWeights=applyInteraction(manipulation);if(manipulation>.5)animation.mode=lastInteraction.kind;}
-    animation.climbStage='none';animation.ladderStage='none';animation.slipStage='none';animation.slideStage='none';animation.storyStage='none';animation.alleyStage='none';
+    animation.climbStage='none';animation.ladderStage='none';animation.slipStage='none';animation.slideStage='none';animation.storyStage='none';animation.alleyStage='none';animation.marketStage='none';
     if(climb){const contacts=applyClimb(climb);handWeights=contacts.hands;stances[0]=contacts.stances[0];stances[1]=contacts.stances[1];weights[0]=contacts.weights[0];weights[1]=contacts.weights[1];footstep=false;}
     if(ladder){const contacts=applyLadder(ladder);handWeights=contacts.hands;stances[0]=contacts.stances[0];stances[1]=contacts.stances[1];weights[0]=contacts.weights[0];weights[1]=contacts.weights[1];footstep=false;}
     if(slip){const contacts=applySlip(slip);handWeights=contacts.hands;stances[0]=contacts.stances[0];stances[1]=contacts.stances[1];weights[0]=contacts.weights[0];weights[1]=contacts.weights[1];footstep=false;}
@@ -1309,9 +1450,29 @@ export function createBoy(THREE) {
       for(let i=0;i<2;i++){solveLeg(legs[i],alleyFeet[i].lerp(alleyTransitionFeet[i],1-blend),footState[i].roll,torso.position.y,torso.position.z);handWeights[i]*=smooth(blend,.94,1);}
       alleyTransitionTime+=delta;
     }
+    if(marketWeight>.0001&&lastMarketAction){
+      const contacts=applyMarketAction(lastMarketAction,marketWeight,speed,delta);handWeights=contacts.hands;
+      if(lastMarketAction.type==='awning-impact'||lastMarketAction.type==='awning-drop'&&!lastMarketAction.supported){stances[0]=contacts.stances[0];stances[1]=contacts.stances[1];weights[0]=contacts.weights[0];weights[1]=contacts.weights[1];}
+      if(marketLocked)footstep=false;
+    }
     if(story?.windowClimb){const contacts=applyWindowClimb(story.windowClimb);handWeights=contacts.hands;stances[0]=contacts.stances[0];stances[1]=contacts.stances[1];weights[0]=contacts.weights[0];weights[1]=contacts.weights[1];footstep=false;}
     if(story?.caught){const contacts=applyCaught(story.caught);handWeights=contacts.hands;stances[0]=contacts.stances[0];stances[1]=contacts.stances[1];weights[0]=contacts.weights[0];weights[1]=contacts.weights[1];footstep=false;}
+    if(marketArmEntryTime<.16){
+      const blend=smooth(marketArmEntryTime,0,.16);
+      for(let i=0;i<2;i++){
+        [arms[i].shoulder,arms[i].elbow,arms[i].wrist].forEach((joint,j)=>blendAlleyRotation(joint,marketEntryArms[i][j],blend));
+        handWeights[i]*=blend;
+      }
+      marketArmEntryTime+=delta;
+    }
     if(wakeProgress<1){stances.fill(false);weights.fill(0);}
+    const marketType=marketAction?.type,pickupFood=marketType==='take-food'&&(marketAction.progress??0)>.55;
+    const foodHeld=story?.food==='held'||pickupFood||marketType==='carry-food'||marketType==='eat';
+    marketBread.visible=!!foodHeld&&!story?.caught&&!climb&&!ladder&&!slip&&!sliding&&!['awning-impact','awning-drop'].includes(marketType)&&!(marketType==='eat'&&(marketAction.progress??0)>.91);
+    if(marketBread.visible){if(marketBread.parent!==arms[marketArm].palm){marketBread.removeFromParent();arms[marketArm].palm.add(marketBread);marketBread.position.set(0,0,.035);}}else marketBread.removeFromParent();
+    marketBread.traverse(object=>{if(object.isMesh&&object!==breadBite)object.visible=marketBread.visible;});
+    if(marketBread.visible){const eaten=marketType==='eat'?(marketAction.progress??0):0;marketBread.scale.set(1-.23*smooth(eaten,.35,.48)-.21*smooth(eaten,.61,.74),1,1);breadBite.visible=eaten>.40;}
+    else{marketBread.scale.setScalar(0);breadBite.visible=false;}
     animation.launchLead=launchLead;animation.launchSpeed=takeoffSpeed;animation.landingReach=landingReach;
     updateDiagnostics(stances,weights,handWeights);
     stepResult.footstep=footstep;stepResult.intensity=contactIntensity;return stepResult;

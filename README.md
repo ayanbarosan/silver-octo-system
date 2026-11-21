@@ -274,3 +274,12 @@ The city now has recessed window apertures, connected door frames and continuous
 A storage room beside the alley offers an alternative to the noisy jack puzzle. Press **E** at its wooden door, explore inside, collect the hanging gate key, then return to unlock the outdoor gate. Both routes lead to the final yard. The room's radio can be switched on or off, with matching sound and indicator light. In the yard, interact with the hanging chain to draw the owner away temporarily, or continue using cover and patrol timing. Discoveries and route choices are included in Continue; older saves remain compatible. The developer menu includes a **Storage room** shortcut.
 
 The additional interactions use animated hand contacts. All captions remain optional through Settings → Hints, and the existing rooftop, stair, street, apartment and escape controls remain available.
+
+
+## Hunger, kiosk pursuit and the market — v0.34
+
+Leaving the garage courtyard now continues into a small neighbourhood street between apartment blocks. The boy slows and clutches his stomach as hunger sets in. At the kiosk, press **E** beside the reachable bread roll to take it. The shopkeeper notices, leaves through his actual side doorway and pursues the boy down the street. His appearance, clothing and apron are original 3D geometry; footsteps follow his movement.
+
+The street ends at a railing above the market. Walking, crouching and sliding stop at the railing; press **Space**, **W** or **Up** nearby to vault it. The boy drops onto a stall's striped canvas, which sags and rebounds as his knees and hands absorb the landing. He steps across the canopy, drops into the lower market and eats once he reaches a quiet spot. The shopkeeper remains above at the railing.
+
+The cloth mesh and character support use the same surface function. A safe checkpoint before the kiosk preserves the brief hunger introduction, while a second checkpoint after the descent avoids repeating the pursuit. Continue preserves the food stage and the shopkeeper's physical position. Previously completed alley saves automatically continue into this chapter. The concealed developer menu adds **Kiosk**, **Kiosk pursuit** and **Market** shortcuts. Existing touch controls work offline; hints remain optional in Settings.

@@ -1,6 +1,7 @@
 import {createSaveSnapshot} from './session.js';
 import {TUTORIAL_IDS} from './tutorial.js';
 import {ALLEY} from './alley.js';
+import {MARKET} from './market.js';
 
 // Test locations use the same supported save format as ordinary Continue.
 export function developerLocation(id){
@@ -14,6 +15,10 @@ export function developerLocation(id){
  else if(id==='bedroom'){Object.assign(value,{chapter:'apartment',apartment:{x:19.25,face:1,stage:'bedroom',nightstandX:21.2,doorClosed:true}});player.x=19.25;}
  else if(id==='fireescape'){Object.assign(value,{chapter:'apartment',apartment:{x:27.1,face:1,stage:'fireescape',flight:0}});player.x=27.1;}
  else if(id==='playground'){Object.assign(value,{chapter:'apartment',apartment:{x:40,face:1,stage:'playground'}});Object.assign(player,{x:40,y:-6.4});}
+ else if(['kiosk','market-chase','market-ground'].includes(id)){
+  const escaped=id==='market-ground',x=escaped?77:id==='market-chase'?35:23.4,y=escaped?MARKET.groundY:0;
+  Object.assign(value,{chapter:'market',market:{area:escaped?'market':id==='market-chase'?'chase':'approach',x,y,face:1,hungerPlayed:true,food:id==='kiosk'?'display':'held',escaped,completed:false}});Object.assign(player,{x,y});
+ }
  else if(id==='storage'){Object.assign(value,{chapter:'alley',alley:{area:'storage',x:89.2,y:0,face:1,crateXs:ALLEY.crates.map(crate=>crate.x),jackStatus:'ground',pumpProgress:0,fencePassed:true,storageVisited:true}});player.x=89.2;}
  else if(['alley','workshop','backyard'].includes(id)){
   const area=id==='workshop'?'garage':id==='backyard'?'yard':'alley',x=id==='workshop'?111.5:id==='backyard'?143:ALLEY.entry.x;

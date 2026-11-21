@@ -46,6 +46,16 @@ test('the storage shortcut restores the actual optional room and keeps the gate 
  assert.equal(controller.state.gateKey,false);assert(controller.snapshot());
 });
 
+test('kiosk shortcuts restore supported narrative stages and independent vendor checkpoints',async()=>{
+ const {createMarket,MARKET}=await import('../src/market.js');
+ for(const [id,area,food,y]of[['kiosk','approach','display',0],['market-chase','chase','held',0],['market-ground','market','held',MARKET.groundY]]){
+  const seed=developerLocation(id);assert(seed);const player={},controller=createMarket();controller.begin(player,seed.market);
+  assert.equal(controller.state.area,area);assert.equal(controller.state.food,food);assert.equal(player.y,y);assert(player.grounded);
+  const snapshot=controller.snapshot();assert(snapshot);assert.deepEqual(snapshot,seed.market);
+  seed.market.vendor.x=1;assert(developerLocation(id).market.vendor.x>20);
+ }
+});
+
 test('freezing pursuit holds the father while the player can still move, and release resumes him',async()=>{
  const {createApartment}=await import('../src/apartment.js');
  const apartment=createApartment(),player={};apartment.begin(player,{x:10,face:1});
